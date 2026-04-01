@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import multer from "multer";
 import { requireAuth, requirePermission } from "../auth.js";
 import { prisma } from "../prisma.js";
@@ -59,8 +60,8 @@ carguesRouter.post(
   "/upload",
   requireAuth,
   requirePermission("CARGUES"),
-  (req, res, next) => {
-    upload.single("file")(req, res, (err) => {
+  (req: Request, res: Response, next: NextFunction) => {
+    upload.single("file")(req, res, (err: unknown) => {
       if (!err) {
         next();
         return;
@@ -79,7 +80,7 @@ carguesRouter.post(
       res.status(500).json({ error: "UPLOAD_ERROR", details: msg });
     });
   },
-  async (req, res) => {
+  async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       writeLog("ERROR: No se subió archivo");
