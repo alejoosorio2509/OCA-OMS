@@ -1,0 +1,23 @@
+{
+  "name": "gestion-ordenes-trabajo",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm:dev --workspace server\" \"npm:dev --workspace web\"",
+    "build": "npm run build --workspace server && npm run build --workspace web",
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
+    "lint": "npm run lint --workspace server && npm run lint --workspace web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "@types/multer": "^2.1.0",
+    "csv-parse": "^6.2.1",
+    "multer": "^2.1.1",
+    "xlsx": "^0.18.5"
+  }
+}

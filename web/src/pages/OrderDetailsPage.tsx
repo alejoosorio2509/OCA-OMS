@@ -1,0 +1,291 @@
+import { useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
+import type { WorkOrderCriticality, WorkOrderDetails, WorkOrderStatus } from "../api";
+import { getWorkOrder, transitionWorkOrder, updateNovedad } from "../api";
+import { useAuth } from "../auth";
+
+function NovedadItem({ novedad, orderId, onUpdated }: { 
+  novedad: WorkOrderDetails["novedades"][0], 
+  orderId: string, 
+  onUpdated: () => void 
+}) {
+  const { token } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [fechaFin, setFechaFin] = useState("");
+  const [detalle, setDetalle] = useState(novedad.detalle);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!fechaFin) return;
+    setSaving(true);
+    try {
+      await updateNovedad(token!, orderId, novedad.id, { fechaFin, detalle });
+      setEditing(false);
+      onUpdated();
+    } catch {
+      alert("No se pudo actualizar la novedad.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isClosed = !!novedad.fechaFin;
+
+  return (
+    <div style={{ border: "1px solid #eee", padding: 10, borderRadius: 6, backgroundColor: isClosed ? "#f9f9f9" : "#fff8e1" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+        <div>
+          <div style={{ fontWeight: "bold", fontSize: "0.95rem" }}>{novedad.descripcion}</div>
+          <div style={{ fontSize: "0.85rem", color: "#666" }}>
+            Inicio: {fmtDate(novedad.fechaInicio)} | 
+            Fin: {isClosed ? fmtDate(novedad.fechaFin) : <span style={{ color: "orange", fontWeight: "bold" }}>Pausado</span>}
+          </div>
+        </div>
+        {!isClosed && !editing && (
+          <button className="btn btn-sm" onClick={() => setEditing(true)}>Cerrar Novedad</button>
+        )}
+      </div>
+      
+      {editing ? (
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          <div className="field">
+            <label>Fecha Fin *</label>
+            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Detalle / Observación</label>
+            <textarea value={detalle} onChange={e => setDetalle(e.target.value)} />
+          </div>
+          <div className="actions">
+            <button className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>Cancelar</button>
+            <button className="btn btn-sm" disabled={!fechaFin || saving} onClick={handleSave}>
+              {saving ? "Guardando..." : "Guardar y Reanudar"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 6, fontSize: "0.9rem", color: "#444" }}>
+          {novedad.detalle}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtDate(value: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  
+  // Si la cadena original no tiene "T" (es solo fecha YYYY-MM-DD), mostrar solo fecha
+  if (value.length <= 10 && !value.includes("T")) {
+    return d.toLocaleDateString();
+  }
+  
+  return d.toLocaleString();
+}
+
+function toKebab(value: string) {
+  return value.toLowerCase().replaceAll("_", "-");
+}
+
+export function OrderDetailsPage() {
+  const { id } = useParams();
+  const { token } = useAuth();
+  const location = useLocation();
+
+  const [order, setOrder] = useState<WorkOrderDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const statusLabels: Record<WorkOrderStatus, string> = {
+    CREATED: "Creada",
+    ASSIGNED: "Asignada",
+    IN_PROGRESS: "En ejecución",
+    ON_HOLD: "En pausa",
+    COMPLETED: "Completada",
+    CANCELLED: "Cancelada",
+    EXCLUDED: "Excluido",
+    FACTURADA: "Facturada",
+    GESTIONADA: "Gestionada",
+    CERRADA: "Cerrada",
+    ASIGNADA: "Asignada",
+    EN_EJECUCION: "En Ejecución",
+    DEVUELTA: "Devuelta",
+    DRAFT: "Borrador"
+  };
+
+  const criticalityLabels: Record<WorkOrderCriticality, string> = {
+    LOW: "Baja",
+    MEDIUM: "Media",
+    HIGH: "Alta",
+    CRITICAL: "Crítica"
+  };
+
+  async function refresh() {
+    const data = await getWorkOrder(token!, id!);
+    setOrder(data);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    Promise.all([getWorkOrder(token!, id!)])
+      .then(([o]) => {
+        if (cancelled) return;
+        setOrder(o);
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudo cargar la orden.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, id]);
+
+  async function doTransition(toStatus: WorkOrderStatus) {
+    if (!order) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await transitionWorkOrder(token!, order.id, { toStatus, note: note.trim() || undefined });
+      setNote("");
+      await refresh();
+    } catch {
+      setError("No se pudo cambiar el estado.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="card">Cargando...</div>;
+  if (error) return <div className="card error">{error}</div>;
+  if (!order) return <div className="card">No se encontró la orden.</div>;
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ color: "#bdbdbd", fontSize: 13 }}>
+              <Link to={`/orders${location.search}`}>← Volver</Link>
+            </div>
+            <h2 style={{ margin: "6px 0" }}>
+              {order.code} — {order.title}
+            </h2>
+            <div className="row" style={{ marginTop: 10 }}>
+              <span className={`badge status-${toKebab(order.status)}`}>
+                {statusLabels[order.status] || order.status}
+              </span>
+              <span className={`badge crit-${toKebab(order.criticality)}`}>
+                {criticalityLabels[order.criticality] || order.criticality}
+              </span>
+              {order.dueAt && <span className={`badge ${order.overdue ? "overdue" : ""}`}>Vence: {fmtDate(order.dueAt)}</span>}
+              {order.compliant !== null && (
+                <span className={`badge ${order.compliant ? "compliant" : "overdue"}`}>
+                  {order.compliant ? "Cumplida a tiempo" : "Fuera de tiempo"}
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ minWidth: 240 }}>
+            <div style={{ color: "#bdbdbd" }}>Gestor</div>
+            <div>
+              {order.gestorNombre || "—"} {order.gestorCc ? `(${order.gestorCc})` : ""}
+            </div>
+            <div style={{ color: "#bdbdbd", marginTop: 8 }}>Oportunidad / ANS</div>
+            <div>{order.oportunidad || "—"} / {order.ansOportunidad || "—"} días</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
+          <div style={{ color: "#bdbdbd", marginBottom: 4 }}>Descripción de la orden</div>
+          <div style={{ whiteSpace: "pre-wrap", minHeight: 40 }}>{order.description || "Sin descripción."}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Exclusión</h3>
+        <div className="field">
+          <label>Observación de la exclusión</label>
+          <input 
+            value={note} 
+            onChange={(e) => setNote(e.target.value)} 
+            placeholder="Breve motivo de la exclusión..."
+          />
+        </div>
+        <div className="actions" style={{ marginTop: 10 }}>
+          <button 
+            className="btn btn-danger" 
+            disabled={saving || !note.trim()} 
+            onClick={() => doTransition("EXCLUDED")}
+          >
+            Cambiar estado a Excluido
+          </button>
+        </div>
+      </div>
+
+      {order.novedades.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Novedades</h3>
+          <div style={{ display: "grid", gap: 10 }}>
+            {order.novedades.map((n) => (
+              <NovedadItem key={n.id} novedad={n} orderId={order.id} onUpdated={refresh} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Historial</h3>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Fecha Registro</th>
+                <th>Inicio Novedad</th>
+                <th>Fin Novedad</th>
+                <th>Días</th>
+                <th>Descripción</th>
+                <th>Detalle</th>
+                <th>Por</th>
+              </tr>
+            </thead>
+            <tbody>
+              {order.history.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ color: "#bdbdbd", textAlign: "center" }}>
+                    Sin historial.
+                  </td>
+                </tr>
+              ) : (
+                order.history.map((h) => (
+                  <tr key={h.id}>
+                    <td>{fmtDate(h.changedAt)}</td>
+                    <td>{fmtDate(h.fechaInicio)}</td>
+                    <td>{fmtDate(h.fechaFin)}</td>
+                    <td>{h.diasNovedad !== null ? h.diasNovedad : "—"}</td>
+                    <td>
+                      {h.note || (
+                        <span className={`badge status-${toKebab(h.toStatus)}`}>
+                          {statusLabels[h.toStatus] || h.toStatus}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>{h.noteDetail || "—"}</td>
+                    <td>{h.changedBy?.name || "Sistema"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

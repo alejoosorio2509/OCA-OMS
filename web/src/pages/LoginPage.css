@@ -1,0 +1,52 @@
+.login-shell {
+  min-height: calc(100vh - 0px);
+  display: grid;
+  place-items: center;
+  padding: 28px 16px;
+  background: radial-gradient(1200px 500px at 20% 0%, rgba(222, 71, 60, 0.22), rgba(11, 51, 86, 0) 55%),
+    linear-gradient(180deg, #0b3356, #072842);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 18px;
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.login-brand {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.login-logo-wrap {
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 16px;
+  padding: 8px 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(11, 51, 86, 0.08);
+}
+
+.login-logo {
+  height: 76px;
+  width: auto;
+  max-width: min(720px, 96vw);
+  object-fit: contain;
+  display: block;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.login-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}

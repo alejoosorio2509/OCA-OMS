@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum WorkOrderStatus {
+  DRAFT
+  CREATED
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  EXCLUDED
+  FACTURADA
+  GESTIONADA
+  CERRADA
+  ASIGNADA
+  EN_EJECUCION
+  DEVUELTA
+}
+
+enum WorkOrderCriticality {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  name         String
+  passwordHash String
+  role         UserRole    @default(USER)
+  canOrders    Boolean     @default(true)
+  canCargues   Boolean     @default(true)
+  canExportes  Boolean     @default(true)
+  canUsers     Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  createdOrders WorkOrder[] @relation("createdOrders")
+  assignedOrders WorkOrder[] @relation("assignedOrders")
+  statusChanges  WorkOrderHistory[]
+}
+
+model WorkOrder {
+  id                 String               @id @default(cuid())
+  code               String               @unique
+  title              String
+  description        String               @default("")
+  status             WorkOrderStatus      @default(DRAFT)
+  criticality        WorkOrderCriticality @default(MEDIUM)
+  estimatedMinutes   Int?
+  dueAt              DateTime?
+
+  // Nuevos campos para cargues
+  gestorCc           String?              // C.c gestor
+  gestorNombre       String?              // Gestor
+  tipoIncremento     String?              // Parametrico, Estructural, Gestion
+  oportunidad        String?              // Concatenación de Origen, Tipo Incremento, Nivel Tensión
+  ansOportunidad     Int?                 // Valor numérico según el código de oportunidad
+  estadoSecundario   String?              // Devuelta u otros estados secundarios
+  diasDescuento      Int                  @default(0) // Días a restar por devoluciones
+
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  assignedAt         DateTime?
+  gestionAt          DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  lastStatusChangeAt DateTime             @default(now())
+
+  createdById String
+  createdBy   User                 @relation("createdOrders", fields: [createdById], references: [id])
+
+  assigneeId  String?
+  assignee    User?                @relation("assignedOrders", fields: [assigneeId], references: [id])
+
+  history     WorkOrderHistory[]
+  novedades   Novedad[]
+
+  @@index([status])
+  @@index([criticality])
+  @@index([dueAt])
+  @@index([assigneeId])
+}
+
+model WorkOrderHistory {
+  id          String          @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  fromStatus  WorkOrderStatus?
+  toStatus    WorkOrderStatus
+  note        String?         @default("")
+  noteDetail  String?         // Detalle de la novedad
+  fechaInicio String?         // Fecha Inicio Novedad
+  fechaFin    String?         // Fecha Fin Novedad
+  changedAt   DateTime        @default(now())
+
+  changedById String
+  changedBy   User            @relation(fields: [changedById], references: [id])
+
+  @@index([workOrderId])
+  @@index([changedAt])
+}
+
+model Calendar {
+  id        String   @id @default(cuid())
+  date      DateTime @unique // La fecha del calendario
+  dayNumber Int      // El valor numérico de la columna "Inicio"
+  dayNumberFin Int?  // El valor numérico de la columna "Fin" (si existe)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Novedad {
+  id          String    @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  fechaInicio DateTime
+  fechaFin    DateTime?
+  descripcion String
+  detalle     String
+  soportePath String?   // Ruta de la imagen almacenada
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workOrderId])
+}
+
+model ActividadBaremo {
+  id              String   @id @default(cuid())
+  codigo          String   @unique
+  estado          String?
+  tipo            String?
+  origen          String?
+  fechaSolicitud  DateTime?
+  fechaAsignacion DateTime?
+  fechaGestion    DateTime?
+  gestor          String?
+  nivelTension    String?
+  proyecto        String?
+  actaFacturacion String?
+  nombreIncremento String?
+  estadoIncremento String?
+  total           Float?
+  totalConIva     Float?
+  totalBarSum     Float?
+  ansRef          Int?
+  ansCalc         Float?
+  baremo          Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model RecorridoIncremento {
+  id                 String   @id @default(cuid())
+  orderCode           String
+  tipo               String?
+  origen             String?
+  estOrigenEstLlegada String?
+  responsable        String?
+  nombreIncremento   String
+  csStatus           String?
+  fechaSolicitud     DateTime?
+  fechaAsignacion    DateTime?
+  fechaGestion       DateTime?
+  estadoAnterior     String?
+  estadoActual       String?
+  fechaInicio        DateTime
+  fechaFin           DateTime?
+  cantidadIncrementos Int?
+  flagFechaFin       Boolean?
+  diasEnel           Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([orderCode])
+  @@unique([orderCode, nombreIncremento, fechaInicio])
+}

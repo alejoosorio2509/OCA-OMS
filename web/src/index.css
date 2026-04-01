@@ -1,0 +1,124 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --surface-2: #eef3f8;
+  --border: #d7e2f4;
+  --text: #0b1b33;
+  --muted: #4a5f82;
+  --primary: #0b3356;
+  --primary-2: #1d5b8f;
+  --accent: #de473c;
+  --warning: #ffd400;
+  --danger: #d9283a;
+  --success: #128a4b;
+  --shadow: 0 10px 20px rgba(11, 27, 51, 0.08);
+  --font-body: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --text-body-size: 15px;
+  --text-body-weight: 400;
+  --text-label-size: 13px;
+  --text-label-weight: 500;
+  --text-heading-weight: 600;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--text-heading-weight);
+  letter-spacing: 0.15px;
+}
+
+h1 { font-size: 24px; line-height: 1.15; }
+h2 { font-size: 22px; line-height: 1.2; }
+h3 { font-size: 20px; line-height: 1.25; }
+
+a {
+  color: var(--primary);
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+::selection {
+  background: rgba(222, 71, 60, 0.25);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+}
+
+.modal-content textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.btn-secondary {
+  background: var(--border) !important;
+  color: var(--text) !important;
+  margin-right: 0.5rem;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.8rem !important;
+}

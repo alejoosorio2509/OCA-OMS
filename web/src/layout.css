@@ -1,0 +1,353 @@
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  min-height: 90px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(90deg, #0b3356, #0b3356);
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.brand-name {
+  font-size: 20px;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.brand-logo-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 14px;
+  padding: 6px 10px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+}
+
+.brand-logo {
+  height: 64px;
+  width: auto;
+  max-width: 640px;
+  object-fit: contain;
+}
+
+.nav {
+  display: flex;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(222, 71, 60, 0.14);
+  outline: 1px solid rgba(222, 71, 60, 0.22);
+}
+
+.nav a {
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.nav a.active {
+  background: linear-gradient(180deg, var(--accent), #c73b32);
+  color: #ffffff;
+  outline: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.nav a:hover {
+  background: rgba(222, 71, 60, 0.32);
+  color: #ffffff;
+}
+
+.account {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+.who {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+}
+
+.content {
+  padding: 16px;
+  flex: 1;
+}
+
+.btn {
+  background: linear-gradient(180deg, var(--primary), #072842);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+}
+
+.btn:hover {
+  background: linear-gradient(180deg, var(--accent), #c73b32);
+  border-color: rgba(222, 71, 60, 0.65);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-outline {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.btn-outline:hover {
+  background: rgba(222, 71, 60, 0.18);
+  border-color: rgba(222, 71, 60, 0.65);
+}
+
+.btn-accent {
+  background: linear-gradient(180deg, var(--accent), #c73b32);
+  border: 1px solid rgba(222, 71, 60, 0.55);
+  box-shadow: 0 10px 20px rgba(222, 71, 60, 0.18);
+}
+
+.btn-accent:hover {
+  filter: brightness(1.02);
+}
+
+.btn-link {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  padding: 0;
+  cursor: pointer;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.field label {
+  font-size: var(--text-label-size);
+  color: var(--muted);
+  font-weight: var(--text-label-weight);
+}
+
+.field input,
+.field select,
+.field textarea {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  height: 42px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: 3px solid rgba(222, 71, 60, 0.22);
+  border-color: rgba(222, 71, 60, 0.55);
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.row > * {
+  flex: 1;
+  min-width: 220px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 600;
+  background: linear-gradient(180deg, var(--primary), #072842);
+  font-size: var(--text-label-size);
+}
+
+.badge {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 51, 86, 0.18);
+  font-size: 12px;
+  color: #0b3356;
+  background: rgba(11, 51, 86, 0.08);
+}
+
+.badge.overdue {
+  border-color: rgba(217, 40, 58, 0.4);
+  color: #8b0f1b;
+  background: rgba(217, 40, 58, 0.12);
+}
+
+.badge.compliant {
+  border-color: rgba(18, 138, 75, 0.35);
+  color: #0b6a37;
+  background: rgba(18, 138, 75, 0.12);
+}
+
+.badge.status-created {
+  background: rgba(0, 179, 255, 0.14);
+  color: #005b7e;
+  border-color: rgba(0, 179, 255, 0.28);
+}
+.badge.status-assigned {
+  background: rgba(255, 212, 0, 0.18);
+  color: #6a5300;
+  border-color: rgba(255, 212, 0, 0.35);
+}
+.badge.status-in-progress {
+  background: rgba(0, 87, 255, 0.12);
+  color: #0037a8;
+  border-color: rgba(0, 87, 255, 0.25);
+}
+.badge.status-on-hold {
+  background: rgba(74, 95, 130, 0.12);
+  color: #2a3f60;
+  border-color: rgba(74, 95, 130, 0.25);
+}
+.badge.status-completed {
+  background: rgba(18, 138, 75, 0.12);
+  color: #0b6a37;
+  border-color: rgba(18, 138, 75, 0.25);
+}
+.badge.status-cancelled {
+  background: rgba(217, 40, 58, 0.12);
+  color: #8b0f1b;
+  border-color: rgba(217, 40, 58, 0.25);
+}
+.badge.status-draft {
+  background: rgba(74, 95, 130, 0.12);
+  color: #2a3f60;
+  border-color: rgba(74, 95, 130, 0.25);
+}
+.badge.status-facturada {
+  background: rgba(18, 138, 75, 0.12);
+  color: #0b6a37;
+  border-color: rgba(18, 138, 75, 0.25);
+}
+.badge.status-gestionada {
+  background: rgba(0, 87, 255, 0.12);
+  color: #0037a8;
+  border-color: rgba(0, 87, 255, 0.25);
+}
+.badge.status-cerrada {
+  background: rgba(18, 138, 75, 0.12);
+  color: #0b6a37;
+  border-color: rgba(18, 138, 75, 0.25);
+}
+.badge.status-asignada {
+  background: rgba(255, 212, 0, 0.18);
+  color: #6a5300;
+  border-color: rgba(255, 212, 0, 0.35);
+}
+.badge.status-en-ejecucion {
+  background: rgba(0, 179, 255, 0.14);
+  color: #005b7e;
+  border-color: rgba(0, 179, 255, 0.28);
+}
+.badge.status-devuelta {
+  background: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+  border-color: rgba(255, 152, 0, 0.3);
+}
+
+.badge.status-admin {
+  background: rgba(0, 87, 255, 0.12);
+  color: #0037a8;
+  border-color: rgba(0, 87, 255, 0.25);
+}
+.badge.status-user {
+  background: rgba(74, 95, 130, 0.12);
+  color: #2a3f60;
+  border-color: rgba(74, 95, 130, 0.25);
+}
+
+.badge.crit-low {
+  background: rgba(18, 138, 75, 0.1);
+  color: #0b6a37;
+  border-color: rgba(18, 138, 75, 0.22);
+}
+.badge.crit-medium {
+  background: rgba(0, 179, 255, 0.14);
+  color: #005b7e;
+  border-color: rgba(0, 179, 255, 0.28);
+}
+.badge.crit-high {
+  background: rgba(255, 212, 0, 0.2);
+  color: #6a5300;
+  border-color: rgba(255, 212, 0, 0.35);
+}
+.badge.crit-critical {
+  background: rgba(217, 40, 58, 0.12);
+  color: #8b0f1b;
+  border-color: rgba(217, 40, 58, 0.32);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.error {
+  color: #8b0f1b;
+  font-size: 14px;
+}
+
