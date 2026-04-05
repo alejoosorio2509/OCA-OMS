@@ -76,11 +76,19 @@ export function CarguesPage() {
             throw new Error("El cargue está tardando demasiado. Revisa Render Logs.");
           }
           await new Promise((r) => setTimeout(r, 2000));
-          const jobRes = await fetch(`${API_URL}/cargues/jobs/${jobId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          let jobRes: Response;
+          try {
+            jobRes = await fetch(`${API_URL}/cargues/jobs/${jobId}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+          } catch {
+            continue;
+          }
           const job = (await jobRes.json().catch(() => null)) as any;
-          if (!jobRes.ok) throw new Error(job?.details ?? job?.error ?? "No se pudo consultar el estado del cargue");
+          if (!jobRes.ok) {
+            if (jobRes.status === 404) continue;
+            continue;
+          }
           if (job.status === "RUNNING" || job.status === "QUEUED") continue;
           if (job.status === "ERROR") throw new Error(job.error || "Error en el cargue");
           const result = job.result ?? {};
