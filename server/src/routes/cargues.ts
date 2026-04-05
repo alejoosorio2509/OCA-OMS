@@ -136,7 +136,8 @@ carguesRouter.post(
         }) as Record<string, unknown>[];
       }
     } else {
-      const workbook = XLSX.readFile(filePath, { cellDates: true });
+      const buffer = fs.readFileSync(filePath);
+      const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
       data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
     }
 
