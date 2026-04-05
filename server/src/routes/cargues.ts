@@ -7,6 +7,7 @@ import * as XLSX from "xlsx";
 import { parse } from "csv-parse/sync";
 import type { Prisma } from "@prisma/client";
 import { WorkOrderStatus } from "@prisma/client";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
@@ -64,11 +65,412 @@ function mapStatus(status: string | undefined): WorkOrderStatus {
     "EN GESTIÓN": "GESTIONADA",
     "CERRADA": "CERRADA",
     "CERRADO": "CERRADA",
+    "CANCELADA": "CANCELLED",
+    "CANCELADO": "CANCELLED",
+    "SOLICITADA": "CREATED",
+    "SOLICITADO": "CREATED",
     "ASIGNADA": "ASIGNADA",
     "ASIGNADO": "ASIGNADA"
   };
   return mapping[s] || "ASIGNADA";
 }
+
+type CargueJobStatus = "QUEUED" | "RUNNING" | "DONE" | "ERROR";
+type CargueJob = {
+  id: string;
+  status: CargueJobStatus;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdById: string;
+  type: string;
+  fileName: string;
+  result: unknown | null;
+  error: string | null;
+};
+
+const cargueJobs = new Map<string, CargueJob>();
+
+function isTruthy(value: unknown, defaultValue = false) {
+  if (value === undefined || value === null) return defaultValue;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function createJob(input: { userId: string; type: string; fileName: string }): CargueJob {
+  const job: CargueJob = {
+    id: crypto.randomUUID(),
+    status: "QUEUED",
+    createdAt: new Date().toISOString(),
+    startedAt: null,
+    finishedAt: null,
+    createdById: input.userId,
+    type: input.type,
+    fileName: input.fileName,
+    result: null,
+    error: null
+  };
+  cargueJobs.set(job.id, job);
+  return job;
+}
+
+async function loadRowsFromFile(input: { filePath: string; fileName: string; type: string }) {
+  let data: Record<string, unknown>[] = [];
+  if (input.fileName.endsWith(".csv")) {
+    const delimiter =
+      input.type === "ACTUALIZACION" || input.type === "ACTIVIDADES_BAREMO" || input.type === "RECORRIDO_INCREMENTOS"
+        ? ";"
+        : ",";
+    try {
+      const content = fs.readFileSync(input.filePath, "utf8");
+      data = parse(content, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        delimiter: delimiter,
+        bom: true,
+        relax_column_count: true
+      }) as Record<string, unknown>[];
+    } catch {
+      writeLog("WARN: Reintentando con Latin1");
+      const content = fs.readFileSync(input.filePath, "latin1");
+      data = parse(content, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        delimiter: delimiter,
+        bom: true,
+        relax_column_count: true
+      }) as Record<string, unknown>[];
+    }
+  } else {
+    const buffer = fs.readFileSync(input.filePath);
+    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+    data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
+  }
+  return data;
+}
+
+async function processActualizacion(input: {
+  data: Record<string, unknown>[];
+  userId: string;
+  cleanupMissing: boolean;
+}) {
+  const now = new Date();
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  if (input.data.length > 0) {
+    writeLog(`INFO: Primera fila de datos (claves): ${Object.keys(input.data[0]).join(", ")}`);
+  }
+
+  const codigosEnArchivo = new Set<string>();
+
+  for (let i = 0; i < input.data.length; i++) {
+    const row = input.data[i];
+    try {
+      const getVal = (name: string) => {
+        const key = Object.keys(row).find((k) => k.trim().toLowerCase() === name.toLowerCase());
+        return key ? row[key] : undefined;
+      };
+
+      const rawCode = (getVal("Orden de trabajo") || getVal("Orden"))?.toString().trim();
+      const code = rawCode;
+
+      if (!code) {
+        writeLog(`WARN: Fila ${i + 1} sin 'Orden de trabajo'`);
+        continue;
+      }
+
+      codigosEnArchivo.add(code);
+
+      const rawStatus = getVal("Estado")?.toString().trim().toUpperCase() || "";
+
+      const orderNum = parseInt(code.replace(/\D/g, ""));
+      const validStatuses = [
+        "FACTURADA",
+        "FACTURADO",
+        "GESTIONADA",
+        "GESTIONADO",
+        "EN EJECUCION",
+        "EN EJECUCIÓN",
+        "EN GESTION",
+        "EN GESTIÓN",
+        "CERRADA",
+        "CERRADO",
+        "ASIGNADA",
+        "ASIGNADO"
+      ];
+
+      if (isNaN(orderNum) || orderNum <= 3000000) {
+        writeLog(`INFO: Omitiendo fila ${i + 1} (Orden ${code}) por ser <= 3000000`);
+        continue;
+      }
+
+      if (rawStatus === "CANCELADA" || rawStatus === "CANCELADO" || rawStatus === "SOLICITADA" || rawStatus === "SOLICITADO") {
+        await prisma.workOrder.deleteMany({ where: { code } });
+        writeLog(`INFO: Eliminando Orden ${code} por estado: ${rawStatus}`);
+        continue;
+      }
+
+      if (!validStatuses.includes(rawStatus)) {
+        writeLog(`INFO: Omitiendo fila ${i + 1} (Orden ${code}) por estado no permitido: ${rawStatus}`);
+        continue;
+      }
+
+      const status = mapStatus(getVal("Estado")?.toString());
+      const gestorCc = getVal("Cedula Gestor")?.toString().trim();
+      const gestorNombre = getVal("Gestor")?.toString().trim();
+      const rawTipoIncremento = getVal("Tipo Incremento")?.toString().trim().toUpperCase();
+      const origen = getVal("Origen")?.toString().trim() || "";
+      const nivelTension = getVal("Nivel Tensión")?.toString().trim() || "";
+
+      let tipoIncremento = "Gestion";
+      if (rawTipoIncremento === "P") {
+        tipoIncremento = "Parametrico";
+      } else if (rawTipoIncremento === "S") {
+        tipoIncremento = "Estructural";
+      } else if (
+        !rawTipoIncremento ||
+        rawTipoIncremento === "SENDA" ||
+        rawTipoIncremento === "ACTUALIZACIÓN" ||
+        rawTipoIncremento === "ACTUALIZACION"
+      ) {
+        tipoIncremento = "Gestion";
+      } else {
+        tipoIncremento = "Gestion";
+      }
+
+      const concatKey = `${origen}${tipoIncremento}${nivelTension}`;
+      const mapOportunidad: Record<string, string> = {
+        "Activos Nuevos Alta Tensión (AT)EstructuralAT": "AT_05",
+        "Actualización Centro de ControlEstructuralAT": "AT_07",
+        "Actualización LidarEstructuralAT": "AT_05",
+        "Cambio de PropiedadParametricoAT": "AT_13",
+        "CumplimentaciónEstructuralAT": "AT_09",
+        "Enel X - ALUMBRADO PÚBLICOEstructuralAT": "AT_07",
+        "InconsistenciaEstructuralAT": "AT_07",
+        "Incremento por EmergenciasEstructuralAT": "AT_11",
+        "Incremento por PDL/PSTEstructuralAT": "AT_05",
+        "Activos Nuevos Alta Tensión (AT)ParametricoAT": "AT_06",
+        "Actualización Centro de ControlParametricoAT": "AT_08",
+        "Actualización LidarParametricoAT": "AT_06",
+        "CumplimentaciónParametricoAT": "AT_10",
+        "Enel X - ALUMBRADO PÚBLICOParametricoAT": "AT_08",
+        "InconsistenciaParametricoAT": "AT_08",
+        "Incremento por EmergenciasParametricoAT": "AT_12",
+        "Incremento por PDL/PSTParametricoAT": "AT_06",
+        "LevantamientoGestionAT": "AT_02",
+        "Actualización Centro de ControlGestionBT": "BT_03",
+        "Actualización LidarGestionBT": "BT_02",
+        "Cambio de PropiedadGestionBT": "BT_02",
+        "CumplimentaciónGestionBT": "BT_04",
+        "Enel X - ALUMBRADO PÚBLICOGestionBT": "BT_03",
+        "InconsistenciaGestionBT": "BT_03",
+        "Incremento por EmergenciasGestionBT": "BT_05",
+        "Incremento por PDL/PSTGestionBT": "BT_02",
+        "Actualización Centro de ControlGestionMT": "MT_07",
+        "Actualización LidarGestionMT": "MT_06",
+        "Cambio de PropiedadGestionMT": "MT_10",
+        "CumplimentaciónGestionMT": "MT_08",
+        "Enel X - ALUMBRADO PÚBLICOGestionMT": "MT_07",
+        "InconsistenciaGestionMT": "MT_07",
+        "Incremento por EmergenciasGestionMT": "MT_09",
+        "Incremento por PDL/PSTGestionMT": "MT_06",
+        "LevantamientoUrbanoMT": "MT_02",
+        "LevantamientoRuralMT": "MT_03",
+        "LevantamientoAT": "AT_01",
+        "ActualizacionAT": "AT_04",
+        "ActualizacionBT": "BT_01",
+        "LevantamientoMT": "MT_01",
+        "ActualizacionMT": "MT_05",
+        "Incrementos Ex PostGestionMT": "MT_09",
+        "Incrementos Ex PostGestionBT": "BT_05",
+        "Actualización TLCGestionMT": "MT_09"
+      };
+      const oportunidad = mapOportunidad[concatKey] || null;
+
+      const mapAns: Record<string, number> = {
+        AT_01: 4,
+        AT_02: 14,
+        AT_03: 10,
+        AT_04: 1,
+        AT_05: 10,
+        AT_06: 5,
+        AT_07: 10,
+        AT_08: 5,
+        AT_09: 5,
+        AT_10: 5,
+        AT_11: 5,
+        AT_12: 3,
+        AT_13: 5,
+        AT_14: 5,
+        BT_01: 1,
+        BT_02: 3,
+        BT_03: 3,
+        BT_04: 4,
+        BT_05: 3,
+        BT_06: 4,
+        MT_01: 4,
+        MT_02: 4,
+        MT_03: 8,
+        MT_04: 5,
+        MT_05: 1,
+        MT_06: 3,
+        MT_07: 3,
+        MT_08: 4,
+        MT_09: 3,
+        MT_10: 5,
+        MT_11: 4
+      };
+      const ansOportunidad = oportunidad ? mapAns[oportunidad] : null;
+
+      const fechaAsignacionVal = getVal("Fecha Asignacion") || getVal("Fecha Asignación");
+      const fechaGestionVal = getVal("Fecha Gestion") || getVal("Fecha Gestión");
+
+      let assignedAt: Date | null = null;
+      if (fechaAsignacionVal) {
+        if (fechaAsignacionVal instanceof Date) {
+          assignedAt = fechaAsignacionVal;
+        } else {
+          const str = fechaAsignacionVal.toString().trim();
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) {
+            assignedAt = d;
+          } else {
+            const parts = str.split(/[/\s:]/);
+            if (parts.length >= 3) {
+              const day = parseInt(parts[0]);
+              const month = parseInt(parts[1]) - 1;
+              const year = parseInt(parts[2]);
+              const hour = parts[3] ? parseInt(parts[3]) : 0;
+              const min = parts[4] ? parseInt(parts[4]) : 0;
+              const d2 = new Date(year, month, day, hour, min);
+              if (!isNaN(d2.getTime())) assignedAt = d2;
+            }
+          }
+        }
+      }
+
+      let gestionAt: Date | null = null;
+      if (fechaGestionVal) {
+        if (fechaGestionVal instanceof Date) {
+          gestionAt = fechaGestionVal;
+        } else {
+          const str = fechaGestionVal.toString().trim();
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) {
+            gestionAt = d;
+          } else {
+            const parts = str.split(/[/\s:]/);
+            if (parts.length >= 3) {
+              const day = parseInt(parts[0]);
+              const month = parseInt(parts[1]) - 1;
+              const year = parseInt(parts[2]);
+              const hour = parts[3] ? parseInt(parts[3]) : 0;
+              const min = parts[4] ? parseInt(parts[4]) : 0;
+              const d2 = new Date(year, month, day, hour, min);
+              if (!isNaN(d2.getTime())) gestionAt = d2;
+            }
+          }
+        }
+      }
+
+      const existing = await prisma.workOrder.findUnique({
+        where: { code },
+        select: { id: true, status: true }
+      });
+
+      let lockStatus = false;
+      if (existing) {
+        if (existing.status === "ON_HOLD") {
+          lockStatus = true;
+        } else {
+          const openNovedades = await prisma.novedad.count({
+            where: { workOrderId: existing.id, fechaFin: null }
+          });
+          lockStatus = openNovedades > 0;
+        }
+      }
+
+      await prisma.workOrder.upsert({
+        where: { code },
+        update: {
+          gestorCc: gestorCc || null,
+          gestorNombre: gestorNombre || null,
+          tipoIncremento,
+          oportunidad,
+          ansOportunidad,
+          status: lockStatus ? existing!.status : status,
+          estadoSecundario: lockStatus ? undefined : null,
+          assignedAt,
+          gestionAt,
+          updatedAt: now,
+          lastStatusChangeAt: lockStatus ? undefined : now
+        },
+        create: {
+          code,
+          title: `Orden ${code}`,
+          description: "",
+          gestorCc: gestorCc || null,
+          gestorNombre: gestorNombre || null,
+          tipoIncremento,
+          oportunidad,
+          ansOportunidad,
+          status,
+          estadoSecundario: null,
+          assignedAt,
+          gestionAt,
+          createdById: input.userId,
+          lastStatusChangeAt: now
+        }
+      });
+      successCount++;
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+  }
+
+  if (input.cleanupMissing) {
+    try {
+      const result = await prisma.workOrder.deleteMany({
+        where: {
+          code: { notIn: Array.from(codigosEnArchivo) as string[] },
+          status: { not: "DEVUELTA" }
+        }
+      });
+      writeLog(`INFO: Eliminadas ${result.count} órdenes que no estaban en el archivo de actualización`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      writeLog(`ERROR al limpiar órdenes antiguas: ${msg}`);
+    }
+  }
+
+  writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  return {
+    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    count: successCount,
+    errors: errorCount,
+    errorDetails: rowErrors,
+    columns: input.data.length > 0 ? Object.keys(input.data[0]) : []
+  };
+}
+
+carguesRouter.get("/jobs/:id", requireAuth, requirePermission("CARGUES"), async (req: Request, res: Response) => {
+  const id = req.params.id;
+  const job = cargueJobs.get(id);
+  if (!job) {
+    res.status(404).json({ error: "JOB_NOT_FOUND" });
+    return;
+  }
+  if (req.auth?.role !== "ADMIN" && job.createdById !== req.auth?.sub) {
+    res.status(403).json({ error: "FORBIDDEN" });
+    return;
+  }
+  res.json(job);
+});
 
 carguesRouter.post(
   "/upload",
@@ -118,298 +520,42 @@ carguesRouter.post(
       res.status(413).json({ error: "UPLOAD_ERROR", details: `El archivo excede el tamaño máximo permitido (${maxMb}MB) para este cargue.` });
       return;
     }
+    const cleanupMissing = isTruthy((req.body as Record<string, unknown>)?.cleanupMissing, false);
 
-    if (fileName.endsWith(".csv")) {
-      const delimiter = type === "ACTUALIZACION" || type === "ACTIVIDADES_BAREMO" || type === "RECORRIDO_INCREMENTOS" ? ";" : ",";
-      try {
-        const content = fs.readFileSync(filePath, "utf8");
-        data = parse(content, {
-          columns: true, skip_empty_lines: true, trim: true,
-          delimiter: delimiter, bom: true, relax_column_count: true
-        }) as Record<string, unknown>[];
-      } catch {
-        writeLog("WARN: Reintentando con Latin1");
-        const content = fs.readFileSync(filePath, "latin1");
-        data = parse(content, {
-          columns: true, skip_empty_lines: true, trim: true,
-          delimiter: delimiter, bom: true, relax_column_count: true
-        }) as Record<string, unknown>[];
-      }
-    } else {
-      const buffer = fs.readFileSync(filePath);
-      const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-      data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
+    if (type === "ACTUALIZACION" && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
+      const job = createJob({ userId: req.auth!.sub, type, fileName });
+      res.status(202).json({ jobId: job.id });
+
+      setImmediate(async () => {
+        const current = cargueJobs.get(job.id);
+        if (!current) return;
+        current.status = "RUNNING";
+        current.startedAt = new Date().toISOString();
+        try {
+          const rows = await loadRowsFromFile({ filePath, fileName, type });
+          const result = await processActualizacion({ data: rows, userId: req.auth!.sub, cleanupMissing });
+          current.status = "DONE";
+          current.result = result;
+        } catch (e) {
+          current.status = "ERROR";
+          current.error = e instanceof Error ? e.message : "UNKNOWN";
+        } finally {
+          current.finishedAt = new Date().toISOString();
+          try {
+            fs.unlinkSync(filePath);
+          } catch {
+          }
+        }
+      });
+
+      return;
     }
 
+    data = await loadRowsFromFile({ filePath, fileName, type });
+
     if (type === "ACTUALIZACION") {
-      const userId = req.auth!.sub;
-      const now = new Date();
-      let successCount = 0;
-      let errorCount = 0;
-      const rowErrors: string[] = [];
-
-      if (data.length > 0) {
-        writeLog(`INFO: Primera fila de datos (claves): ${Object.keys(data[0]).join(", ")}`);
-      }
-
-      const codigosEnArchivo = new Set();
-
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        try {
-          const getVal = (name: string) => {
-            const key = Object.keys(row).find(k => k.trim().toLowerCase() === name.toLowerCase());
-            return key ? row[key] : undefined;
-          };
-
-          // Buscamos 'Orden de trabajo' o 'Orden'
-          const rawCode = (getVal("Orden de trabajo") || getVal("Orden"))?.toString().trim();
-          const code = rawCode;
-
-          if (!code) {
-            writeLog(`WARN: Fila ${i+1} sin 'Orden de trabajo'`);
-            continue;
-          }
-          
-          codigosEnArchivo.add(code);
-
-          const rawStatus = getVal("Estado")?.toString().trim().toUpperCase() || "";
-
-          // NUEVA REGLA ESTRICTA: Solo recibir órdenes > 3000000 Y con estados específicos
-          const orderNum = parseInt(code.replace(/\D/g, ""));
-          const validStatuses = [
-            "FACTURADA", "FACTURADO",
-            "GESTIONADA", "GESTIONADO",
-            "EN EJECUCION", "EN EJECUCIÓN",
-            "EN GESTION", "EN GESTIÓN",
-            "CERRADA", "CERRADO",
-            "ASIGNADA", "ASIGNADO"
-          ];
-          
-          if (isNaN(orderNum) || orderNum <= 3000000) {
-            writeLog(`INFO: Omitiendo fila ${i+1} (Orden ${code}) por ser <= 3000000`);
-            continue;
-          }
-
-          if (!validStatuses.includes(rawStatus)) {
-            writeLog(`INFO: Omitiendo fila ${i+1} (Orden ${code}) por estado no permitido: ${rawStatus}`);
-            continue;
-          }
-
-          const status = mapStatus(getVal("Estado")?.toString());
-          const gestorCc = getVal("Cedula Gestor")?.toString().trim();
-          const gestorNombre = getVal("Gestor")?.toString().trim();
-          const rawTipoIncremento = getVal("Tipo Incremento")?.toString().trim().toUpperCase();
-          const origen = getVal("Origen")?.toString().trim() || "";
-          const nivelTension = getVal("Nivel Tensión")?.toString().trim() || "";
-          
-          let tipoIncremento = "Gestion"; // Valor por defecto para MISSING, SENDA, ACTUALIZACIÓN
-          if (rawTipoIncremento === "P") {
-            tipoIncremento = "Parametrico";
-          } else if (rawTipoIncremento === "S") {
-            tipoIncremento = "Estructural";
-          } else if (!rawTipoIncremento || rawTipoIncremento === "SENDA" || rawTipoIncremento === "ACTUALIZACIÓN" || rawTipoIncremento === "ACTUALIZACION") {
-            tipoIncremento = "Gestion";
-          } else {
-            tipoIncremento = "Gestion";
-          }
-
-          // Lógica de mapeo de Oportunidad
-          const concatKey = `${origen}${tipoIncremento}${nivelTension}`;
-          const mapOportunidad: Record<string, string> = {
-            "Activos Nuevos Alta Tensión (AT)EstructuralAT": "AT_05",
-            "Actualización Centro de ControlEstructuralAT": "AT_07",
-            "Actualización LidarEstructuralAT": "AT_05",
-            "Cambio de PropiedadParametricoAT": "AT_13",
-            "CumplimentaciónEstructuralAT": "AT_09",
-            "Enel X - ALUMBRADO PÚBLICOEstructuralAT": "AT_07",
-            "InconsistenciaEstructuralAT": "AT_07",
-            "Incremento por EmergenciasEstructuralAT": "AT_11",
-            "Incremento por PDL/PSTEstructuralAT": "AT_05",
-            "Activos Nuevos Alta Tensión (AT)ParametricoAT": "AT_06",
-            "Actualización Centro de ControlParametricoAT": "AT_08",
-            "Actualización LidarParametricoAT": "AT_06",
-            "CumplimentaciónParametricoAT": "AT_10",
-            "Enel X - ALUMBRADO PÚBLICOParametricoAT": "AT_08",
-            "InconsistenciaParametricoAT": "AT_08",
-            "Incremento por EmergenciasParametricoAT": "AT_12",
-            "Incremento por PDL/PSTParametricoAT": "AT_06",
-            "LevantamientoGestionAT": "AT_02",
-            "Actualización Centro de ControlGestionBT": "BT_03",
-            "Actualización LidarGestionBT": "BT_02",
-            "Cambio de PropiedadGestionBT": "BT_02",
-            "CumplimentaciónGestionBT": "BT_04",
-            "Enel X - ALUMBRADO PÚBLICOGestionBT": "BT_03",
-            "InconsistenciaGestionBT": "BT_03",
-            "Incremento por EmergenciasGestionBT": "BT_05",
-            "Incremento por PDL/PSTGestionBT": "BT_02",
-            "Actualización Centro de ControlGestionMT": "MT_07",
-            "Actualización LidarGestionMT": "MT_06",
-            "Cambio de PropiedadGestionMT": "MT_10",
-            "CumplimentaciónGestionMT": "MT_08",
-            "Enel X - ALUMBRADO PÚBLICOGestionMT": "MT_07",
-            "InconsistenciaGestionMT": "MT_07",
-            "Incremento por EmergenciasGestionMT": "MT_09",
-            "Incremento por PDL/PSTGestionMT": "MT_06",
-            "LevantamientoUrbanoMT": "MT_02",
-            "LevantamientoRuralMT": "MT_03",
-            "LevantamientoAT": "AT_01",
-            "ActualizacionAT": "AT_04",
-            "ActualizacionBT": "BT_01",
-            "LevantamientoMT": "MT_01",
-            "ActualizacionMT": "MT_05",
-            "Incrementos Ex PostGestionMT": "MT_09",
-            "Incrementos Ex PostGestionBT": "BT_05",
-            "Actualización TLCGestionMT": "MT_09"
-          };
-          const oportunidad = mapOportunidad[concatKey] || null;
-
-          // Lógica de mapeo de ANS Oportunidad
-          const mapAns: Record<string, number> = {
-            "AT_01": 4, "AT_02": 14, "AT_03": 10, "AT_04": 1, "AT_05": 10,
-            "AT_06": 5, "AT_07": 10, "AT_08": 5, "AT_09": 5, "AT_10": 5,
-            "AT_11": 5, "AT_12": 3, "AT_13": 5, "AT_14": 5,
-            "BT_01": 1, "BT_02": 3, "BT_03": 3, "BT_04": 4, "BT_05": 3, "BT_06": 4,
-            "MT_01": 4, "MT_02": 4, "MT_03": 8, "MT_04": 5, "MT_05": 1,
-            "MT_06": 3, "MT_07": 3, "MT_08": 4, "MT_09": 3, "MT_10": 5, "MT_11": 4
-          };
-          const ansOportunidad = oportunidad ? mapAns[oportunidad] : null;
-
-          const fechaAsignacionVal = getVal("Fecha Asignacion") || getVal("Fecha Asignación");
-          const fechaGestionVal = getVal("Fecha Gestion") || getVal("Fecha Gestión");
-          
-          let assignedAt: Date | null = null;
-          if (fechaAsignacionVal) {
-            if (fechaAsignacionVal instanceof Date) {
-              assignedAt = fechaAsignacionVal;
-            } else {
-              const str = fechaAsignacionVal.toString().trim();
-              const d = new Date(str);
-              if (!isNaN(d.getTime())) {
-                assignedAt = d;
-              } else {
-                // Intento de parseo manual para formatos comunes en Latam (DD/MM/YYYY HH:mm)
-                const parts = str.split(/[/\s:]/);
-                if (parts.length >= 3) {
-                  const day = parseInt(parts[0]);
-                  const month = parseInt(parts[1]) - 1;
-                  const year = parseInt(parts[2]);
-                  const hour = parts[3] ? parseInt(parts[3]) : 0;
-                  const min = parts[4] ? parseInt(parts[4]) : 0;
-                  const d2 = new Date(year, month, day, hour, min);
-                  if (!isNaN(d2.getTime())) assignedAt = d2;
-                }
-              }
-            }
-          }
-
-          let gestionAt: Date | null = null;
-          if (fechaGestionVal) {
-            if (fechaGestionVal instanceof Date) {
-              gestionAt = fechaGestionVal;
-            } else {
-              const str = fechaGestionVal.toString().trim();
-              const d = new Date(str);
-              if (!isNaN(d.getTime())) {
-                gestionAt = d;
-              } else {
-                const parts = str.split(/[/\s:]/);
-                if (parts.length >= 3) {
-                  const day = parseInt(parts[0]);
-                  const month = parseInt(parts[1]) - 1;
-                  const year = parseInt(parts[2]);
-                  const hour = parts[3] ? parseInt(parts[3]) : 0;
-                  const min = parts[4] ? parseInt(parts[4]) : 0;
-                  const d2 = new Date(year, month, day, hour, min);
-                  if (!isNaN(d2.getTime())) gestionAt = d2;
-                }
-              }
-            }
-          }
-
-          // REGLA:
-          // - Si la orden está en pausa (ON_HOLD) o tiene una novedad abierta, NO se cambia el estado
-          //   desde el cargue de ACTUALIZACIÓN. El estado pausado solo se cambia al cerrar la novedad.
-          // - Si la orden no está pausada, se aplica el estado del archivo y se limpia estadoSecundario.
-          const existing = await prisma.workOrder.findUnique({
-            where: { code },
-            select: { id: true, status: true, estadoSecundario: true }
-          });
-
-          let lockStatus = false;
-          if (existing) {
-            if (existing.status === "ON_HOLD") {
-              lockStatus = true;
-            } else {
-              const openNovedades = await prisma.novedad.count({
-                where: { workOrderId: existing.id, fechaFin: null }
-              });
-              lockStatus = openNovedades > 0;
-            }
-          }
-
-          await prisma.workOrder.upsert({
-            where: { code },
-            update: {
-              gestorCc: gestorCc || null,
-              gestorNombre: gestorNombre || null,
-              tipoIncremento,
-              oportunidad,
-              ansOportunidad,
-              status: lockStatus ? existing!.status : status,
-              estadoSecundario: lockStatus ? undefined : null,
-              assignedAt,
-              gestionAt,
-              updatedAt: now,
-              lastStatusChangeAt: lockStatus ? undefined : now
-            },
-            create: {
-              code,
-              title: `Orden ${code}`,
-              description: "",
-              gestorCc: gestorCc || null,
-              gestorNombre: gestorNombre || null,
-              tipoIncremento,
-              oportunidad,
-              ansOportunidad,
-              status,
-              estadoSecundario: null,
-              assignedAt,
-              gestionAt,
-              createdById: userId,
-              lastStatusChangeAt: now
-            }
-          });
-          successCount++;
-        } catch (err) {
-          errorCount++;
-          const msg = err instanceof Error ? err.message : "UNKNOWN";
-          rowErrors.push(`Error en fila ${i+1}: ${msg}`);
-        }
-      }
-
-      // Eliminar órdenes que no vinieron en el archivo y que NO están en estado DEVUELTA
-      try {
-        const result = await prisma.workOrder.deleteMany({
-          where: {
-            code: { notIn: Array.from(codigosEnArchivo) as string[] },
-            status: { not: "DEVUELTA" }
-          }
-        });
-        writeLog(`INFO: Eliminadas ${result.count} órdenes que no estaban en el archivo de actualización`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "UNKNOWN";
-        writeLog(`ERROR al limpiar órdenes antiguas: ${msg}`);
-      }
-
-      writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
-      res.json({ 
-        message: `Procesados: ${successCount} éxitos, ${errorCount} errores`, 
-        count: successCount, 
-        errors: errorCount, 
-        errorDetails: rowErrors,
-        columns: data.length > 0 ? Object.keys(data[0]) : []
-      });
+      const payload = await processActualizacion({ data, userId: req.auth!.sub, cleanupMissing });
+      res.json(payload);
     } else if (type === "DEVOLUCIONES") {
       const userId = req.auth!.sub;
       let deletedCount = 0;

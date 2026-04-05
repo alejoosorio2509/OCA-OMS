@@ -38,6 +38,7 @@ export function CarguesPage() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("type", uploadType);
+    if (uploadType === "ACTUALIZACION") formData.append("async", "1");
 
     try {
       const res = await fetch(`${API_URL}/cargues/upload`, {
@@ -64,6 +65,37 @@ export function CarguesPage() {
       if (!res.ok) {
         const details = (obj.details ?? obj.error ?? obj.message) as string | undefined;
         throw new Error(details || "Error al subir el archivo");
+      }
+
+      if (typeof obj.jobId === "string" && obj.jobId.trim()) {
+        const jobId = obj.jobId.trim();
+        setMessage({ text: "Procesando cargue en servidor...", type: "success" });
+        const start = Date.now();
+        for (;;) {
+          if (Date.now() - start > 30 * 60 * 1000) {
+            throw new Error("El cargue está tardando demasiado. Revisa Render Logs.");
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+          const jobRes = await fetch(`${API_URL}/cargues/jobs/${jobId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const job = (await jobRes.json().catch(() => null)) as any;
+          if (!jobRes.ok) throw new Error(job?.details ?? job?.error ?? "No se pudo consultar el estado del cargue");
+          if (job.status === "RUNNING" || job.status === "QUEUED") continue;
+          if (job.status === "ERROR") throw new Error(job.error || "Error en el cargue");
+          const result = job.result ?? {};
+          const errorsCount = typeof result.errors === "number" ? result.errors : 0;
+          const message = typeof result.message === "string" ? result.message : "Carga finalizada.";
+          setMessage({ text: message, type: errorsCount > 0 ? "error" : "success" });
+          const details = Array.isArray(result.errorDetails) ? result.errorDetails : [];
+          if (details.length > 0 && details.every((v: unknown) => typeof v === "string")) setErrorDetails(details as string[]);
+          if (errorsCount === 0) {
+            setFile(null);
+            const fileInput = document.getElementById("fileInput") as HTMLInputElement;
+            if (fileInput) fileInput.value = "";
+          }
+          return;
+        }
       }
 
       const errorsCount = typeof obj.errors === "number" ? (obj.errors as number) : 0;
