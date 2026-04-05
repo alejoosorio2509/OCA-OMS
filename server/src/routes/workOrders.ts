@@ -541,6 +541,88 @@ workOrdersRouter.post("/recalcular-devoluciones/:code", requireAuth, requireAdmi
   });
 });
 
+workOrdersRouter.post("/purge-under", requireAuth, requireAdmin, async (req, res) => {
+  const body = z
+    .object({
+      threshold: z.coerce.number().int().positive().optional(),
+      dryRun: z.coerce.boolean().optional()
+    })
+    .safeParse(req.body);
+
+  if (!body.success) {
+    res.status(400).json({ error: "INVALID_BODY" });
+    return;
+  }
+
+  const threshold = body.data.threshold ?? 3_000_000;
+  const dryRun = body.data.dryRun ?? false;
+
+  const matches = await prisma.$queryRaw<Array<{ id: string; code: string }>>`
+    SELECT "id", "code"
+    FROM "WorkOrder"
+    WHERE NULLIF(regexp_replace("code", '\\D', '', 'g'), '')::bigint < ${threshold}
+  `;
+
+  const ids = matches.map((m) => m.id);
+  const sample = matches.slice(0, 25).map((m) => m.code);
+
+  if (dryRun) {
+    res.json({ threshold, matched: ids.length, sample });
+    return;
+  }
+
+  const deleted = await prisma.workOrder.deleteMany({
+    where: { id: { in: ids } }
+  });
+
+  res.json({ threshold, matched: ids.length, deleted: deleted.count, sample });
+});
+
+workOrdersRouter.post("/purge-statuses", requireAuth, requireAdmin, async (req, res) => {
+  const body = z
+    .object({
+      cancelado: z.coerce.boolean().optional(),
+      solicitado: z.coerce.boolean().optional(),
+      dryRun: z.coerce.boolean().optional()
+    })
+    .safeParse(req.body);
+
+  if (!body.success) {
+    res.status(400).json({ error: "INVALID_BODY" });
+    return;
+  }
+
+  const cancelado = body.data.cancelado ?? true;
+  const solicitado = body.data.solicitado ?? true;
+  const dryRun = body.data.dryRun ?? false;
+
+  const statuses: WorkOrderStatus[] = [];
+  if (cancelado) statuses.push("CANCELLED");
+  if (solicitado) statuses.push("CREATED");
+
+  const matches = await prisma.workOrder.findMany({
+    where: { status: { in: statuses } },
+    select: { id: true, code: true, status: true },
+    take: 25,
+    orderBy: { updatedAt: "desc" }
+  });
+
+  const total = await prisma.workOrder.count({
+    where: { status: { in: statuses } }
+  });
+
+  if (dryRun) {
+    res.json({ statuses, matched: total, sample: matches });
+    return;
+  }
+
+  const deleted = await prisma.workOrder.deleteMany({
+    where: { status: { in: statuses } }
+  });
+
+  res.json({ statuses, matched: total, deleted: deleted.count, sample: matches });
+});
+
 workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const sortKeySchema = z.enum([
     "code",
