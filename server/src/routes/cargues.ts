@@ -14,7 +14,7 @@ import path from "path";
 
 export const carguesRouter = Router();
 
-const UPLOADS_DIR = path.join(process.cwd(), "server", "uploads", "cargues");
+const UPLOADS_DIR = path.join(process.cwd(), "uploads", "cargues");
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
@@ -35,7 +35,7 @@ const upload = multer({
 });
 
 // Asegurar que el directorio de logs existe
-const LOGS_DIR = path.join(process.cwd(), "server", "logs");
+const LOGS_DIR = path.join(process.cwd(), "logs");
 if (!fs.existsSync(LOGS_DIR)) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
@@ -167,7 +167,14 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
     relax_column_count: true
   });
 
-  const stream = fs.createReadStream(input.filePath).pipe(parser);
+  const fileStream = fs.createReadStream(input.filePath);
+  fileStream.on("error", (err) => {
+    parser.destroy(err);
+  });
+  parser.on("error", (err) => {
+    fileStream.destroy(err);
+  });
+  const stream = fileStream.pipe(parser);
 
   let i = 0;
   for await (const row of stream as unknown as AsyncIterable<Record<string, unknown>>) {
@@ -817,6 +824,7 @@ carguesRouter.post(
         }
       });
 
+      filePath = null;
       return;
     }
 
