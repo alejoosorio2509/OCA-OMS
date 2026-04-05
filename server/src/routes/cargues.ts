@@ -4,7 +4,8 @@ import multer from "multer";
 import { requireAuth, requirePermission } from "../auth.js";
 import { prisma } from "../prisma.js";
 import * as XLSX from "xlsx";
-import { parse } from "csv-parse/sync";
+import { parse as parseSync } from "csv-parse/sync";
+import { parse as parseStream } from "csv-parse";
 import type { Prisma } from "@prisma/client";
 import { WorkOrderStatus } from "@prisma/client";
 import crypto from "crypto";
@@ -122,7 +123,7 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
         : ",";
     try {
       const content = fs.readFileSync(input.filePath, "utf8");
-      data = parse(content, {
+      data = parseSync(content, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
@@ -133,7 +134,7 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
     } catch {
       writeLog("WARN: Reintentando con Latin1");
       const content = fs.readFileSync(input.filePath, "latin1");
-      data = parse(content, {
+      data = parseSync(content, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
@@ -148,6 +149,267 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
     data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
   }
   return data;
+}
+
+async function processActualizacionCsvFile(input: { filePath: string; userId: string; cleanupMissing: boolean }) {
+  const now = new Date();
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+  const codigosEnArchivo = new Set<string>();
+
+  const parser = parseStream({
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+    delimiter: ";",
+    bom: true,
+    relax_column_count: true
+  });
+
+  const stream = fs.createReadStream(input.filePath).pipe(parser);
+
+  let i = 0;
+  for await (const row of stream as unknown as AsyncIterable<Record<string, unknown>>) {
+    i++;
+    try {
+      const getVal = (name: string) => {
+        const key = Object.keys(row).find((k) => k.trim().toLowerCase() === name.toLowerCase());
+        return key ? row[key] : undefined;
+      };
+
+      const rawCode = (getVal("Orden de trabajo") || getVal("Orden"))?.toString().trim();
+      const code = rawCode;
+      if (!code) continue;
+
+      codigosEnArchivo.add(code);
+
+      const rawStatus = getVal("Estado")?.toString().trim().toUpperCase() || "";
+      const orderNum = parseInt(code.replace(/\D/g, ""));
+      const validStatuses = [
+        "FACTURADA",
+        "FACTURADO",
+        "GESTIONADA",
+        "GESTIONADO",
+        "EN EJECUCION",
+        "EN EJECUCIÓN",
+        "EN GESTION",
+        "EN GESTIÓN",
+        "CERRADA",
+        "CERRADO",
+        "ASIGNADA",
+        "ASIGNADO"
+      ];
+
+      if (isNaN(orderNum) || orderNum <= 3000000) continue;
+
+      if (rawStatus === "CANCELADA" || rawStatus === "CANCELADO" || rawStatus === "SOLICITADA" || rawStatus === "SOLICITADO") {
+        await prisma.workOrder.deleteMany({ where: { code } });
+        continue;
+      }
+
+      if (!validStatuses.includes(rawStatus)) continue;
+
+      const status = mapStatus(getVal("Estado")?.toString());
+      const gestorCc = getVal("Cedula Gestor")?.toString().trim();
+      const gestorNombre = getVal("Gestor")?.toString().trim();
+      const rawTipoIncremento = getVal("Tipo Incremento")?.toString().trim().toUpperCase();
+      const origen = getVal("Origen")?.toString().trim() || "";
+      const nivelTension = getVal("Nivel Tensión")?.toString().trim() || "";
+
+      let tipoIncremento = "Gestion";
+      if (rawTipoIncremento === "P") tipoIncremento = "Parametrico";
+      else if (rawTipoIncremento === "S") tipoIncremento = "Estructural";
+      else tipoIncremento = "Gestion";
+
+      const concatKey = `${origen}${tipoIncremento}${nivelTension}`;
+      const mapOportunidad: Record<string, string> = {
+        "Activos Nuevos Alta Tensión (AT)EstructuralAT": "AT_05",
+        "Actualización Centro de ControlEstructuralAT": "AT_07",
+        "Actualización LidarEstructuralAT": "AT_05",
+        "Cambio de PropiedadParametricoAT": "AT_13",
+        "CumplimentaciónEstructuralAT": "AT_09",
+        "Enel X - ALUMBRADO PÚBLICOEstructuralAT": "AT_07",
+        "InconsistenciaEstructuralAT": "AT_07",
+        "Incremento por EmergenciasEstructuralAT": "AT_11",
+        "Incremento por PDL/PSTEstructuralAT": "AT_05",
+        "Activos Nuevos Alta Tensión (AT)ParametricoAT": "AT_06",
+        "Actualización Centro de ControlParametricoAT": "AT_08",
+        "Actualización LidarParametricoAT": "AT_06",
+        "CumplimentaciónParametricoAT": "AT_10",
+        "Enel X - ALUMBRADO PÚBLICOParametricoAT": "AT_08",
+        "InconsistenciaParametricoAT": "AT_08",
+        "Incremento por EmergenciasParametricoAT": "AT_12",
+        "Incremento por PDL/PSTParametricoAT": "AT_06",
+        "LevantamientoGestionAT": "AT_02",
+        "Actualización Centro de ControlGestionBT": "BT_03",
+        "Actualización LidarGestionBT": "BT_02",
+        "Cambio de PropiedadGestionBT": "BT_02",
+        "CumplimentaciónGestionBT": "BT_04",
+        "Enel X - ALUMBRADO PÚBLICOGestionBT": "BT_03",
+        "InconsistenciaGestionBT": "BT_03",
+        "Incremento por EmergenciasGestionBT": "BT_05",
+        "Incremento por PDL/PSTGestionBT": "BT_02",
+        "Actualización Centro de ControlGestionMT": "MT_07",
+        "Actualización LidarGestionMT": "MT_06",
+        "Cambio de PropiedadGestionMT": "MT_10",
+        "CumplimentaciónGestionMT": "MT_08",
+        "Enel X - ALUMBRADO PÚBLICOGestionMT": "MT_07",
+        "InconsistenciaGestionMT": "MT_07",
+        "Incremento por EmergenciasGestionMT": "MT_09",
+        "Incremento por PDL/PSTGestionMT": "MT_06",
+        "LevantamientoUrbanoMT": "MT_02",
+        "LevantamientoRuralMT": "MT_03",
+        "LevantamientoAT": "AT_01",
+        "ActualizacionAT": "AT_04",
+        "ActualizacionBT": "BT_01",
+        "LevantamientoMT": "MT_01",
+        "ActualizacionMT": "MT_05",
+        "Incrementos Ex PostGestionMT": "MT_09",
+        "Incrementos Ex PostGestionBT": "BT_05",
+        "Actualización TLCGestionMT": "MT_09"
+      };
+      const oportunidad = mapOportunidad[concatKey] || null;
+
+      const mapAns: Record<string, number> = {
+        AT_01: 4,
+        AT_02: 14,
+        AT_03: 10,
+        AT_04: 1,
+        AT_05: 10,
+        AT_06: 5,
+        AT_07: 10,
+        AT_08: 5,
+        AT_09: 5,
+        AT_10: 5,
+        AT_11: 5,
+        AT_12: 3,
+        AT_13: 5,
+        AT_14: 5,
+        BT_01: 1,
+        BT_02: 3,
+        BT_03: 3,
+        BT_04: 4,
+        BT_05: 3,
+        BT_06: 4,
+        MT_01: 4,
+        MT_02: 4,
+        MT_03: 8,
+        MT_04: 5,
+        MT_05: 1,
+        MT_06: 3,
+        MT_07: 3,
+        MT_08: 4,
+        MT_09: 3,
+        MT_10: 5,
+        MT_11: 4
+      };
+      const ansOportunidad = oportunidad ? mapAns[oportunidad] : null;
+
+      const fechaAsignacionVal = getVal("Fecha Asignacion") || getVal("Fecha Asignación");
+      const fechaGestionVal = getVal("Fecha Gestion") || getVal("Fecha Gestión");
+
+      let assignedAt: Date | null = null;
+      if (fechaAsignacionVal) {
+        if (fechaAsignacionVal instanceof Date) {
+          assignedAt = fechaAsignacionVal;
+        } else {
+          const str = fechaAsignacionVal.toString().trim();
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) assignedAt = d;
+        }
+      }
+
+      let gestionAt: Date | null = null;
+      if (fechaGestionVal) {
+        if (fechaGestionVal instanceof Date) {
+          gestionAt = fechaGestionVal;
+        } else {
+          const str = fechaGestionVal.toString().trim();
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) gestionAt = d;
+        }
+      }
+
+      const existing = await prisma.workOrder.findUnique({
+        where: { code },
+        select: { id: true, status: true }
+      });
+
+      let lockStatus = false;
+      if (existing) {
+        if (existing.status === "ON_HOLD") {
+          lockStatus = true;
+        } else {
+          const openNovedades = await prisma.novedad.count({
+            where: { workOrderId: existing.id, fechaFin: null }
+          });
+          lockStatus = openNovedades > 0;
+        }
+      }
+
+      await prisma.workOrder.upsert({
+        where: { code },
+        update: {
+          gestorCc: gestorCc || null,
+          gestorNombre: gestorNombre || null,
+          tipoIncremento,
+          oportunidad,
+          ansOportunidad,
+          status: lockStatus ? existing!.status : status,
+          estadoSecundario: lockStatus ? undefined : null,
+          assignedAt,
+          gestionAt,
+          updatedAt: now,
+          lastStatusChangeAt: lockStatus ? undefined : now
+        },
+        create: {
+          code,
+          title: `Orden ${code}`,
+          description: "",
+          gestorCc: gestorCc || null,
+          gestorNombre: gestorNombre || null,
+          tipoIncremento,
+          oportunidad,
+          ansOportunidad,
+          status,
+          estadoSecundario: null,
+          assignedAt,
+          gestionAt,
+          createdById: input.userId,
+          lastStatusChangeAt: now
+        }
+      });
+
+      successCount++;
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i}: ${msg}`);
+    }
+
+    if (i % 2000 === 0) {
+      writeLog(`INFO: Progreso ACTUALIZACION filas=${i} exitos=${successCount} errores=${errorCount}`);
+    }
+  }
+
+  if (input.cleanupMissing) {
+    const result = await prisma.workOrder.deleteMany({
+      where: {
+        code: { notIn: Array.from(codigosEnArchivo) as string[] },
+        status: { not: "DEVUELTA" }
+      }
+    });
+    writeLog(`INFO: Eliminadas ${result.count} órdenes que no estaban en el archivo de actualización`);
+  }
+
+  writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  return {
+    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    count: successCount,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
 }
 
 async function processActualizacion(input: {
@@ -459,7 +721,7 @@ async function processActualizacion(input: {
 }
 
 carguesRouter.get("/jobs/:id", requireAuth, requirePermission("CARGUES"), async (req: Request, res: Response) => {
-  const id = req.params.id;
+  const id = req.params.id as string;
   const job = cargueJobs.get(id);
   if (!job) {
     res.status(404).json({ error: "JOB_NOT_FOUND" });
@@ -526,14 +788,21 @@ carguesRouter.post(
       const job = createJob({ userId: req.auth!.sub, type, fileName });
       res.status(202).json({ jobId: job.id });
 
+      const jobFilePath = filePath;
       setImmediate(async () => {
         const current = cargueJobs.get(job.id);
         if (!current) return;
         current.status = "RUNNING";
         current.startedAt = new Date().toISOString();
         try {
-          const rows = await loadRowsFromFile({ filePath, fileName, type });
-          const result = await processActualizacion({ data: rows, userId: req.auth!.sub, cleanupMissing });
+          const result =
+            fileName.endsWith(".csv")
+              ? await processActualizacionCsvFile({ filePath: jobFilePath, userId: req.auth!.sub, cleanupMissing })
+              : await processActualizacion({
+                  data: await loadRowsFromFile({ filePath: jobFilePath, fileName, type }),
+                  userId: req.auth!.sub,
+                  cleanupMissing
+                });
           current.status = "DONE";
           current.result = result;
         } catch (e) {
@@ -542,7 +811,7 @@ carguesRouter.post(
         } finally {
           current.finishedAt = new Date().toISOString();
           try {
-            fs.unlinkSync(filePath);
+            fs.unlinkSync(jobFilePath);
           } catch {
           }
         }
