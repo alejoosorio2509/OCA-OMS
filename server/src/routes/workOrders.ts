@@ -10,7 +10,7 @@ import fs from "fs";
 
 const storage = multer.diskStorage({
   destination: (req: Request, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
-    const uploadDir = path.join(process.cwd(), "server", "uploads", "novedades");
+    const uploadDir = path.join(process.cwd(), "uploads", "novedades");
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }

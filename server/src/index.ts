@@ -36,7 +36,7 @@ app.get("/health", (_req, res) => {
 });
 
 // Servir archivos estáticos de soportes
-app.use("/uploads", express.static(path.join(process.cwd(), "server", "uploads")));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);
