@@ -36,6 +36,13 @@ enum WorkOrderCriticality {
   CRITICAL
 }
 
+enum CargueJobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  ERROR
+}
+
 model User {
   id           String      @id @default(cuid())
   email        String      @unique
@@ -52,6 +59,7 @@ model User {
   createdOrders WorkOrder[] @relation("createdOrders")
   assignedOrders WorkOrder[] @relation("assignedOrders")
   statusChanges  WorkOrderHistory[]
+  cargueJobs     CargueJob[]
 }
 
 model WorkOrder {
@@ -95,6 +103,36 @@ model WorkOrder {
   @@index([criticality])
   @@index([dueAt])
   @@index([assigneeId])
+}
+
+model CargueJob {
+  id            String         @id @default(uuid())
+  status        CargueJobStatus @default(QUEUED)
+  type          String
+  fileName      String
+  fileMime      String?
+  fileSize      Int?
+  fileBytes     Bytes
+  cleanupMissing Boolean       @default(false)
+
+  progressRows    Int          @default(0)
+  progressSuccess Int          @default(0)
+  progressErrors  Int          @default(0)
+
+  result        Json?
+  error         String?
+
+  createdAt     DateTime       @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  updatedAt     DateTime       @updatedAt
+
+  createdById   String
+  createdBy     User           @relation(fields: [createdById], references: [id])
+
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
 }
 
 model WorkOrderHistory {

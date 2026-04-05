@@ -6,11 +6,10 @@ import { prisma } from "../prisma.js";
 import * as XLSX from "xlsx";
 import { parse as parseSync } from "csv-parse/sync";
 import { parse as parseStream } from "csv-parse";
-import type { Prisma } from "@prisma/client";
-import { WorkOrderStatus } from "@prisma/client";
-import crypto from "crypto";
+import { CargueJobStatus, Prisma, WorkOrderStatus } from "@prisma/client";
 import fs from "fs";
 import path from "path";
+import { Readable } from "node:stream";
 
 export const carguesRouter = Router();
 
@@ -76,42 +75,110 @@ function mapStatus(status: string | undefined): WorkOrderStatus {
   return mapping[s] || "ASIGNADA";
 }
 
-type CargueJobStatus = "QUEUED" | "RUNNING" | "DONE" | "ERROR";
-type CargueJob = {
-  id: string;
-  status: CargueJobStatus;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  createdById: string;
-  type: string;
-  fileName: string;
-  result: unknown | null;
-  error: string | null;
-};
-
-const cargueJobs = new Map<string, CargueJob>();
-
 function isTruthy(value: unknown, defaultValue = false) {
   if (value === undefined || value === null) return defaultValue;
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
 }
 
-function createJob(input: { userId: string; type: string; fileName: string }): CargueJob {
-  const job: CargueJob = {
-    id: crypto.randomUUID(),
-    status: "QUEUED",
-    createdAt: new Date().toISOString(),
-    startedAt: null,
-    finishedAt: null,
-    createdById: input.userId,
-    type: input.type,
-    fileName: input.fileName,
-    result: null,
-    error: null
-  };
-  cargueJobs.set(job.id, job);
-  return job;
+async function createJob(input: {
+  userId: string;
+  type: string;
+  fileName: string;
+  fileMime?: string;
+  fileSize?: number;
+  fileBytes: Buffer;
+  cleanupMissing: boolean;
+}) {
+  return prisma.cargueJob.create({
+    data: {
+      createdById: input.userId,
+      type: input.type,
+      fileName: input.fileName,
+      fileMime: input.fileMime ?? null,
+      fileSize: typeof input.fileSize === "number" ? input.fileSize : null,
+      fileBytes: new Uint8Array(input.fileBytes),
+      cleanupMissing: input.cleanupMissing,
+      status: CargueJobStatus.QUEUED
+    },
+    select: { id: true }
+  });
+}
+
+async function getJobForRead(jobId: string) {
+  return prisma.cargueJob.findUnique({
+    where: { id: jobId },
+    select: {
+      id: true,
+      status: true,
+      type: true,
+      fileName: true,
+      cleanupMissing: true,
+      createdById: true,
+      createdAt: true,
+      startedAt: true,
+      finishedAt: true,
+      progressRows: true,
+      progressSuccess: true,
+      progressErrors: true,
+      result: true,
+      error: true
+    }
+  });
+}
+
+async function getJobForProcess(jobId: string) {
+  return prisma.cargueJob.findUnique({
+    where: { id: jobId },
+    select: {
+      id: true,
+      status: true,
+      type: true,
+      fileName: true,
+      cleanupMissing: true,
+      createdById: true,
+      fileBytes: true
+    }
+  });
+}
+
+async function claimJob(jobId: string) {
+  const updated = await prisma.cargueJob.updateMany({
+    where: { id: jobId, status: CargueJobStatus.QUEUED },
+    data: { status: CargueJobStatus.RUNNING, startedAt: new Date() }
+  });
+  return updated.count === 1;
+}
+
+async function updateJobProgress(jobId: string, progress: { rows: number; success: number; errors: number }) {
+  await prisma.cargueJob.update({
+    where: { id: jobId },
+    data: {
+      progressRows: progress.rows,
+      progressSuccess: progress.success,
+      progressErrors: progress.errors
+    }
+  });
+}
+
+async function finishJob(jobId: string, input: { ok: true; result: unknown } | { ok: false; error: string }) {
+  await prisma.cargueJob.update({
+    where: { id: jobId },
+    data: input.ok
+      ? {
+          status: CargueJobStatus.DONE,
+          result: input.result as Prisma.InputJsonValue,
+          error: null,
+          finishedAt: new Date(),
+          fileBytes: new Uint8Array()
+        }
+      : {
+          status: CargueJobStatus.ERROR,
+          result: Prisma.DbNull,
+          error: input.error,
+          finishedAt: new Date(),
+          fileBytes: new Uint8Array()
+        }
+  });
 }
 
 async function loadRowsFromFile(input: { filePath: string; fileName: string; type: string }) {
@@ -151,7 +218,12 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
   return data;
 }
 
-async function processActualizacionCsvFile(input: { filePath: string; userId: string; cleanupMissing: boolean }) {
+async function processActualizacionCsvFile(input: {
+  fileBytes: Buffer;
+  userId: string;
+  cleanupMissing: boolean;
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
   const now = new Date();
   let successCount = 0;
   let errorCount = 0;
@@ -167,12 +239,9 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
     relax_column_count: true
   });
 
-  const fileStream = fs.createReadStream(input.filePath);
+  const fileStream = Readable.from([input.fileBytes]);
   fileStream.on("error", (err) => {
     parser.destroy(err);
-  });
-  parser.on("error", (err) => {
-    fileStream.destroy(err);
   });
   const stream = fileStream.pipe(parser);
 
@@ -397,6 +466,9 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
 
     if (i % 2000 === 0) {
       writeLog(`INFO: Progreso ACTUALIZACION filas=${i} exitos=${successCount} errores=${errorCount}`);
+      if (input.onProgress) {
+        await input.onProgress({ rows: i, success: successCount, errors: errorCount });
+      }
     }
   }
 
@@ -411,6 +483,9 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
   }
 
   writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  if (input.onProgress) {
+    await input.onProgress({ rows: i, success: successCount, errors: errorCount });
+  }
   return {
     message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
     count: successCount,
@@ -727,9 +802,49 @@ async function processActualizacion(input: {
   };
 }
 
+async function runJob(jobId: string) {
+  const claimed = await claimJob(jobId);
+  if (!claimed) return;
+
+  const job = await getJobForProcess(jobId);
+  if (!job) return;
+
+  try {
+    if (job.type !== "ACTUALIZACION") {
+      throw new Error("UNSUPPORTED_JOB_TYPE");
+    }
+
+    const bytes = Buffer.from(job.fileBytes);
+
+    const result = job.fileName.toLowerCase().endsWith(".csv")
+      ? await processActualizacionCsvFile({
+          fileBytes: bytes,
+          userId: job.createdById,
+          cleanupMissing: job.cleanupMissing,
+          onProgress: (p) => updateJobProgress(jobId, p)
+        })
+      : await processActualizacion({
+          data: (() => {
+            const workbook = XLSX.read(bytes, { type: "buffer", cellDates: true });
+            return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<
+              string,
+              unknown
+            >[];
+          })(),
+          userId: job.createdById,
+          cleanupMissing: job.cleanupMissing
+        });
+
+    await finishJob(jobId, { ok: true, result });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "UNKNOWN";
+    await finishJob(jobId, { ok: false, error: msg });
+  }
+}
+
 carguesRouter.get("/jobs/:id", requireAuth, requirePermission("CARGUES"), async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const job = cargueJobs.get(id);
+  const job = await getJobForRead(id);
   if (!job) {
     res.status(404).json({ error: "JOB_NOT_FOUND" });
     return;
@@ -738,6 +853,26 @@ carguesRouter.get("/jobs/:id", requireAuth, requirePermission("CARGUES"), async 
     res.status(403).json({ error: "FORBIDDEN" });
     return;
   }
+
+  if (job.status === CargueJobStatus.QUEUED) {
+    setImmediate(() => {
+      runJob(id).catch(() => {
+      });
+    });
+  } else if (job.status === CargueJobStatus.RUNNING && job.startedAt) {
+    const startedAt = new Date(job.startedAt).getTime();
+    if (!Number.isNaN(startedAt) && Date.now() - startedAt > 2 * 60 * 1000) {
+      await prisma.cargueJob.updateMany({
+        where: { id, status: CargueJobStatus.RUNNING },
+        data: { status: CargueJobStatus.QUEUED, startedAt: null }
+      });
+      setImmediate(() => {
+        runJob(id).catch(() => {
+        });
+      });
+    }
+  }
+
   res.json(job);
 });
 
@@ -792,37 +927,27 @@ carguesRouter.post(
     const cleanupMissing = isTruthy((req.body as Record<string, unknown>)?.cleanupMissing, false);
 
     if (type === "ACTUALIZACION" && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
-      const job = createJob({ userId: req.auth!.sub, type, fileName });
-      res.status(202).json({ jobId: job.id });
-
-      const jobFilePath = filePath;
-      setImmediate(async () => {
-        const current = cargueJobs.get(job.id);
-        if (!current) return;
-        current.status = "RUNNING";
-        current.startedAt = new Date().toISOString();
-        try {
-          const result =
-            fileName.endsWith(".csv")
-              ? await processActualizacionCsvFile({ filePath: jobFilePath, userId: req.auth!.sub, cleanupMissing })
-              : await processActualizacion({
-                  data: await loadRowsFromFile({ filePath: jobFilePath, fileName, type }),
-                  userId: req.auth!.sub,
-                  cleanupMissing
-                });
-          current.status = "DONE";
-          current.result = result;
-        } catch (e) {
-          current.status = "ERROR";
-          current.error = e instanceof Error ? e.message : "UNKNOWN";
-        } finally {
-          current.finishedAt = new Date().toISOString();
-          try {
-            fs.unlinkSync(jobFilePath);
-          } catch {
-          }
-        }
+      const bytes = fs.readFileSync(filePath);
+      const created = await createJob({
+        userId: req.auth!.sub,
+        type,
+        fileName,
+        fileMime: req.file.mimetype,
+        fileSize: req.file.size,
+        fileBytes: bytes,
+        cleanupMissing
       });
+      res.status(202).json({ jobId: created.id });
+
+      setImmediate(() => {
+        runJob(created.id).catch(() => {
+        });
+      });
+
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+      }
 
       filePath = null;
       return;
