@@ -117,6 +117,7 @@ async function getJobForRead(jobId: string) {
       createdAt: true,
       startedAt: true,
       finishedAt: true,
+      updatedAt: true,
       progressRows: true,
       progressSuccess: true,
       progressErrors: true,
@@ -816,7 +817,8 @@ async function runJob(jobId: string) {
 
     const bytes = Buffer.from(job.fileBytes);
 
-    const result = job.fileName.toLowerCase().endsWith(".csv")
+    const ext = path.extname((job.fileName ?? "").trim().toLowerCase());
+    const result = ext === ".csv"
       ? await processActualizacionCsvFile({
           fileBytes: bytes,
           userId: job.createdById,
@@ -859,9 +861,9 @@ carguesRouter.get("/jobs/:id", requireAuth, requirePermission("CARGUES"), async 
       runJob(id).catch(() => {
       });
     });
-  } else if (job.status === CargueJobStatus.RUNNING && job.startedAt) {
-    const startedAt = new Date(job.startedAt).getTime();
-    if (!Number.isNaN(startedAt) && Date.now() - startedAt > 2 * 60 * 1000) {
+  } else if (job.status === CargueJobStatus.RUNNING) {
+    const updatedAt = new Date(job.updatedAt).getTime();
+    if (!Number.isNaN(updatedAt) && Date.now() - updatedAt > 5 * 60 * 1000) {
       await prisma.cargueJob.updateMany({
         where: { id, status: CargueJobStatus.RUNNING },
         data: { status: CargueJobStatus.QUEUED, startedAt: null }
@@ -928,10 +930,11 @@ carguesRouter.post(
 
     if (type === "ACTUALIZACION" && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
+      const normalizedFileName = String(fileName ?? "").trim();
       const created = await createJob({
         userId: req.auth!.sub,
         type,
-        fileName,
+        fileName: normalizedFileName,
         fileMime: req.file.mimetype,
         fileSize: req.file.size,
         fileBytes: bytes,
