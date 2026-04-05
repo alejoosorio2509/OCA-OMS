@@ -156,7 +156,7 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
   let successCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
-  const codigosEnArchivo = new Set<string>();
+  const codigosEnArchivo = input.cleanupMissing ? new Set<string>() : null;
 
   const parser = parseStream({
     columns: true,
@@ -189,7 +189,7 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
       const code = rawCode;
       if (!code) continue;
 
-      codigosEnArchivo.add(code);
+      if (codigosEnArchivo) codigosEnArchivo.add(code);
 
       const rawStatus = getVal("Estado")?.toString().trim().toUpperCase() || "";
       const orderNum = parseInt(code.replace(/\D/g, ""));
@@ -403,7 +403,7 @@ async function processActualizacionCsvFile(input: { filePath: string; userId: st
   if (input.cleanupMissing) {
     const result = await prisma.workOrder.deleteMany({
       where: {
-        code: { notIn: Array.from(codigosEnArchivo) as string[] },
+        code: { notIn: Array.from(codigosEnArchivo ?? []) as string[] },
         status: { not: "DEVUELTA" }
       }
     });
