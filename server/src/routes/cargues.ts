@@ -12,8 +12,22 @@ import path from "path";
 
 export const carguesRouter = Router();
 
-const storage = multer.memoryStorage();
-const upload = multer({ 
+const UPLOADS_DIR = path.join(process.cwd(), "server", "uploads", "cargues");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 }
 });
@@ -81,6 +95,7 @@ carguesRouter.post(
     });
   },
   async (req: Request, res: Response) => {
+  let filePath: string | null = null;
   try {
     if (!req.file) {
       writeLog("ERROR: No se subió archivo");
@@ -90,12 +105,13 @@ carguesRouter.post(
 
     const { type } = req.body;
     const fileName = req.file.originalname;
-    const buffer = req.file.buffer;
+    filePath = req.file.path;
     let data: Record<string, unknown>[] = [];
 
     writeLog(`INFO: Procesando ${fileName} (${type})`);
 
-    const sizeMb = Math.round((buffer.length / (1024 * 1024)) * 10) / 10;
+    const sizeBytes = typeof req.file.size === "number" ? req.file.size : 0;
+    const sizeMb = Math.round((sizeBytes / (1024 * 1024)) * 10) / 10;
     const maxMb = type === "ACTIVIDADES_BAREMO" ? 100 : 50;
     if (sizeMb > maxMb) {
       writeLog(`ERROR: Archivo demasiado grande (${sizeMb}MB) para tipo ${type}. Máximo ${maxMb}MB.`);
@@ -106,21 +122,21 @@ carguesRouter.post(
     if (fileName.endsWith(".csv")) {
       const delimiter = type === "ACTUALIZACION" || type === "ACTIVIDADES_BAREMO" || type === "RECORRIDO_INCREMENTOS" ? ";" : ",";
       try {
-        const content = buffer.toString("utf8");
+        const content = fs.readFileSync(filePath, "utf8");
         data = parse(content, {
           columns: true, skip_empty_lines: true, trim: true,
           delimiter: delimiter, bom: true, relax_column_count: true
         }) as Record<string, unknown>[];
       } catch {
         writeLog("WARN: Reintentando con Latin1");
-        const content = buffer.toString("latin1");
+        const content = fs.readFileSync(filePath, "latin1");
         data = parse(content, {
           columns: true, skip_empty_lines: true, trim: true,
           delimiter: delimiter, bom: true, relax_column_count: true
         }) as Record<string, unknown>[];
       }
     } else {
-      const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+      const workbook = XLSX.readFile(filePath, { cellDates: true });
       data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
     }
 
@@ -1710,6 +1726,13 @@ carguesRouter.post(
     const stack = error instanceof Error ? error.stack : null;
     writeLog(`CRITICAL: ${msg}${stack ? `\n${stack}` : ""}`);
     res.status(500).json({ error: "INTERNAL_ERROR", details: msg });
+  } finally {
+    if (filePath) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+      }
+    }
   }
   }
 );
