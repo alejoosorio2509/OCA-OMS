@@ -55,8 +55,11 @@ function toCsv(headers: string[], rows: unknown[][]) {
   return `\ufeff${lines.join("\n")}\n`;
 }
 
+const BOGOTA_TZ = "America/Bogota";
+const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+
 function normalizeDateStr(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+  return bogotaDateFmt.format(date);
 }
 
 function buildCalendarMaps(calendar: { date: Date; dayNumber: number; dayNumberFin: number | null }[]) {
@@ -65,11 +68,11 @@ function buildCalendarMaps(calendar: { date: Date; dayNumber: number; dayNumberF
   const finNumberToDate = new Map<number, string>();
   let maxFinNumber: number | undefined;
   for (const c of calendar) {
-    const iso = new Date(c.date.getFullYear(), c.date.getMonth(), c.date.getDate()).toISOString();
-    inicioMap.set(iso, c.dayNumber);
+    const key = normalizeDateStr(c.date);
+    inicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
-    finMap.set(iso, finNum);
-    finNumberToDate.set(finNum, iso);
+    finMap.set(key, finNum);
+    finNumberToDate.set(finNum, key);
     if (maxFinNumber === undefined || finNum > maxFinNumber) maxFinNumber = finNum;
   }
   return { inicioMap, finMap, finNumberToDate, maxFinNumber };
