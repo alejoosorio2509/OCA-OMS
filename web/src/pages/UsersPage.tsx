@@ -33,6 +33,10 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [resetPw, setResetPw] = useState<Record<string, string>>({});
 
+  function patchItem(id: string, patch: Partial<{ email: string; name: string; role: UserRole; canOrders: boolean; canCargues: boolean; canExportes: boolean; canUsers: boolean }>) {
+    setItems((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+
   async function refresh() {
     const data = await listUsers(token!);
     setItems(data);
@@ -222,8 +226,21 @@ export function UsersPage() {
                       value={u.role}
                       onChange={async (e) => {
                         const next = e.target.value as UserRole;
-                        await updateUser(token!, u.id, { role: next });
-                        await refresh();
+                        setError(null);
+                        patchItem(u.id, { role: next });
+                        try {
+                          await updateUser(token!, u.id, { role: next });
+                          await refresh();
+                        } catch (err: any) {
+                          setError(
+                            err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details)
+                              ? "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ")
+                              : err?.data?.error
+                                ? String(err.data.error)
+                                : "No se pudo actualizar el rol."
+                          );
+                          await refresh();
+                        }
                       }}
                     >
                       <option value="USER">USER</option>
@@ -235,8 +252,16 @@ export function UsersPage() {
                       type="checkbox"
                       checked={u.canOrders ?? false}
                       onChange={async (e) => {
-                        await updateUser(token!, u.id, { canOrders: e.target.checked });
-                        await refresh();
+                        const next = e.target.checked;
+                        setError(null);
+                        patchItem(u.id, { canOrders: next });
+                        try {
+                          await updateUser(token!, u.id, { canOrders: next });
+                          await refresh();
+                        } catch (err: any) {
+                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Órdenes.");
+                          await refresh();
+                        }
                       }}
                     />
                   </td>
@@ -245,8 +270,16 @@ export function UsersPage() {
                       type="checkbox"
                       checked={u.canCargues ?? false}
                       onChange={async (e) => {
-                        await updateUser(token!, u.id, { canCargues: e.target.checked });
-                        await refresh();
+                        const next = e.target.checked;
+                        setError(null);
+                        patchItem(u.id, { canCargues: next });
+                        try {
+                          await updateUser(token!, u.id, { canCargues: next });
+                          await refresh();
+                        } catch (err: any) {
+                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Cargues.");
+                          await refresh();
+                        }
                       }}
                     />
                   </td>
@@ -255,8 +288,16 @@ export function UsersPage() {
                       type="checkbox"
                       checked={u.canExportes ?? false}
                       onChange={async (e) => {
-                        await updateUser(token!, u.id, { canExportes: e.target.checked });
-                        await refresh();
+                        const next = e.target.checked;
+                        setError(null);
+                        patchItem(u.id, { canExportes: next });
+                        try {
+                          await updateUser(token!, u.id, { canExportes: next });
+                          await refresh();
+                        } catch (err: any) {
+                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Exportes.");
+                          await refresh();
+                        }
                       }}
                     />
                   </td>
@@ -265,8 +306,16 @@ export function UsersPage() {
                       type="checkbox"
                       checked={u.canUsers ?? false}
                       onChange={async (e) => {
-                        await updateUser(token!, u.id, { canUsers: e.target.checked });
-                        await refresh();
+                        const next = e.target.checked;
+                        setError(null);
+                        patchItem(u.id, { canUsers: next });
+                        try {
+                          await updateUser(token!, u.id, { canUsers: next });
+                          await refresh();
+                        } catch (err: any) {
+                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Usuarios.");
+                          await refresh();
+                        }
                       }}
                     />
                   </td>

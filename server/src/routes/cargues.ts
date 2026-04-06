@@ -1192,22 +1192,12 @@ async function processCalendarioJob(input: {
 
       const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
       const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
-      let dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
-      let dayNumberFin = Number.isFinite(parsedFin)
-        ? parsedFin
-        : Number.isFinite(parsedInicio)
-          ? parsedInicio
-          : null;
+      const dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
+      const dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : null;
       if (isNaN(dayNumber)) {
         rowErrors.push(`Fila ${i + 1}: Inicio/Fin no es número (Inicio=${inicioVal ?? ""}, Fin=${finVal ?? ""})`);
         errorCount++;
         continue;
-      }
-
-      if (dayNumberFin !== null && dayNumberFin < dayNumber) {
-        const tmp = dayNumber;
-        dayNumber = dayNumberFin;
-        dayNumberFin = tmp;
       }
 
       await prisma.calendar.upsert({
@@ -2716,18 +2706,12 @@ carguesRouter.post(
 
           const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
           const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
-          let dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
-          let dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : (Number.isFinite(parsedInicio) ? parsedInicio : null);
+          const dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
+          const dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : null;
           if (isNaN(dayNumber)) {
             rowErrors.push(`Fila ${i+1}: Inicio/Fin no es número (Inicio=${inicioVal ?? ""}, Fin=${finVal ?? ""})`);
             errorCount++;
             continue;
-          }
-
-          if (dayNumberFin !== null && dayNumberFin < dayNumber) {
-            const tmp = dayNumber;
-            dayNumber = dayNumberFin;
-            dayNumberFin = tmp;
           }
 
           await prisma.calendar.upsert({
