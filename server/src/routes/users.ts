@@ -39,7 +39,7 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
 
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "INVALID_BODY" });
+    res.status(400).json({ error: "INVALID_BODY", details: parsed.error.issues });
     return;
   }
 
@@ -97,7 +97,7 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
   });
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "INVALID_BODY" });
+    res.status(400).json({ error: "INVALID_BODY", details: parsed.error.issues });
     return;
   }
 

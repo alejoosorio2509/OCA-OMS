@@ -73,8 +73,16 @@ export function UsersPage() {
       setCanExportes(true);
       setCanUsers(false);
       await refresh();
-    } catch {
-      setError("No se pudo crear el usuario (¿email ya existe?).");
+    } catch (err: any) {
+      let msg = "No se pudo crear el usuario (¿email ya existe?).";
+      if (err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details)) {
+        msg = "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ");
+      } else if (err?.data?.error === "EMAIL_IN_USE") {
+        msg = "El email ya está en uso.";
+      } else if (err?.data?.error) {
+        msg = err.data.error;
+      }
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -176,8 +184,13 @@ export function UsersPage() {
                       value={u.name}
                       onChange={(e) => setItems((prev) => prev.map((p) => (p.id === u.id ? { ...p, name: e.target.value } : p)))}
                       onBlur={async () => {
-                        await updateUser(token!, u.id, { name: u.name });
-                        await refresh();
+                        try {
+                          await updateUser(token!, u.id, { name: u.name });
+                          await refresh();
+                        } catch (err: any) {
+                          setError(err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details) ? "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ") : "No se pudo actualizar el nombre.");
+                          await refresh();
+                        }
                       }}
                     />
                   </td>
@@ -189,8 +202,16 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { email: u.email });
                           await refresh();
-                        } catch {
-                          setError("No se pudo actualizar el email (¿ya existe?).");
+                        } catch (err: any) {
+                          let msg = "No se pudo actualizar el email (¿ya existe?).";
+                          if (err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details)) {
+                            msg = "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ");
+                          } else if (err?.data?.error === "EMAIL_IN_USE") {
+                            msg = "El email ya está en uso.";
+                          } else if (err?.data?.error) {
+                            msg = err.data.error;
+                          }
+                          setError(msg);
                           await refresh();
                         }
                       }}

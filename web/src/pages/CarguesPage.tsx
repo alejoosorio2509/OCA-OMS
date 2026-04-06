@@ -38,7 +38,7 @@ export function CarguesPage() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("type", uploadType);
-    if (uploadType === "ACTUALIZACION") formData.append("async", "1");
+    formData.append("async", "1");
 
     try {
       const res = await fetch(`${API_URL}/cargues/upload`, {
