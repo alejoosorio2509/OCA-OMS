@@ -1,50 +1,73 @@
-# Gestión de Órdenes de Trabajo (OT)
+# OCA-OMS (Gestión de Órdenes de Trabajo)
 
-Aplicación web con login para gestionar órdenes de trabajo con ciclo de vida completo, vencimientos y criticidad.
+Sistema web con autenticación y permisos para gestionar órdenes de trabajo (OT), cargues masivos y exportes. Arquitectura: **Vercel (Web)** → **Render (API)** → **Supabase Postgres (DB)**.
+
+## Estructura del repo
+
+- Backend: [server](file:///e:/Prueba/ansALEJO/server)
+- Frontend: [web](file:///e:/Prueba/ansALEJO/web)
+- Prisma (modelos/migraciones/seed): [server/prisma](file:///e:/Prueba/ansALEJO/server/prisma)
 
 ## Requisitos
 
-- Node.js (incluye npm)
+- Node.js + npm
+- Base de datos PostgreSQL (recomendado: Supabase)
 
-## Primer arranque
+## Variables de entorno
 
-En la raíz del proyecto:
+Backend: crea `server/.env` basado en [server/.env.example](file:///e:/Prueba/ansALEJO/server/.env.example):
+
+- `DATABASE_URL` (Postgres)
+- `JWT_SECRET`
+- `WEB_ORIGIN` (lista separada por comas; soporta wildcard al final, por ejemplo `https://miapp-*`)
+- `PORT` (default 3001)
+
+Frontend: en Vercel o local, define `VITE_API_URL` (ej: `https://tu-api.onrender.com`). Si no existe, usa `http://{host}:3001`. Ver [apiUrl.ts](file:///e:/Prueba/ansALEJO/web/src/apiUrl.ts).
+
+## Arranque local
+
+1) Instalar dependencias en la raíz:
 
 ```bash
 npm install
 ```
 
-Base de datos (SQLite) + datos iniciales:
+2) Inicializar DB (elige uno):
 
+- Supabase/DB ya existente (sin migraciones): desde `server/`
 ```bash
-cd server
-npx prisma migrate dev --name init
+npx prisma db push
+npx prisma generate
 npm run prisma:seed
 ```
 
-Levantar frontend + backend:
+- Con migraciones (si tu DB las soporta): desde `server/`
+```bash
+npx prisma migrate deploy
+npx prisma generate
+npm run prisma:seed
+```
+
+3) Levantar backend + frontend:
 
 ```bash
-cd ..
 npm run dev
 ```
 
 - Web: http://localhost:5173
-- API: http://localhost:3001
+- API: http://localhost:3001/health
 
-## Credenciales demo
+## Credenciales demo (seed)
 
 - Admin: `admin@local.test` / `admin123`
 - Usuario: `usuario@local.test` / `usuario123`
 
-## Funcionalidades
+## Documentación del código
 
-- Login con JWT
-- CRUD de órdenes de trabajo
-- Estados (ciclo de vida): CREATED → ASSIGNED → IN_PROGRESS → (ON_HOLD) → COMPLETED / CANCELLED
-- Vencimiento (`dueAt`) y cálculo de:
-  - `overdue`: vencida y no completada/cancelada
-  - `compliant`: completada antes del vencimiento (si existe `dueAt`)
-- Criticidad: LOW / MEDIUM / HIGH / CRITICAL
-- Historial de cambios de estado (quién, cuándo, nota opcional)
+- [docs/overview.md](file:///e:/Prueba/ansALEJO/docs/overview.md)
+- [docs/local-dev.md](file:///e:/Prueba/ansALEJO/docs/local-dev.md)
+- [docs/deployment.md](file:///e:/Prueba/ansALEJO/docs/deployment.md)
+- [docs/api.md](file:///e:/Prueba/ansALEJO/docs/api.md)
+- [docs/cargues.md](file:///e:/Prueba/ansALEJO/docs/cargues.md)
+- [docs/data-model.md](file:///e:/Prueba/ansALEJO/docs/data-model.md)
 

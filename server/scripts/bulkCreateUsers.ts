@@ -7,6 +7,13 @@ function normalizeSpaces(s: string) {
   return s.trim().replace(/\s+/g, " ");
 }
 
+function normalizeHeader(s: string) {
+  return normalizeSpaces(s)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function normalizeNoAccents(s: string) {
   return s
     .normalize("NFD")
@@ -36,6 +43,38 @@ function getArgValue(flag: string) {
   return process.argv[idx + 1] ?? null;
 }
 
+function parseUsersCsv(filePath: string) {
+  const buffer = fs.readFileSync(filePath);
+  const encodings: Array<BufferEncoding> = ["utf8", "latin1"];
+  const delimiters = [",", ";", "\t"];
+
+  for (const encoding of encodings) {
+    const content = buffer.toString(encoding);
+    for (const delimiter of delimiters) {
+      try {
+        const rows = parseCsv(content, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true,
+          relax_column_count: true,
+          bom: true,
+          delimiter
+        }) as Array<Record<string, unknown>>;
+
+        const first = rows[0];
+        if (!first) continue;
+        const keys = Object.keys(first).map(normalizeHeader);
+        const hasNombre = keys.includes("nombre");
+        const hasEmail = keys.includes("email");
+        if (hasNombre && hasEmail) return rows;
+      } catch {
+      }
+    }
+  }
+
+  throw new Error("CSV_FORMAT_NOT_SUPPORTED");
+}
+
 async function main() {
   const filePath = process.argv[2];
   if (!filePath) {
@@ -47,14 +86,7 @@ async function main() {
   const shouldPrint = process.argv.includes("--print");
   const outPath = getArgValue("--out");
 
-  const raw = fs.readFileSync(filePath, "utf8");
-  const rows = parseCsv(raw, {
-    columns: true,
-    skip_empty_lines: true,
-    trim: true,
-    relax_column_count: true,
-    bom: true
-  }) as Array<Record<string, unknown>>;
+  const rows = parseUsersCsv(filePath);
 
   const prisma = new PrismaClient();
 
