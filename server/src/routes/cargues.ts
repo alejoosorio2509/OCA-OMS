@@ -112,11 +112,17 @@ function parseIntLoose(val: unknown) {
 function pickCalendarNumbersFromRow(row: Record<string, unknown>) {
   const values = Object.values(row);
   const nums: number[] = [];
+  const dayNums: number[] = [];
   for (const v of values) {
     const n = parseIntLoose(v);
-    if (Number.isFinite(n)) nums.push(n);
+    if (Number.isFinite(n)) {
+      nums.push(n);
+      if (n >= 1000) dayNums.push(n);
+    }
   }
-  if (nums.length >= 2) return { inicio: nums[nums.length - 2], fin: nums[nums.length - 1] };
+  if (dayNums.length >= 2) return { inicio: dayNums[0], fin: dayNums[1] };
+  if (dayNums.length === 1) return { inicio: dayNums[0], fin: null };
+  if (nums.length >= 2) return { inicio: nums[0], fin: nums[1] };
   if (nums.length === 1) return { inicio: nums[0], fin: null };
   return { inicio: null, fin: null };
 }
