@@ -383,8 +383,8 @@ export function OrdersPage() {
             <label>ANS</label>
             <select value={colorFilter} onChange={e => setColorFilter(e.target.value as "" | "red" | "green")}>
               <option value="">Todos</option>
-              <option value="red" style={{ color: "red", fontWeight: "bold" }}>Rojo</option>
-              <option value="green" style={{ color: "green", fontWeight: "bold" }}>Verde</option>
+              <option value="green">Cumple</option>
+              <option value="red">No cumple</option>
             </select>
           </div>
           <div className="field" style={{ width: 180 }}>
