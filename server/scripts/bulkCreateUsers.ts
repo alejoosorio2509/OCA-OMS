@@ -25,9 +25,8 @@ function buildPasswordFromName(fullName: string) {
   const tokens = normalizeSpaces(fullName).split(" ").filter(Boolean);
   const first = tokens[0] ?? "";
   const firstSurname = tokens.length >= 2 ? tokens[Math.max(1, tokens.length - 2)] : "";
-  const raw = `${first}${firstSurname}`;
+  const raw = `${first.slice(0, 1)}${firstSurname.slice(0, 1)}`;
   const normalized = normalizeNoAccents(raw).toLowerCase();
-  if (normalized.length >= 6) return normalized;
   return (normalized + "123456").slice(0, 6);
 }
 
@@ -125,4 +124,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
