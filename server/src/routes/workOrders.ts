@@ -222,6 +222,10 @@ function normalizeDay(date: Date) {
   return bogotaDateFmt.format(date);
 }
 
+function calendarKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 type CalendarMaps = {
   inicioMap: Map<string, number>;
   finMap: Map<string, number>;
@@ -243,7 +247,7 @@ async function loadCalendarMaps(): Promise<CalendarMaps> {
   let maxFinNumber: number | undefined;
 
   for (const c of calendar) {
-    const key = normalizeDay(c.date);
+    const key = calendarKey(c.date);
     inicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
     finMap.set(key, finNum);

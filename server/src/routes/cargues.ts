@@ -127,6 +127,10 @@ function pickCalendarNumbersFromRow(row: Record<string, unknown>) {
   return { inicio: null, fin: null };
 }
 
+function calendarKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 function makeBogotaDate(year: number, month: number, day: number, hours = 0, minutes = 0, seconds = 0) {
   return new Date(Date.UTC(year, month - 1, day, hours + 5, minutes, seconds));
 }
@@ -993,7 +997,7 @@ async function processDevolucionesJob(input: {
   const calendarFinMap = new Map<string, number>();
   const finNumberToDate = new Map<number, string>();
   calendar.forEach((c) => {
-    const key = bogotaDateKey(c.date);
+    const key = calendarKey(c.date);
     calendarInicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
     calendarFinMap.set(key, finNum);
@@ -1890,7 +1894,7 @@ async function processRecorridoIncrementosJob(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = bogotaDateKey(new Date(r.date));
+    const key = calendarKey(new Date(r.date));
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
@@ -2504,11 +2508,11 @@ carguesRouter.post(
       const calendarFinMap = new Map<string, number>();
       const finNumberToDate = new Map<number, string>();
       calendar.forEach(c => {
-        const normalized = new Date(c.date.getFullYear(), c.date.getMonth(), c.date.getDate()).toISOString();
-        calendarInicioMap.set(normalized, c.dayNumber);
+        const key = calendarKey(c.date);
+        calendarInicioMap.set(key, c.dayNumber);
         const finNum = c.dayNumberFin ?? c.dayNumber;
-        calendarFinMap.set(normalized, finNum);
-        finNumberToDate.set(finNum, normalized);
+        calendarFinMap.set(key, finNum);
+        finNumberToDate.set(finNum, key);
       });
 
       for (let i = 0; i < data.length; i++) {
@@ -3389,7 +3393,7 @@ carguesRouter.post(
       const calendarInicioMap = new Map<string, number>();
       const calendarFinMap = new Map<string, number>();
       for (const r of calendarRows) {
-        const key = bogotaDateKey(new Date(r.date));
+        const key = calendarKey(new Date(r.date));
         calendarInicioMap.set(key, r.dayNumber);
         calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
       }

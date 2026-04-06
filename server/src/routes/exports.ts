@@ -62,13 +62,17 @@ function normalizeDateStr(date: Date) {
   return bogotaDateFmt.format(date);
 }
 
+function calendarKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 function buildCalendarMaps(calendar: { date: Date; dayNumber: number; dayNumberFin: number | null }[]) {
   const inicioMap = new Map<string, number>();
   const finMap = new Map<string, number>();
   const finNumberToDate = new Map<number, string>();
   let maxFinNumber: number | undefined;
   for (const c of calendar) {
-    const key = normalizeDateStr(c.date);
+    const key = calendarKey(c.date);
     inicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
     finMap.set(key, finNum);
