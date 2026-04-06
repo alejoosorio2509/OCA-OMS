@@ -159,10 +159,8 @@ function computeOrderDerived<
     const vencimientoNum = assignedNum + workOrder.ansOportunidad + (workOrder.diasDescuento || 0);
 
     let refNum: number | undefined;
-    if (workOrder.gestionAt && fechaTentativaGestion) {
-      refNum =
-        finMap.get(fechaTentativaGestion) ??
-        finMap.get(normalizeDay(new Date(fechaTentativaGestion)));
+    if (workOrder.gestionAt) {
+      refNum = finMap.get(normalizeDay(workOrder.gestionAt));
     } else {
       refNum = nowNum ?? maxFinNumber;
     }
@@ -217,8 +215,11 @@ function toDto(
 
 export const workOrdersRouter = Router();
 
+const BOGOTA_TZ = "America/Bogota";
+const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+
 function normalizeDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+  return bogotaDateFmt.format(date);
 }
 
 type CalendarMaps = {
@@ -242,11 +243,11 @@ async function loadCalendarMaps(): Promise<CalendarMaps> {
   let maxFinNumber: number | undefined;
 
   for (const c of calendar) {
-    const iso = normalizeDay(c.date);
-    inicioMap.set(iso, c.dayNumber);
+    const key = normalizeDay(c.date);
+    inicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
-    finMap.set(iso, finNum);
-    finNumberToDate.set(finNum, iso);
+    finMap.set(key, finNum);
+    finNumberToDate.set(finNum, key);
     if (maxFinNumber === undefined || finNum > maxFinNumber) maxFinNumber = finNum;
   }
 

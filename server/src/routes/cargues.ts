@@ -84,6 +84,10 @@ const BOGOTA_TZ = "America/Bogota";
 const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 const bogotaTimeFmt = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 
+function makeBogotaDate(year: number, month: number, day: number, hours = 0, minutes = 0, seconds = 0) {
+  return new Date(Date.UTC(year, month - 1, day, hours + 5, minutes, seconds));
+}
+
 function bogotaDateKey(d: Date) {
   return bogotaDateFmt.format(d);
 }
@@ -93,6 +97,14 @@ function bogotaMinutes(d: Date) {
   const hh = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
   const mm = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
   return hh * 60 + mm;
+}
+
+function pickBestDateByMap(raw: unknown, map: Map<string, number>) {
+  const candidates = parseFlexibleDateCandidates(raw);
+  for (const d of candidates) {
+    if (map.has(bogotaDateKey(d))) return d;
+  }
+  return candidates[0] ?? null;
 }
 
 function parseFlexibleDateCandidates(val: unknown) {
@@ -116,12 +128,12 @@ function parseFlexibleDateCandidates(val: unknown) {
 
   const out: Date[] = [];
 
-  const ddmm = new Date(year, b - 1, a, hours, minutes, seconds);
+  const ddmm = makeBogotaDate(year, b, a, hours, minutes, seconds);
   if (!Number.isNaN(ddmm.getTime())) out.push(ddmm);
 
   const ambiguous = a <= 12 && b <= 12;
   if (ambiguous) {
-    const mmdd = new Date(year, a - 1, b, hours, minutes, seconds);
+    const mmdd = makeBogotaDate(year, a, b, hours, minutes, seconds);
     if (!Number.isNaN(mmdd.getTime())) out.push(mmdd);
   }
 
@@ -523,9 +535,7 @@ async function processActualizacionCsvFile(input: {
         if (fechaAsignacionVal instanceof Date) {
           assignedAt = fechaAsignacionVal;
         } else {
-          const str = fechaAsignacionVal.toString().trim();
-          const d = new Date(str);
-          if (!isNaN(d.getTime())) assignedAt = d;
+          assignedAt = parseFlexibleDateCandidates(fechaAsignacionVal)[0] ?? null;
         }
       }
 
@@ -534,9 +544,7 @@ async function processActualizacionCsvFile(input: {
         if (fechaGestionVal instanceof Date) {
           gestionAt = fechaGestionVal;
         } else {
-          const str = fechaGestionVal.toString().trim();
-          const d = new Date(str);
-          if (!isNaN(d.getTime())) gestionAt = d;
+          gestionAt = parseFlexibleDateCandidates(fechaGestionVal)[0] ?? null;
         }
       }
 
@@ -810,22 +818,7 @@ async function processActualizacion(input: {
         if (fechaAsignacionVal instanceof Date) {
           assignedAt = fechaAsignacionVal;
         } else {
-          const str = fechaAsignacionVal.toString().trim();
-          const d = new Date(str);
-          if (!isNaN(d.getTime())) {
-            assignedAt = d;
-          } else {
-            const parts = str.split(/[/\s:]/);
-            if (parts.length >= 3) {
-              const day = parseInt(parts[0]);
-              const month = parseInt(parts[1]) - 1;
-              const year = parseInt(parts[2]);
-              const hour = parts[3] ? parseInt(parts[3]) : 0;
-              const min = parts[4] ? parseInt(parts[4]) : 0;
-              const d2 = new Date(year, month, day, hour, min);
-              if (!isNaN(d2.getTime())) assignedAt = d2;
-            }
-          }
+          assignedAt = parseFlexibleDateCandidates(fechaAsignacionVal)[0] ?? null;
         }
       }
 
@@ -834,22 +827,7 @@ async function processActualizacion(input: {
         if (fechaGestionVal instanceof Date) {
           gestionAt = fechaGestionVal;
         } else {
-          const str = fechaGestionVal.toString().trim();
-          const d = new Date(str);
-          if (!isNaN(d.getTime())) {
-            gestionAt = d;
-          } else {
-            const parts = str.split(/[/\s:]/);
-            if (parts.length >= 3) {
-              const day = parseInt(parts[0]);
-              const month = parseInt(parts[1]) - 1;
-              const year = parseInt(parts[2]);
-              const hour = parts[3] ? parseInt(parts[3]) : 0;
-              const min = parts[4] ? parseInt(parts[4]) : 0;
-              const d2 = new Date(year, month, day, hour, min);
-              if (!isNaN(d2.getTime())) gestionAt = d2;
-            }
-          }
+          gestionAt = parseFlexibleDateCandidates(fechaGestionVal)[0] ?? null;
         }
       }
 
@@ -950,11 +928,11 @@ async function processDevolucionesJob(input: {
   const calendarFinMap = new Map<string, number>();
   const finNumberToDate = new Map<number, string>();
   calendar.forEach((c) => {
-    const normalized = new Date(c.date.getFullYear(), c.date.getMonth(), c.date.getDate()).toISOString();
-    calendarInicioMap.set(normalized, c.dayNumber);
+    const key = bogotaDateKey(c.date);
+    calendarInicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
-    calendarFinMap.set(normalized, finNum);
-    finNumberToDate.set(finNum, normalized);
+    calendarFinMap.set(key, finNum);
+    finNumberToDate.set(finNum, key);
   });
 
   for (let i = 0; i < input.data.length; i++) {
@@ -1022,46 +1000,28 @@ async function processDevolucionesJob(input: {
         continue;
       }
 
-      const parseDate = (val: unknown) => {
-        if (val instanceof Date) return val;
-        if (val === null || val === undefined) return null;
-        const str = String(val).trim();
-        if (!str) return null;
-        const d = new Date(str);
-        if (!isNaN(d.getTime())) return d;
-        const parts = str.split(/[/\s:]/);
-        if (parts.length >= 3) {
-          const day = parseInt(parts[0]);
-          const month = parseInt(parts[1]) - 1;
-          const year = parseInt(parts[2]);
-          return new Date(year, month, day);
-        }
-        return null;
-      };
-
-      const dDev = parseDate(fechaDevolucionVal);
-      const dRes = parseDate(fechaRespuestaVal);
+      const dDev = pickBestDateByMap(fechaDevolucionVal, calendarInicioMap);
+      const dRes = pickBestDateByMap(fechaRespuestaVal, calendarFinMap);
       if (!(dDev && dRes)) {
         ignoredCount++;
         continue;
       }
 
-      const normalize = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
-      const inicioDev = calendarInicioMap.get(normalize(dDev));
-      let finRes = calendarFinMap.get(normalize(dRes));
+      const inicioDev = calendarInicioMap.get(bogotaDateKey(dDev));
+      let finRes = calendarFinMap.get(bogotaDateKey(dRes));
 
-      const isAfter1700 =
-        dRes.getHours() > 17 ||
-        (dRes.getHours() === 17 && (dRes.getMinutes() > 0 || dRes.getSeconds() > 0 || dRes.getMilliseconds() > 0));
+      const isAfter1700 = bogotaMinutes(dRes) > 17 * 60;
 
       let fechaFinEfectiva = new Date(dRes);
       if (finRes !== undefined && isAfter1700) {
         finRes = finRes + 1;
-        const effectiveDayIso = finNumberToDate.get(finRes);
-        if (effectiveDayIso) {
-          const effectiveDay = new Date(effectiveDayIso);
-          effectiveDay.setHours(dRes.getHours(), dRes.getMinutes(), dRes.getSeconds(), dRes.getMilliseconds());
-          fechaFinEfectiva = effectiveDay;
+        const effectiveKey = finNumberToDate.get(finRes);
+        if (effectiveKey) {
+          const [y, m, d] = effectiveKey.split("-").map((v) => parseInt(v, 10));
+          const minutes = bogotaMinutes(dRes);
+          const hh = Math.floor(minutes / 60);
+          const mm = minutes % 60;
+          fechaFinEfectiva = makeBogotaDate(y, m, d, hh, mm, 0);
         }
       }
       const fechaFinEfectivaIso = fechaFinEfectiva.toISOString();
@@ -1083,9 +1043,7 @@ async function processDevolucionesJob(input: {
       }
 
       const dAsig = order.assignedAt;
-      const normalizeAsig = new Date(dAsig.getFullYear(), dAsig.getMonth(), dAsig.getDate()).getTime();
-      const normalizeDev = new Date(dDev.getFullYear(), dDev.getMonth(), dDev.getDate()).getTime();
-      if (normalizeDev <= normalizeAsig) {
+      if (bogotaDateKey(dDev) <= bogotaDateKey(dAsig)) {
         ignoredCount++;
         continue;
       }
@@ -1187,20 +1145,16 @@ async function processCalendarioJob(input: {
 
       let date: Date | null = null;
       if (fechaVal instanceof Date) {
-        date = fechaVal;
+        const key = bogotaDateKey(fechaVal);
+        const [y, m, d] = key.split("-").map((v) => parseInt(v, 10));
+        date = makeBogotaDate(y, m, d, 0, 0, 0);
       } else {
-        const str = fechaVal.toString().trim();
-        const d = new Date(str);
-        if (!isNaN(d.getTime())) {
-          date = d;
-        } else {
-          const parts = str.split(/[/\s:]/);
-          if (parts.length >= 3) {
-            const day = parseInt(parts[0]);
-            const month = parseInt(parts[1]) - 1;
-            const year = parseInt(parts[2]);
-            date = new Date(year, month, day);
-          }
+        const candidates = parseFlexibleDateCandidates(fechaVal);
+        const picked = candidates[0] ?? null;
+        if (picked) {
+          const key = bogotaDateKey(picked);
+          const [y, m, d] = key.split("-").map((v) => parseInt(v, 10));
+          date = makeBogotaDate(y, m, d, 0, 0, 0);
         }
       }
 
@@ -1210,7 +1164,9 @@ async function processCalendarioJob(input: {
         continue;
       }
 
-      const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const normalizedKey = bogotaDateKey(date);
+      const [ny, nm, nd] = normalizedKey.split("-").map((v) => parseInt(v, 10));
+      const normalizedDate = makeBogotaDate(ny, nm, nd, 0, 0, 0);
 
       const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
       const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
