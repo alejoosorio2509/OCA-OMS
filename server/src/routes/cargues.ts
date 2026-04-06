@@ -84,6 +84,43 @@ const BOGOTA_TZ = "America/Bogota";
 const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 const bogotaTimeFmt = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 
+function normalizeHeaderKey(s: string) {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function getRowVal(row: Record<string, unknown>, name: string) {
+  const target = normalizeHeaderKey(name);
+  const key = Object.keys(row).find((k) => normalizeHeaderKey(k) === target);
+  return key ? row[key] : undefined;
+}
+
+function parseIntLoose(val: unknown) {
+  if (val === null || val === undefined) return NaN;
+  if (typeof val === "number") return Number.isFinite(val) ? Math.trunc(val) : NaN;
+  const s = String(val).trim();
+  if (!s) return NaN;
+  const normalized = s.replace(/[^\d-]/g, "");
+  const n = parseInt(normalized, 10);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function pickCalendarNumbersFromRow(row: Record<string, unknown>) {
+  const values = Object.values(row);
+  const nums: number[] = [];
+  for (const v of values) {
+    const n = parseIntLoose(v);
+    if (Number.isFinite(n)) nums.push(n);
+  }
+  if (nums.length >= 2) return { inicio: nums[nums.length - 2], fin: nums[nums.length - 1] };
+  if (nums.length === 1) return { inicio: nums[0], fin: null };
+  return { inicio: null, fin: null };
+}
+
 function makeBogotaDate(year: number, month: number, day: number, hours = 0, minutes = 0, seconds = 0) {
   return new Date(Date.UTC(year, month - 1, day, hours + 5, minutes, seconds));
 }
@@ -1152,14 +1189,25 @@ async function processCalendarioJob(input: {
   for (let i = 0; i < input.data.length; i++) {
     const row = input.data[i];
     try {
-      const getVal = (name: string) => {
-        const key = Object.keys(row).find((k) => k.trim().toLowerCase() === name.toLowerCase());
-        return key ? row[key] : undefined;
-      };
+      const fechaVal =
+        getRowVal(row, "fecha") ??
+        getRowVal(row, "Fecha") ??
+        (() => {
+          const v = Object.values(row).find((x) => {
+            const s = String(x ?? "").trim();
+            if (!s) return false;
+            return /^(\d{4})-(\d{2})-(\d{2})/.test(s) || /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.test(s);
+          });
+          return v;
+        })();
 
-      const fechaVal = getVal("fecha");
-      const inicioVal = getVal("Incio") || getVal("Inicio");
-      const finVal = getVal("Fin");
+      let inicioVal = getRowVal(row, "Incio") ?? getRowVal(row, "Inicio");
+      let finVal = getRowVal(row, "Fin");
+      if (inicioVal === undefined && finVal === undefined) {
+        const picked = pickCalendarNumbersFromRow(row);
+        inicioVal = picked.inicio ?? undefined;
+        finVal = picked.fin ?? undefined;
+      }
 
       const hasInicio = !(inicioVal === undefined || inicioVal === null || inicioVal === "");
       const hasFin = !(finVal === undefined || finVal === null || finVal === "");
@@ -1190,8 +1238,8 @@ async function processCalendarioJob(input: {
       const [ny, nm, nd] = normalizedKey.split("-").map((v) => parseInt(v, 10));
       const normalizedDate = makeBogotaDate(ny, nm, nd, 0, 0, 0);
 
-      const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
-      const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
+      const parsedInicio = hasInicio ? parseIntLoose(inicioVal) : NaN;
+      const parsedFin = hasFin ? parseIntLoose(finVal) : NaN;
       const dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
       const dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : null;
       if (isNaN(dayNumber)) {
@@ -2666,14 +2714,25 @@ carguesRouter.post(
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
         try {
-          const getVal = (name: string) => {
-            const key = Object.keys(row).find(k => k.trim().toLowerCase() === name.toLowerCase());
-            return key ? row[key] : undefined;
-          };
+          const fechaVal =
+            getRowVal(row, "fecha") ??
+            getRowVal(row, "Fecha") ??
+            (() => {
+              const v = Object.values(row).find((x) => {
+                const s = String(x ?? "").trim();
+                if (!s) return false;
+                return /^(\d{4})-(\d{2})-(\d{2})/.test(s) || /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.test(s);
+              });
+              return v;
+            })();
 
-          const fechaVal = getVal("fecha");
-          const inicioVal = getVal("Incio") || getVal("Inicio");
-          const finVal = getVal("Fin");
+          let inicioVal = getRowVal(row, "Incio") ?? getRowVal(row, "Inicio");
+          let finVal = getRowVal(row, "Fin");
+          if (inicioVal === undefined && finVal === undefined) {
+            const picked = pickCalendarNumbersFromRow(row);
+            inicioVal = picked.inicio ?? undefined;
+            finVal = picked.fin ?? undefined;
+          }
 
           const hasInicio = !(inicioVal === undefined || inicioVal === null || inicioVal === "");
           const hasFin = !(finVal === undefined || finVal === null || finVal === "");
@@ -2704,8 +2763,8 @@ carguesRouter.post(
           const [ny, nm, nd] = normalizedKey.split("-").map((v) => parseInt(v, 10));
           const normalizedDate = makeBogotaDate(ny, nm, nd, 0, 0, 0);
 
-          const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
-          const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
+          const parsedInicio = hasInicio ? parseIntLoose(inicioVal) : NaN;
+          const parsedFin = hasFin ? parseIntLoose(finVal) : NaN;
           const dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
           const dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : null;
           if (isNaN(dayNumber)) {
