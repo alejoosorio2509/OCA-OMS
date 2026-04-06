@@ -1189,6 +1189,9 @@ async function processCalendarioJob(input: {
   let successCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
+  const debugSample: Array<{ fila: number; fecha: string; inicio: number; fin: number | null }> = [];
+  const duplicateSample: Array<{ fecha: string; prevFila: number; fila: number; prevInicio: number; prevFin: number | null; inicio: number; fin: number | null }> = [];
+  const seenByDate = new Map<string, { fila: number; inicio: number; fin: number | null }>();
 
   await prisma.calendar.deleteMany({});
 
@@ -1254,12 +1257,29 @@ async function processCalendarioJob(input: {
         continue;
       }
 
+      const prev = seenByDate.get(normalizedKey);
+      if (prev && duplicateSample.length < 20) {
+        duplicateSample.push({
+          fecha: normalizedKey,
+          prevFila: prev.fila,
+          fila: i + 1,
+          prevInicio: prev.inicio,
+          prevFin: prev.fin,
+          inicio: dayNumber,
+          fin: dayNumberFin
+        });
+      }
+      if (!prev) {
+        seenByDate.set(normalizedKey, { fila: i + 1, inicio: dayNumber, fin: dayNumberFin });
+      }
+
       await prisma.calendar.upsert({
         where: { date: normalizedDate },
         update: { dayNumber, dayNumberFin },
         create: { date: normalizedDate, dayNumber, dayNumberFin }
       });
       successCount++;
+      if (debugSample.length < 20) debugSample.push({ fila: i + 1, fecha: normalizedKey, inicio: dayNumber, fin: dayNumberFin });
     } catch (err) {
       errorCount++;
       const msg = err instanceof Error ? err.message : "UNKNOWN";
@@ -1279,7 +1299,9 @@ async function processCalendarioJob(input: {
     message: `Calendario actualizado: ${successCount} registros.`,
     count: successCount,
     errors: errorCount,
-    errorDetails: rowErrors
+    errorDetails: rowErrors,
+    debugSample,
+    duplicateSample
   };
 }
 
