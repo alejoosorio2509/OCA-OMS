@@ -113,6 +113,27 @@ function parseFlexibleDateCandidates(val: unknown) {
   const str = String(val).trim();
   if (!str) return [];
 
+  const isoDateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (isoDateOnly) {
+    const year = parseInt(isoDateOnly[1], 10);
+    const month = parseInt(isoDateOnly[2], 10);
+    const day = parseInt(isoDateOnly[3], 10);
+    const d = makeBogotaDate(year, month, day, 0, 0, 0);
+    return Number.isNaN(d.getTime()) ? [] : [d];
+  }
+
+  const isoLocal = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/.exec(str);
+  if (isoLocal && !/[zZ]|[+-]\d{2}:\d{2}$/.test(str)) {
+    const year = parseInt(isoLocal[1], 10);
+    const month = parseInt(isoLocal[2], 10);
+    const day = parseInt(isoLocal[3], 10);
+    const hours = parseInt(isoLocal[4], 10);
+    const minutes = parseInt(isoLocal[5], 10);
+    const seconds = isoLocal[6] ? parseInt(isoLocal[6], 10) : 0;
+    const d = makeBogotaDate(year, month, day, hours, minutes, seconds);
+    return Number.isNaN(d.getTime()) ? [] : [d];
+  }
+
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(str);
   if (!m) {
     const d = new Date(str);
@@ -1171,8 +1192,8 @@ async function processCalendarioJob(input: {
 
       const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
       const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
-      const dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
-      const dayNumberFin = Number.isFinite(parsedFin)
+      let dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
+      let dayNumberFin = Number.isFinite(parsedFin)
         ? parsedFin
         : Number.isFinite(parsedInicio)
           ? parsedInicio
@@ -1181,6 +1202,12 @@ async function processCalendarioJob(input: {
         rowErrors.push(`Fila ${i + 1}: Inicio/Fin no es número (Inicio=${inicioVal ?? ""}, Fin=${finVal ?? ""})`);
         errorCount++;
         continue;
+      }
+
+      if (dayNumberFin !== null && dayNumberFin < dayNumber) {
+        const tmp = dayNumber;
+        dayNumber = dayNumberFin;
+        dayNumberFin = tmp;
       }
 
       await prisma.calendar.upsert({
@@ -2664,20 +2691,16 @@ carguesRouter.post(
 
           let date: Date | null = null;
           if (fechaVal instanceof Date) {
-            date = fechaVal;
+            const key = bogotaDateKey(fechaVal);
+            const [y, m, d] = key.split("-").map((v) => parseInt(v, 10));
+            date = makeBogotaDate(y, m, d, 0, 0, 0);
           } else {
-            const str = fechaVal.toString().trim();
-            const d = new Date(str);
-            if (!isNaN(d.getTime())) {
-              date = d;
-            } else {
-              const parts = str.split(/[/\s:]/);
-              if (parts.length >= 3) {
-                const day = parseInt(parts[0]);
-                const month = parseInt(parts[1]) - 1;
-                const year = parseInt(parts[2]);
-                date = new Date(year, month, day);
-              }
+            const candidates = parseFlexibleDateCandidates(fechaVal);
+            const picked = candidates[0] ?? null;
+            if (picked) {
+              const key = bogotaDateKey(picked);
+              const [y, m, d] = key.split("-").map((v) => parseInt(v, 10));
+              date = makeBogotaDate(y, m, d, 0, 0, 0);
             }
           }
 
@@ -2687,17 +2710,24 @@ carguesRouter.post(
             continue;
           }
 
-          // Normalizar fecha a medianoche para evitar problemas de zona horaria
-          const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+          const normalizedKey = bogotaDateKey(date);
+          const [ny, nm, nd] = normalizedKey.split("-").map((v) => parseInt(v, 10));
+          const normalizedDate = makeBogotaDate(ny, nm, nd, 0, 0, 0);
 
           const parsedInicio = hasInicio ? parseInt(inicioVal.toString()) : NaN;
           const parsedFin = hasFin ? parseInt(finVal.toString()) : NaN;
-          const dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
-          const dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : (Number.isFinite(parsedInicio) ? parsedInicio : null);
+          let dayNumber = Number.isFinite(parsedInicio) ? parsedInicio : parsedFin;
+          let dayNumberFin = Number.isFinite(parsedFin) ? parsedFin : (Number.isFinite(parsedInicio) ? parsedInicio : null);
           if (isNaN(dayNumber)) {
             rowErrors.push(`Fila ${i+1}: Inicio/Fin no es número (Inicio=${inicioVal ?? ""}, Fin=${finVal ?? ""})`);
             errorCount++;
             continue;
+          }
+
+          if (dayNumberFin !== null && dayNumberFin < dayNumber) {
+            const tmp = dayNumber;
+            dayNumber = dayNumberFin;
+            dayNumberFin = tmp;
           }
 
           await prisma.calendar.upsert({
