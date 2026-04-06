@@ -11,7 +11,8 @@
     "test": "npm run build && node --test dist/**/*.test.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "users:bulk": "tsx scripts/bulkCreateUsers.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.1",
