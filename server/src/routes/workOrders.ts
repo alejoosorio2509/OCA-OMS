@@ -1304,12 +1304,12 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
   const finMap = new Map<string, number>();
   const finNumberToDate = new Map<number, string>();
   let maxFinNumber: number | undefined;
-  calendar.forEach(c => {
-    const normalized = new Date(c.date.getFullYear(), c.date.getMonth(), c.date.getDate()).toISOString();
-    inicioMap.set(normalized, c.dayNumber);
+  calendar.forEach((c) => {
+    const key = normalizeDay(c.date);
+    inicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
-    finMap.set(normalized, finNum);
-    finNumberToDate.set(finNum, normalized);
+    finMap.set(key, finNum);
+    finNumberToDate.set(finNum, key);
     if (maxFinNumber === undefined || finNum > maxFinNumber) maxFinNumber = finNum;
   });
 
@@ -1317,7 +1317,7 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
     if (!dateStr) return null;
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return null;
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+    return normalizeDay(d);
   };
 
   const dto = toDto(item, inicioMap, finMap, finNumberToDate, maxFinNumber);
@@ -1341,10 +1341,8 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
   const diasPasados = dto.diasPasados == null ? null : dto.diasPasados + extraDescuento;
 
   const assignedAt = dto.assignedAt ? new Date(dto.assignedAt as unknown as string | Date) : null;
-  const assignedIso = assignedAt
-    ? new Date(assignedAt.getFullYear(), assignedAt.getMonth(), assignedAt.getDate()).toISOString()
-    : null;
-  const assignedNum = assignedIso ? inicioMap.get(assignedIso) : undefined;
+  const assignedKey = assignedAt ? normalizeDay(assignedAt) : null;
+  const assignedNum = assignedKey ? inicioMap.get(assignedKey) : undefined;
 
   const fechaTentativaGestion =
     !dto.gestionAt && assignedNum !== undefined && dto.ansOportunidad != null
@@ -1373,34 +1371,38 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
     cumplimiento,
     history: [
       ...item.history.map((h) => {
-      let diasNovedad: number | null = null;
-      if (h.fechaInicio && h.fechaFin) {
-        const inicioNum = inicioMap.get(normalize(h.fechaInicio)!);
-        const finNum = finMap.get(normalize(h.fechaFin)!);
-        if (inicioNum !== undefined && finNum !== undefined) {
-          diasNovedad = finNum - inicioNum;
-        }
-      }
-
-      if (diasNovedad === null) {
+        let diasNovedad: number | null = null;
         const note = (h.note ?? "").toLowerCase();
         const detail = (h.noteDetail ?? "").toLowerCase();
-        if (note.includes("actividades baremo") || detail.includes("actividades baremo") || detail.includes("resultado=")) {
-          const matches = [...(h.noteDetail ?? "").matchAll(/Resultado=([-]?\d+(?:\.\d+)?)/g)];
-          if (matches.length > 0) {
-            const last = matches[matches.length - 1]?.[1];
-            const n = last ? parseFloat(last) : NaN;
-            if (Number.isFinite(n)) diasNovedad = Math.round(n);
-          }
-        }
-        if (diasNovedad === null && (note.includes("recorrido incrementos") || detail.includes("diasenel="))) {
+
+        if (note.includes("recorrido incrementos") || detail.includes("diasenel=")) {
           const m = /DiasENEL=([-]?\d+)/.exec(h.noteDetail ?? "");
           if (m?.[1]) {
             const n = parseInt(m[1], 10);
             if (Number.isFinite(n)) diasNovedad = n;
           }
         }
-      }
+
+        if (diasNovedad === null && h.fechaInicio && h.fechaFin) {
+          const inicioKey = normalize(h.fechaInicio);
+          const finKey = normalize(h.fechaFin);
+          const inicioNum = inicioKey ? inicioMap.get(inicioKey) : undefined;
+          const finNum = finKey ? finMap.get(finKey) : undefined;
+          if (inicioNum !== undefined && finNum !== undefined) {
+            diasNovedad = finNum - inicioNum;
+          }
+        }
+
+        if (diasNovedad === null) {
+          if (note.includes("actividades baremo") || detail.includes("actividades baremo") || detail.includes("resultado=")) {
+            const matches = [...(h.noteDetail ?? "").matchAll(/Resultado=([-]?\d+(?:\.\d+)?)/g)];
+            if (matches.length > 0) {
+              const last = matches[matches.length - 1]?.[1];
+              const n = last ? parseFloat(last) : NaN;
+              if (Number.isFinite(n)) diasNovedad = Math.round(n);
+            }
+          }
+        }
 
       return {
         id: h.id,
