@@ -80,6 +80,101 @@ function isTruthy(value: unknown, defaultValue = false) {
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
 }
 
+const BOGOTA_TZ = "America/Bogota";
+const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+const bogotaTimeFmt = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+
+function bogotaDateKey(d: Date) {
+  return bogotaDateFmt.format(d);
+}
+
+function bogotaMinutes(d: Date) {
+  const parts = bogotaTimeFmt.formatToParts(d);
+  const hh = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+  const mm = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+  return hh * 60 + mm;
+}
+
+function parseFlexibleDateCandidates(val: unknown) {
+  if (val instanceof Date) return [val];
+  if (val === null || val === undefined) return [];
+  const str = String(val).trim();
+  if (!str) return [];
+
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(str);
+  if (!m) {
+    const d = new Date(str);
+    return Number.isNaN(d.getTime()) ? [] : [d];
+  }
+
+  const a = parseInt(m[1], 10);
+  const b = parseInt(m[2], 10);
+  const year = parseInt(m[3], 10);
+  const hours = m[4] ? parseInt(m[4], 10) : 0;
+  const minutes = m[5] ? parseInt(m[5], 10) : 0;
+  const seconds = m[6] ? parseInt(m[6], 10) : 0;
+
+  const out: Date[] = [];
+
+  const ddmm = new Date(year, b - 1, a, hours, minutes, seconds);
+  if (!Number.isNaN(ddmm.getTime())) out.push(ddmm);
+
+  const ambiguous = a <= 12 && b <= 12;
+  if (ambiguous) {
+    const mmdd = new Date(year, a - 1, b, hours, minutes, seconds);
+    if (!Number.isNaN(mmdd.getTime())) out.push(mmdd);
+  }
+
+  return out;
+}
+
+function pickBestDatePairByCalendar(
+  inicioRaw: unknown,
+  finRaw: unknown,
+  calendarInicioMap: Map<string, number>,
+  calendarFinMap: Map<string, number>
+) {
+  const inicioCandidates = parseFlexibleDateCandidates(inicioRaw);
+  const finCandidates = parseFlexibleDateCandidates(finRaw);
+
+  if (inicioCandidates.length === 0 || finCandidates.length === 0) {
+    return { inicio: inicioCandidates[0] ?? null, fin: finCandidates[0] ?? null };
+  }
+
+  const cutoffMinutes = 17 * 60;
+
+  let best: { inicio: Date; fin: Date } | null = null;
+  let bestScore = -1;
+  let bestMs = Number.POSITIVE_INFINITY;
+
+  for (const inicio of inicioCandidates) {
+    const iKey = bogotaDateKey(inicio);
+    const iNum = calendarInicioMap.get(iKey);
+    if (iNum === undefined) continue;
+    for (const fin of finCandidates) {
+      const fKey = bogotaDateKey(fin);
+      const fNum = calendarFinMap.get(fKey);
+      if (fNum === undefined) continue;
+
+      const finMinutes = bogotaMinutes(fin);
+      const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
+      const sameDay = iKey === fKey;
+      const dias = sameDay && finMinutes < cutoffMinutes ? 0 : Math.max(0, fNum - iNum + extraDay);
+      if (dias > 400) continue;
+
+      const ms = Math.abs(fin.getTime() - inicio.getTime());
+      if (dias > bestScore || (dias === bestScore && ms < bestMs)) {
+        bestScore = dias;
+        bestMs = ms;
+        best = { inicio, fin };
+      }
+    }
+  }
+
+  if (best) return best;
+  return { inicio: inicioCandidates[0] ?? null, fin: finCandidates[0] ?? null };
+}
+
 async function createJob(input: {
   userId: string;
   type: string;
@@ -1745,10 +1840,9 @@ async function processRecorridoIncrementosJob(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const d = new Date(r.date);
-    const iso = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
-    calendarInicioMap.set(iso, r.dayNumber);
-    calendarFinMap.set(iso, r.dayNumberFin ?? r.dayNumber);
+    const key = bogotaDateKey(new Date(r.date));
+    calendarInicioMap.set(key, r.dayNumber);
+    calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
 
   const normalizeTransition = (value: string) =>
@@ -1791,15 +1885,15 @@ async function processRecorridoIncrementosJob(input: {
   };
 
   const computeDias = (inicio: Date, fin: Date) => {
-    const iIso = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate()).toISOString();
-    const fIso = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate()).toISOString();
-    const iNum = calendarInicioMap.get(iIso);
-    const fNum = calendarFinMap.get(fIso);
+    const iKey = bogotaDateKey(inicio);
+    const fKey = bogotaDateKey(fin);
+    const iNum = calendarInicioMap.get(iKey);
+    const fNum = calendarFinMap.get(fKey);
     if (iNum === undefined || fNum === undefined) return null;
     const cutoffMinutes = 17 * 60;
-    const finMinutes = fin.getHours() * 60 + fin.getMinutes();
+    const finMinutes = bogotaMinutes(fin);
     const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
-    const sameDay = iIso === fIso;
+    const sameDay = iKey === fKey;
     if (sameDay && finMinutes < cutoffMinutes) return 0;
     return Math.max(0, fNum - iNum + extraDay);
   };
@@ -1832,7 +1926,12 @@ async function processRecorridoIncrementosJob(input: {
     try {
       const orderCode = (getVal(row, "Orden de Trabajo") ?? getVal(row, "Orden") ?? getVal(row, "Orden de trabajo"))?.toString().trim();
       const nombreIncremento = (getVal(row, "Nombre Incremento") ?? getVal(row, "Nombre incremento"))?.toString().trim();
-      const fechaInicio = parseDate(getVal(row, "FECHA_INICIO"));
+      const { inicio: fechaInicio, fin: fechaFin } = pickBestDatePairByCalendar(
+        getVal(row, "FECHA_INICIO"),
+        getVal(row, "FECHA_FIN"),
+        calendarInicioMap,
+        calendarFinMap
+      );
 
       if (!orderCode) {
         errorCount++;
@@ -1867,7 +1966,6 @@ async function processRecorridoIncrementosJob(input: {
         parseDate(getVal(row, "Fecha gestiÃ³n"));
       const estadoAnterior = (getVal(row, "ESTADO_ANTERIOR") ?? "").toString().trim() || null;
       const estadoActual = (getVal(row, "ESTADO_ACTUAL") ?? "").toString().trim() || null;
-      const fechaFin = parseDate(getVal(row, "FECHA_FIN"));
       const cantidadIncrementos = parseIntSafe(getVal(row, "Cantidad Incrementos"));
       const flagFechaFin = parseBool(getVal(row, "FLAG_FECHA_FIN"));
 
@@ -3200,10 +3298,9 @@ carguesRouter.post(
       const calendarInicioMap = new Map<string, number>();
       const calendarFinMap = new Map<string, number>();
       for (const r of calendarRows) {
-        const d = new Date(r.date);
-        const iso = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
-        calendarInicioMap.set(iso, r.dayNumber);
-        calendarFinMap.set(iso, r.dayNumberFin ?? r.dayNumber);
+        const key = bogotaDateKey(new Date(r.date));
+        calendarInicioMap.set(key, r.dayNumber);
+        calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
       }
 
       const normalizeTransition = (value: string) =>
@@ -3251,15 +3348,15 @@ carguesRouter.post(
         // - fNum: Fin(fin)
         // - extraDay: +1 si fin > 17:00
         // - si mismo día y fin < 17:00 => 0
-        const iIso = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate()).toISOString();
-        const fIso = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate()).toISOString();
-        const iNum = calendarInicioMap.get(iIso);
-        const fNum = calendarFinMap.get(fIso);
+        const iKey = bogotaDateKey(inicio);
+        const fKey = bogotaDateKey(fin);
+        const iNum = calendarInicioMap.get(iKey);
+        const fNum = calendarFinMap.get(fKey);
         if (iNum === undefined || fNum === undefined) return null;
         const cutoffMinutes = 17 * 60;
-        const finMinutes = fin.getHours() * 60 + fin.getMinutes();
+        const finMinutes = bogotaMinutes(fin);
         const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
-        const sameDay = iIso === fIso;
+        const sameDay = iKey === fKey;
         if (sameDay && finMinutes < cutoffMinutes) return 0;
         return Math.max(0, fNum - iNum + extraDay);
       };
@@ -3299,7 +3396,12 @@ carguesRouter.post(
           )?.toString().trim();
 
           const nombreIncremento = (getVal(row, "Nombre Incremento") ?? getVal(row, "Nombre incremento"))?.toString().trim();
-          const fechaInicio = parseDate(getVal(row, "FECHA_INICIO"));
+          const { inicio: fechaInicio, fin: fechaFin } = pickBestDatePairByCalendar(
+            getVal(row, "FECHA_INICIO"),
+            getVal(row, "FECHA_FIN"),
+            calendarInicioMap,
+            calendarFinMap
+          );
 
           if (!orderCode) {
             errorCount++;
@@ -3331,7 +3433,6 @@ carguesRouter.post(
             parseDate(getVal(row, "Fecha gestiÃ³n"));
           const estadoAnterior = (getVal(row, "ESTADO_ANTERIOR") ?? "").toString().trim() || null;
           const estadoActual = (getVal(row, "ESTADO_ACTUAL") ?? "").toString().trim() || null;
-          const fechaFin = parseDate(getVal(row, "FECHA_FIN"));
           const cantidadIncrementos = parseIntSafe(getVal(row, "Cantidad Incrementos"));
           const flagFechaFin = parseBool(getVal(row, "FLAG_FECHA_FIN"));
 
