@@ -156,8 +156,8 @@ function pickBestDatePairByCalendar(
   const cutoffMinutes = 17 * 60;
 
   let best: { inicio: Date; fin: Date } | null = null;
-  let bestScore = -1;
   let bestMs = Number.POSITIVE_INFINITY;
+  let bestDias = Number.POSITIVE_INFINITY;
 
   for (const inicio of inicioCandidates) {
     const iKey = bogotaDateKey(inicio);
@@ -171,13 +171,14 @@ function pickBestDatePairByCalendar(
       const finMinutes = bogotaMinutes(fin);
       const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
       const sameDay = iKey === fKey;
-      const dias = sameDay && finMinutes < cutoffMinutes ? 0 : Math.max(0, fNum - iNum + extraDay);
-      if (dias > 400) continue;
+      const rawDias = sameDay && finMinutes < cutoffMinutes ? 0 : fNum - iNum + extraDay;
+      if (rawDias < 0) continue;
+      if (rawDias > 400) continue;
 
       const ms = Math.abs(fin.getTime() - inicio.getTime());
-      if (dias > bestScore || (dias === bestScore && ms < bestMs)) {
-        bestScore = dias;
+      if (ms < bestMs || (ms === bestMs && rawDias < bestDias)) {
         bestMs = ms;
+        bestDias = rawDias;
         best = { inicio, fin };
       }
     }
@@ -2125,37 +2126,70 @@ async function processRecorridoIncrementosJob(input: {
     enelWindowByOrder.set(g.orderCode, { fechaInicio: inicio, fechaFin: fin });
   }
 
-  const changedOrders: Array<{ orderCode: string; before: number; after: number }> = [];
-  for (const orderCode of codes) {
-    const before = existingEnelSumByOrder.get(orderCode) ?? 0;
-    const after = newEnelSumByOrder.get(orderCode) ?? 0;
-    if (before !== after) changedOrders.push({ orderCode, before, after });
-  }
-
-  if (changedOrders.length > 0) {
+  if (codes.length > 0) {
     const orders = await prisma.workOrder.findMany({
-      where: { code: { in: changedOrders.map((c) => c.orderCode) } },
+      where: { code: { in: codes } },
       select: { id: true, code: true, status: true }
     });
     const orderIdMap = new Map(orders.map((o) => [o.code, o]));
-    const historyRows: Array<Prisma.WorkOrderHistoryCreateManyInput> = [];
-    for (const c of changedOrders) {
-      const o = orderIdMap.get(c.orderCode);
-      if (!o) continue;
-      const window = enelWindowByOrder.get(c.orderCode);
-      historyRows.push({
-        workOrderId: o.id,
-        toStatus: o.status,
-        note: "Recorrido Incrementos (ENEL)",
-        noteDetail: `DiasENEL=${c.after}; Antes=${c.before}`,
-        fechaInicio: window?.fechaInicio ?? null,
-        fechaFin: window?.fechaFin ?? null,
-        changedById: input.userId
-      });
+
+    const existingHistory = await prisma.workOrderHistory.findMany({
+      where: { workOrderId: { in: orders.map((o) => o.id) }, note: "Recorrido Incrementos (ENEL)" },
+      orderBy: { changedAt: "desc" },
+      select: { id: true, workOrderId: true }
+    });
+    const latestHistoryByWorkOrderId = new Map<string, string>();
+    for (const h of existingHistory) {
+      if (!latestHistoryByWorkOrderId.has(h.workOrderId)) latestHistoryByWorkOrderId.set(h.workOrderId, h.id);
     }
-    for (const group of chunk(historyRows, 200)) {
+
+    const creates: Array<Prisma.WorkOrderHistoryCreateManyInput> = [];
+    const updates: Array<{ id: string; data: Prisma.WorkOrderHistoryUpdateInput }> = [];
+
+    for (const orderCode of codes) {
+      const o = orderIdMap.get(orderCode);
+      if (!o) continue;
+      const window = enelWindowByOrder.get(orderCode);
+      if (!window?.fechaInicio || !window?.fechaFin) continue;
+
+      const before = existingEnelSumByOrder.get(orderCode) ?? 0;
+      const after = newEnelSumByOrder.get(orderCode) ?? 0;
+      const noteDetail = `DiasENEL=${after}; Antes=${before}`;
+
+      const existingId = latestHistoryByWorkOrderId.get(o.id);
+      if (existingId) {
+        updates.push({
+          id: existingId,
+          data: {
+            toStatus: o.status,
+            noteDetail,
+            fechaInicio: window.fechaInicio,
+            fechaFin: window.fechaFin,
+            changedBy: { connect: { id: input.userId } }
+          }
+        });
+      } else {
+        creates.push({
+          workOrderId: o.id,
+          toStatus: o.status,
+          note: "Recorrido Incrementos (ENEL)",
+          noteDetail,
+          fechaInicio: window.fechaInicio,
+          fechaFin: window.fechaFin,
+          changedById: input.userId
+        });
+      }
+    }
+
+    for (const group of chunk(creates, 200)) {
       if (group.length === 0) continue;
       await withRetry(() => prisma.workOrderHistory.createMany({ data: group }));
+    }
+    for (const group of chunk(updates, 50)) {
+      if (group.length === 0) continue;
+      await withRetry(() =>
+        prisma.$transaction(group.map((u) => prisma.workOrderHistory.update({ where: { id: u.id }, data: u.data })))
+      );
     }
   }
 
@@ -3614,41 +3648,71 @@ carguesRouter.post(
         enelWindowByOrder.set(g.orderCode, { fechaInicio: inicio, fechaFin: fin });
       }
 
-      const changedOrders: Array<{ orderCode: string; before: number; after: number }> = [];
-      for (const orderCode of codes) {
-        const before = existingEnelSumByOrder.get(orderCode) ?? 0;
-        const after = newEnelSumByOrder.get(orderCode) ?? 0;
-        if (before !== after) changedOrders.push({ orderCode, before, after });
-      }
-
-      // Trazabilidad:
-      // Si el acumulado ENEL cambió para una OT, se registra un evento en WorkOrderHistory
-      // con el resumen (Antes/Después) y un rango (min FECHA_INICIO, max FECHA_FIN) del recorrido ENEL.
-      if (changedOrders.length > 0) {
+      if (codes.length > 0) {
         const userId = req.auth!.sub;
         const orders = await prisma.workOrder.findMany({
-          where: { code: { in: changedOrders.map((c) => c.orderCode) } },
+          where: { code: { in: codes } },
           select: { id: true, code: true, status: true }
         });
         const orderIdMap = new Map(orders.map((o) => [o.code, o]));
-        const historyRows: Array<Prisma.WorkOrderHistoryCreateManyInput> = [];
-        for (const c of changedOrders) {
-          const o = orderIdMap.get(c.orderCode);
-          if (!o) continue;
-          const window = enelWindowByOrder.get(c.orderCode);
-          historyRows.push({
-            workOrderId: o.id,
-            toStatus: o.status,
-            note: "Recorrido Incrementos (ENEL)",
-            noteDetail: `DiasENEL=${c.after}; Antes=${c.before}`,
-            fechaInicio: window?.fechaInicio ?? null,
-            fechaFin: window?.fechaFin ?? null,
-            changedById: userId
-          });
+
+        const existingHistory = await prisma.workOrderHistory.findMany({
+          where: { workOrderId: { in: orders.map((o) => o.id) }, note: "Recorrido Incrementos (ENEL)" },
+          orderBy: { changedAt: "desc" },
+          select: { id: true, workOrderId: true }
+        });
+        const latestHistoryByWorkOrderId = new Map<string, string>();
+        for (const h of existingHistory) {
+          if (!latestHistoryByWorkOrderId.has(h.workOrderId)) latestHistoryByWorkOrderId.set(h.workOrderId, h.id);
         }
-        for (const group of chunk(historyRows, 200)) {
+
+        const creates: Array<Prisma.WorkOrderHistoryCreateManyInput> = [];
+        const updates: Array<{ id: string; data: Prisma.WorkOrderHistoryUpdateInput }> = [];
+
+        for (const orderCode of codes) {
+          const o = orderIdMap.get(orderCode);
+          if (!o) continue;
+          const window = enelWindowByOrder.get(orderCode);
+          if (!window?.fechaInicio || !window?.fechaFin) continue;
+
+          const before = existingEnelSumByOrder.get(orderCode) ?? 0;
+          const after = newEnelSumByOrder.get(orderCode) ?? 0;
+          const noteDetail = `DiasENEL=${after}; Antes=${before}`;
+
+          const existingId = latestHistoryByWorkOrderId.get(o.id);
+          if (existingId) {
+            updates.push({
+              id: existingId,
+              data: {
+                toStatus: o.status,
+                noteDetail,
+                fechaInicio: window.fechaInicio,
+                fechaFin: window.fechaFin,
+                changedBy: { connect: { id: userId } }
+              }
+            });
+          } else {
+            creates.push({
+              workOrderId: o.id,
+              toStatus: o.status,
+              note: "Recorrido Incrementos (ENEL)",
+              noteDetail,
+              fechaInicio: window.fechaInicio,
+              fechaFin: window.fechaFin,
+              changedById: userId
+            });
+          }
+        }
+
+        for (const group of chunk(creates, 200)) {
           if (group.length === 0) continue;
           await withRetry(() => prisma.workOrderHistory.createMany({ data: group }));
+        }
+        for (const group of chunk(updates, 50)) {
+          if (group.length === 0) continue;
+          await withRetry(() =>
+            prisma.$transaction(group.map((u) => prisma.workOrderHistory.update({ where: { id: u.id }, data: u.data })))
+          );
         }
       }
 

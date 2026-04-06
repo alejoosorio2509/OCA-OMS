@@ -1375,15 +1375,7 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
         const note = (h.note ?? "").toLowerCase();
         const detail = (h.noteDetail ?? "").toLowerCase();
 
-        if (note.includes("recorrido incrementos") || detail.includes("diasenel=")) {
-          const m = /DiasENEL=([-]?\d+)/.exec(h.noteDetail ?? "");
-          if (m?.[1]) {
-            const n = parseInt(m[1], 10);
-            if (Number.isFinite(n)) diasNovedad = n;
-          }
-        }
-
-        if (diasNovedad === null && h.fechaInicio && h.fechaFin) {
+        if (h.fechaInicio && h.fechaFin) {
           const inicioKey = normalize(h.fechaInicio);
           const finKey = normalize(h.fechaFin);
           const inicioNum = inicioKey ? inicioMap.get(inicioKey) : undefined;
@@ -1394,6 +1386,13 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
         }
 
         if (diasNovedad === null) {
+          if (note.includes("recorrido incrementos") || detail.includes("diasenel=")) {
+            const m = /DiasENEL=([-]?\d+)/.exec(h.noteDetail ?? "");
+            if (m?.[1]) {
+              const n = parseInt(m[1], 10);
+              if (Number.isFinite(n)) diasNovedad = n;
+            }
+          }
           if (note.includes("actividades baremo") || detail.includes("actividades baremo") || detail.includes("resultado=")) {
             const matches = [...(h.noteDetail ?? "").matchAll(/Resultado=([-]?\d+(?:\.\d+)?)/g)];
             if (matches.length > 0) {
