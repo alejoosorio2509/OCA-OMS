@@ -6,6 +6,7 @@ dist
 # Datos locales (no versionar)
 server/users.csv
 server/credenciales.csv
+Calendar.csv
 
 server/prisma/dev.db
 server/prisma/dev.db-journal
