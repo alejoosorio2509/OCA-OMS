@@ -578,10 +578,17 @@ async function processActualizacionCsvFile(input: {
   const codigosEnArchivo = input.cleanupMissing ? new Set<string>() : null;
 
   const calendarRows = await prisma.calendar.findMany({ select: { date: true, dayNumber: true, dayNumberFin: true } });
+  const getPureDateKey = (d: Date) => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = calendarKey(r.date);
+    const key = getPureDateKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
