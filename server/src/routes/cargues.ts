@@ -199,12 +199,6 @@ function parseFlexibleDateCandidates(val: unknown) {
   const ddmm = makeBogotaDate(year, b, a, hours, minutes, seconds);
   if (!Number.isNaN(ddmm.getTime())) out.push(ddmm);
 
-  const ambiguous = a <= 12 && b <= 12;
-  if (ambiguous) {
-    const mmdd = makeBogotaDate(year, a, b, hours, minutes, seconds);
-    if (!Number.isNaN(mmdd.getTime())) out.push(mmdd);
-  }
-
   return out;
 }
 
@@ -254,6 +248,60 @@ function pickBestDatePairByCalendar(
 
   if (best) return best;
   return { inicio: inicioCandidates[0] ?? null, fin: finCandidates[0] ?? null };
+}
+
+function parseDateCandidatesWithSwap(raw: unknown) {
+  const candidates = parseFlexibleDateCandidates(raw);
+  if (!(raw instanceof Date) || candidates.length === 0) return candidates;
+  const d = candidates[0]!;
+  const key = bogotaDateKey(d);
+  const [y, m, day] = key.split("-").map((v) => parseInt(v, 10));
+  if (day <= 12 && m <= 12) {
+    const minutes = bogotaMinutes(d);
+    const hh = Math.floor(minutes / 60);
+    const mm = minutes % 60;
+    const swapped = makeBogotaDate(y, day, m, hh, mm, 0);
+    if (!Number.isNaN(swapped.getTime())) candidates.push(swapped);
+  }
+  return candidates;
+}
+
+function pickBestAssignedGestionByCalendar(
+  asignacionRaw: unknown,
+  gestionRaw: unknown,
+  calendarInicioMap: Map<string, number>,
+  calendarFinMap: Map<string, number>
+) {
+  const aCandidates = parseDateCandidatesWithSwap(asignacionRaw);
+  const gCandidates = parseDateCandidatesWithSwap(gestionRaw);
+
+  if (aCandidates.length === 0 || gCandidates.length === 0) {
+    return { asignacion: aCandidates[0] ?? null, gestion: gCandidates[0] ?? null };
+  }
+
+  let best: { asignacion: Date; gestion: Date } | null = null;
+  let bestMs = Number.POSITIVE_INFINITY;
+  let bestDiff = Number.POSITIVE_INFINITY;
+
+  for (const a of aCandidates) {
+    const aNum = calendarInicioMap.get(bogotaDateKey(a));
+    if (aNum === undefined) continue;
+    for (const g of gCandidates) {
+      const gNum = calendarFinMap.get(bogotaDateKey(g));
+      if (gNum === undefined) continue;
+      const diff = gNum - aNum;
+      if (diff < 0 || diff > 400) continue;
+      const ms = Math.abs(g.getTime() - a.getTime());
+      if (ms < bestMs || (ms === bestMs && diff < bestDiff)) {
+        bestMs = ms;
+        bestDiff = diff;
+        best = { asignacion: a, gestion: g };
+      }
+    }
+  }
+
+  if (best) return best;
+  return { asignacion: aCandidates[0] ?? null, gestion: gCandidates[0] ?? null };
 }
 
 async function createJob(input: {
@@ -444,6 +492,15 @@ async function processActualizacionCsvFile(input: {
   const rowErrors: string[] = [];
   const codigosEnArchivo = input.cleanupMissing ? new Set<string>() : null;
 
+  const calendarRows = await prisma.calendar.findMany({ select: { date: true, dayNumber: true, dayNumberFin: true } });
+  const calendarInicioMap = new Map<string, number>();
+  const calendarFinMap = new Map<string, number>();
+  for (const r of calendarRows) {
+    const key = calendarKey(r.date);
+    calendarInicioMap.set(key, r.dayNumber);
+    calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
+  }
+
   const parser = parseStream({
     columns: true,
     skip_empty_lines: true,
@@ -600,21 +657,14 @@ async function processActualizacionCsvFile(input: {
       const fechaGestionVal = getVal("Fecha Gestion") || getVal("Fecha Gestión");
 
       let assignedAt: Date | null = null;
-      if (fechaAsignacionVal) {
-        if (fechaAsignacionVal instanceof Date) {
-          assignedAt = fechaAsignacionVal;
-        } else {
-          assignedAt = parseFlexibleDateCandidates(fechaAsignacionVal)[0] ?? null;
-        }
-      }
-
       let gestionAt: Date | null = null;
-      if (fechaGestionVal) {
-        if (fechaGestionVal instanceof Date) {
-          gestionAt = fechaGestionVal;
-        } else {
-          gestionAt = parseFlexibleDateCandidates(fechaGestionVal)[0] ?? null;
-        }
+      if (fechaAsignacionVal && fechaGestionVal) {
+        const picked = pickBestAssignedGestionByCalendar(fechaAsignacionVal, fechaGestionVal, calendarInicioMap, calendarFinMap);
+        assignedAt = picked.asignacion;
+        gestionAt = picked.gestion;
+      } else {
+        assignedAt = fechaAsignacionVal ? (parseDateCandidatesWithSwap(fechaAsignacionVal)[0] ?? null) : null;
+        gestionAt = fechaGestionVal ? (parseDateCandidatesWithSwap(fechaGestionVal)[0] ?? null) : null;
       }
 
       const existing = await prisma.workOrder.findUnique({
@@ -719,6 +769,15 @@ async function processActualizacion(input: {
   }
 
   const codigosEnArchivo = new Set<string>();
+
+  const calendarRows = await prisma.calendar.findMany({ select: { date: true, dayNumber: true, dayNumberFin: true } });
+  const calendarInicioMap = new Map<string, number>();
+  const calendarFinMap = new Map<string, number>();
+  for (const r of calendarRows) {
+    const key = calendarKey(r.date);
+    calendarInicioMap.set(key, r.dayNumber);
+    calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
+  }
 
   for (let i = 0; i < input.data.length; i++) {
     const row = input.data[i];
@@ -883,21 +942,14 @@ async function processActualizacion(input: {
       const fechaGestionVal = getVal("Fecha Gestion") || getVal("Fecha Gestión");
 
       let assignedAt: Date | null = null;
-      if (fechaAsignacionVal) {
-        if (fechaAsignacionVal instanceof Date) {
-          assignedAt = fechaAsignacionVal;
-        } else {
-          assignedAt = parseFlexibleDateCandidates(fechaAsignacionVal)[0] ?? null;
-        }
-      }
-
       let gestionAt: Date | null = null;
-      if (fechaGestionVal) {
-        if (fechaGestionVal instanceof Date) {
-          gestionAt = fechaGestionVal;
-        } else {
-          gestionAt = parseFlexibleDateCandidates(fechaGestionVal)[0] ?? null;
-        }
+      if (fechaAsignacionVal && fechaGestionVal) {
+        const picked = pickBestAssignedGestionByCalendar(fechaAsignacionVal, fechaGestionVal, calendarInicioMap, calendarFinMap);
+        assignedAt = picked.asignacion;
+        gestionAt = picked.gestion;
+      } else {
+        assignedAt = fechaAsignacionVal ? (parseDateCandidatesWithSwap(fechaAsignacionVal)[0] ?? null) : null;
+        gestionAt = fechaGestionVal ? (parseDateCandidatesWithSwap(fechaGestionVal)[0] ?? null) : null;
       }
 
       const existing = await prisma.workOrder.findUnique({
@@ -1343,23 +1395,7 @@ async function processActividadesBaremoJob(input: {
   };
 
   const parseDate = (val: unknown) => {
-    if (val instanceof Date) return val;
-    if (val === null || val === undefined) return null;
-    const str = String(val).trim();
-    if (!str) return null;
-    const d = new Date(str);
-    if (!Number.isNaN(d.getTime())) return d;
-    const parts = str.split(/[/\s:]/);
-    if (parts.length >= 3) {
-      const day = parseInt(parts[0]);
-      const month = parseInt(parts[1]) - 1;
-      const year = parseInt(parts[2]);
-      const hours = parts.length >= 4 ? parseInt(parts[3]) : 0;
-      const minutes = parts.length >= 5 ? parseInt(parts[4]) : 0;
-      const seconds = parts.length >= 6 ? parseInt(parts[5]) : 0;
-      return new Date(year, month, day, hours, minutes, seconds);
-    }
-    return null;
+    return parseFlexibleDateCandidates(val)[0] ?? null;
   };
 
   const stableStringify = (obj: Record<string, unknown>) => {
