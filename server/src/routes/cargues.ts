@@ -1072,13 +1072,29 @@ async function processDevolucionesJob(input: {
   let updatedCount = 0;
   let ignoredCount = 0;
   const rowErrors: string[] = [];
+  const debugSample: Array<{
+    fila: number;
+    orden: string;
+    motivo: string;
+    fechaDevolucion: string;
+    fechaRespuesta: string;
+    devKey: string;
+    resKey: string;
+    devEnCalendar: boolean;
+    resEnCalendar: boolean;
+  }> = [];
+
+  const asRawStr = (v: unknown) => {
+    if (v instanceof Date) return v.toISOString();
+    return String(v ?? "");
+  };
 
   const calendar = await prisma.calendar.findMany();
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   const finNumberToDate = new Map<number, string>();
   calendar.forEach((c) => {
-    const key = calendarKey(c.date);
+    const key = bogotaDateKey(c.date);
     calendarInicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
     calendarFinMap.set(key, finNum);
@@ -1146,6 +1162,19 @@ async function processDevolucionesJob(input: {
       const fechaRespuestaVal = getVal("Fecha Respuesta");
 
       if (!(fechaDevolucionVal && fechaRespuestaVal)) {
+        if (debugSample.length < 50) {
+          debugSample.push({
+            fila: i + 1,
+            orden: code,
+            motivo: "Falta fecha devolucion o fecha respuesta",
+            fechaDevolucion: asRawStr(fechaDevolucionVal),
+            fechaRespuesta: asRawStr(fechaRespuestaVal),
+            devKey: "",
+            resKey: "",
+            devEnCalendar: false,
+            resEnCalendar: false
+          });
+        }
         ignoredCount++;
         continue;
       }
@@ -1153,12 +1182,27 @@ async function processDevolucionesJob(input: {
       const dDev = pickBestDateByMap(fechaDevolucionVal, calendarInicioMap);
       const dRes = pickBestDateByMap(fechaRespuestaVal, calendarFinMap);
       if (!(dDev && dRes)) {
+        if (debugSample.length < 50) {
+          debugSample.push({
+            fila: i + 1,
+            orden: code,
+            motivo: "No se pudo parsear fecha devolucion o respuesta",
+            fechaDevolucion: asRawStr(fechaDevolucionVal),
+            fechaRespuesta: asRawStr(fechaRespuestaVal),
+            devKey: dDev ? bogotaDateKey(dDev) : "",
+            resKey: dRes ? bogotaDateKey(dRes) : "",
+            devEnCalendar: dDev ? calendarInicioMap.has(bogotaDateKey(dDev)) : false,
+            resEnCalendar: dRes ? calendarFinMap.has(bogotaDateKey(dRes)) : false
+          });
+        }
         ignoredCount++;
         continue;
       }
 
-      const inicioDev = calendarInicioMap.get(bogotaDateKey(dDev));
-      let finRes = calendarFinMap.get(bogotaDateKey(dRes));
+      const devKey = bogotaDateKey(dDev);
+      const resKey = bogotaDateKey(dRes);
+      const inicioDev = calendarInicioMap.get(devKey);
+      let finRes = calendarFinMap.get(resKey);
 
       const isAfter1700 = bogotaMinutes(dRes) > 17 * 60;
 
@@ -1177,6 +1221,19 @@ async function processDevolucionesJob(input: {
       const fechaFinEfectivaIso = fechaFinEfectiva.toISOString();
 
       if (inicioDev === undefined || finRes === undefined) {
+        if (debugSample.length < 50) {
+          debugSample.push({
+            fila: i + 1,
+            orden: code,
+            motivo: "Fecha no encontrada en Calendar (inicio o fin)",
+            fechaDevolucion: asRawStr(fechaDevolucionVal),
+            fechaRespuesta: asRawStr(fechaRespuestaVal),
+            devKey,
+            resKey,
+            devEnCalendar: calendarInicioMap.has(devKey),
+            resEnCalendar: calendarFinMap.has(resKey)
+          });
+        }
         ignoredCount++;
         continue;
       }
@@ -1263,7 +1320,8 @@ async function processDevolucionesJob(input: {
     count: updatedCount,
     deleted: deletedCount,
     errors: rowErrors.length,
-    errorDetails: rowErrors
+    errorDetails: rowErrors,
+    debugSample
   };
 }
 
@@ -1859,6 +1917,23 @@ async function processRecorridoIncrementosJob(input: {
   let successCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
+  const debugSample: Array<{
+    fila: number;
+    orden: string;
+    nombreIncremento: string;
+    motivo: string;
+    fechaInicioRaw: string;
+    fechaFinRaw: string;
+    inicioKey: string;
+    finKey: string;
+    inicioEnCalendar: boolean;
+    finEnCalendar: boolean;
+  }> = [];
+
+  const asRawStr = (v: unknown) => {
+    if (v instanceof Date) return v.toISOString();
+    return String(v ?? "");
+  };
 
   const normalizeHeader = (value: string) =>
     value
@@ -1875,23 +1950,7 @@ async function processRecorridoIncrementosJob(input: {
   };
 
   const parseDate = (val: unknown) => {
-    if (val instanceof Date) return val;
-    if (val === null || val === undefined) return null;
-    const str = String(val).trim();
-    if (!str) return null;
-    const d = new Date(str);
-    if (!Number.isNaN(d.getTime())) return d;
-    const parts = str.split(/[/\s:]/);
-    if (parts.length >= 3) {
-      const day = parseInt(parts[0]);
-      const month = parseInt(parts[1]) - 1;
-      const year = parseInt(parts[2]);
-      const hours = parts.length >= 4 ? parseInt(parts[3]) : 0;
-      const minutes = parts.length >= 5 ? parseInt(parts[4]) : 0;
-      const seconds = parts.length >= 6 ? parseInt(parts[5]) : 0;
-      return new Date(year, month, day, hours, minutes, seconds);
-    }
-    return null;
+    return parseDateCandidatesWithSwap(val)[0] ?? null;
   };
 
   const parseIntSafe = (val: unknown) => {
@@ -1959,7 +2018,7 @@ async function processRecorridoIncrementosJob(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = calendarKey(new Date(r.date));
+    const key = bogotaDateKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
@@ -2094,6 +2153,22 @@ async function processRecorridoIncrementosJob(input: {
       const responsable = estOrigenEstLlegada ? responsableMap[estOrigenEstLlegada] ?? "NA" : null;
       const computedDiasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
       const diasEnel = computedDiasEnel === 0 ? 1 : computedDiasEnel;
+      if (responsable === "ENEL" && fechaFin && computedDiasEnel === null && debugSample.length < 50) {
+        const inicioKey = bogotaDateKey(fechaInicio);
+        const finKey = bogotaDateKey(fechaFin);
+        debugSample.push({
+          fila: i + 1,
+          orden: orderCode,
+          nombreIncremento,
+          motivo: "No se pudo calcular dias (Calendar no tiene inicio o fin)",
+          fechaInicioRaw: asRawStr(getVal(row, "FECHA_INICIO")),
+          fechaFinRaw: asRawStr(getVal(row, "FECHA_FIN")),
+          inicioKey,
+          finKey,
+          inicioEnCalendar: calendarInicioMap.has(inicioKey),
+          finEnCalendar: calendarFinMap.has(finKey)
+        });
+      }
 
       const key = `${orderCode}||${nombreIncremento}||${fechaInicio.toISOString()}`;
       latestByKey.set(key, {
@@ -2367,7 +2442,8 @@ async function processRecorridoIncrementosJob(input: {
     created: createdCount,
     unchanged: unchangedCount,
     errors: errorCount,
-    errorDetails: rowErrors
+    errorDetails: rowErrors,
+    debugSample
   };
 }
 
