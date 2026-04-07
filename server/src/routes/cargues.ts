@@ -1777,7 +1777,7 @@ async function processActividadesBaremoJob(input: {
   for (const [codigo, row] of latestByCodigo.entries()) {
     const ansRef = ansMap.get(codigo) ?? null;
     const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
-    const ansCalc = rawAnsCalc == null ? null : Math.round(rawAnsCalc);
+    const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
     const newData = {
       codigo,
@@ -1885,7 +1885,7 @@ async function processActividadesBaremoJob(input: {
     const existing = existingMap.get(codigo);
     const ansRef = ansMap.get(codigo) ?? null;
     const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
-    const ansCalc = rawAnsCalc == null ? null : Math.round(rawAnsCalc);
+    const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
     const order = workOrderMap.get(codigo);
     if (!order) continue;
@@ -2218,7 +2218,7 @@ async function processRecorridoIncrementosJob(input: {
       const estOrigenEstLlegada = derivedTrans ? normalizeTransition(derivedTrans) : null;
       const responsable = estOrigenEstLlegada ? responsableMap[estOrigenEstLlegada] ?? "NA" : null;
       const computedDiasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
-      const diasEnel = computedDiasEnel === 0 ? 1 : computedDiasEnel;
+      const diasEnel = computedDiasEnel;
       if (responsable === "ENEL" && fechaFin && computedDiasEnel === null && debugSample.length < 50) {
         const inicioKey = bogotaDateKey(fechaInicio);
         const finKey = bogotaDateKey(fechaFin);
@@ -2301,11 +2301,16 @@ async function processRecorridoIncrementosJob(input: {
     existingMap.set(key, r);
   }
 
-  const existingEnelSumByOrder = new Map<string, number>();
+  const existingEnelSumRaw = new Map<string, { sum: number; count: number }>();
   for (const r of existingRows) {
     if (r.responsable !== "ENEL") continue;
     if (r.diasEnel == null) continue;
-    existingEnelSumByOrder.set(r.orderCode, (existingEnelSumByOrder.get(r.orderCode) ?? 0) + r.diasEnel);
+    const curr = existingEnelSumRaw.get(r.orderCode) ?? { sum: 0, count: 0 };
+    existingEnelSumRaw.set(r.orderCode, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+  }
+  const existingEnelSumByOrder = new Map<string, number>();
+  for (const [code, val] of existingEnelSumRaw.entries()) {
+    existingEnelSumByOrder.set(code, val.sum === 0 && val.count > 0 ? 1 : val.sum);
   }
 
   let createdCount = 0;
@@ -2415,6 +2420,7 @@ async function processRecorridoIncrementosJob(input: {
         by: ["orderCode"],
         where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
         _sum: { diasEnel: true },
+        _count: { diasEnel: true },
         _min: { fechaInicio: true },
         _max: { fechaFin: true }
       })
@@ -2424,7 +2430,9 @@ async function processRecorridoIncrementosJob(input: {
   const enelWindowByOrder = new Map<string, { fechaInicio: string | null; fechaFin: string | null }>();
   for (const g of newGroups) {
     const sum = g._sum.diasEnel ?? 0;
-    newEnelSumByOrder.set(g.orderCode, sum);
+    const count = g._count.diasEnel ?? 0;
+    const finalSum = sum === 0 && count > 0 ? 1 : sum;
+    newEnelSumByOrder.set(g.orderCode, finalSum);
     const inicio = g._min.fechaInicio ? new Date(g._min.fechaInicio).toISOString() : null;
     const fin = g._max.fechaFin ? new Date(g._max.fechaFin).toISOString() : null;
     enelWindowByOrder.set(g.orderCode, { fechaInicio: inicio, fechaFin: fin });
@@ -3290,7 +3298,7 @@ carguesRouter.post(
       for (const [codigo, row] of latestByCodigo.entries()) {
         const ansRef = ansMap.get(codigo) ?? null;
         const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
-        const ansCalc = rawAnsCalc == null ? null : Math.round(rawAnsCalc);
+        const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
         const newData = {
           codigo,
@@ -3420,7 +3428,7 @@ carguesRouter.post(
         const existing = existingMap.get(codigo);
         const ansRef = ansMap.get(codigo) ?? null;
         const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
-        const ansCalc = rawAnsCalc == null ? null : Math.round(rawAnsCalc);
+        const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
         const order = workOrderMap.get(codigo);
         if (!order) continue;
@@ -3748,7 +3756,7 @@ carguesRouter.post(
           const estOrigenEstLlegada = derivedTrans ? normalizeTransition(derivedTrans) : null;
           const responsable = estOrigenEstLlegada ? responsableMap[estOrigenEstLlegada] ?? "NA" : null;
           const computedDiasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
-          const diasEnel = computedDiasEnel === 0 ? 1 : computedDiasEnel;
+          const diasEnel = computedDiasEnel;
 
           const key = `${orderCode}||${nombreIncremento}||${fechaInicio.toISOString()}`;
           latestByKey.set(key, {
@@ -3810,11 +3818,16 @@ carguesRouter.post(
         existingMap.set(key, r);
       }
 
-      const existingEnelSumByOrder = new Map<string, number>();
+      const existingEnelSumRaw = new Map<string, { sum: number; count: number }>();
       for (const r of existingRows) {
         if (r.responsable !== "ENEL") continue;
         if (r.diasEnel == null) continue;
-        existingEnelSumByOrder.set(r.orderCode, (existingEnelSumByOrder.get(r.orderCode) ?? 0) + r.diasEnel);
+        const curr = existingEnelSumRaw.get(r.orderCode) ?? { sum: 0, count: 0 };
+        existingEnelSumRaw.set(r.orderCode, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+      }
+      const existingEnelSumByOrder = new Map<string, number>();
+      for (const [code, val] of existingEnelSumRaw.entries()) {
+        existingEnelSumByOrder.set(code, val.sum === 0 && val.count > 0 ? 1 : val.sum);
       }
 
       let createdCount = 0;
@@ -3947,6 +3960,7 @@ carguesRouter.post(
             by: ["orderCode"],
             where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
             _sum: { diasEnel: true },
+            _count: { diasEnel: true },
             _min: { fechaInicio: true },
             _max: { fechaFin: true }
           })
@@ -3956,7 +3970,9 @@ carguesRouter.post(
       const enelWindowByOrder = new Map<string, { fechaInicio: string | null; fechaFin: string | null }>();
       for (const g of newGroups) {
         const sum = g._sum.diasEnel ?? 0;
-        newEnelSumByOrder.set(g.orderCode, sum);
+        const count = g._count.diasEnel ?? 0;
+        const finalSum = sum === 0 && count > 0 ? 1 : sum;
+        newEnelSumByOrder.set(g.orderCode, finalSum);
         const inicio = g._min.fechaInicio ? new Date(g._min.fechaInicio).toISOString() : null;
         const fin = g._max.fechaFin ? new Date(g._max.fechaFin).toISOString() : null;
         enelWindowByOrder.set(g.orderCode, { fechaInicio: inicio, fechaFin: fin });

@@ -328,12 +328,17 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
     prisma.recorridoIncremento.groupBy({
       by: ["orderCode"],
       where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
-      _sum: { diasEnel: true }
+      _sum: { diasEnel: true },
+      _count: { diasEnel: true }
     })
   ]);
 
   const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
-  const enelSumMap = new Map(enelGroups.map((g) => [g.orderCode, g._sum.diasEnel ?? 0]));
+  const enelSumMap = new Map(enelGroups.map((g) => {
+    const sum = g._sum.diasEnel ?? 0;
+    const count = g._count.diasEnel ?? 0;
+    return [g.orderCode, sum === 0 && count > 0 ? 1 : sum];
+  }));
 
   const headers = [
     "OT",
