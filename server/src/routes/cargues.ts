@@ -2027,7 +2027,8 @@ async function processRecorridoIncrementosJob(input: {
       const derivedTrans = rawTrans || (estadoAnterior && estadoActual ? `de ${estadoAnterior} a ${estadoActual}` : estadoActual || estadoAnterior || "0");
       const estOrigenEstLlegada = derivedTrans ? normalizeTransition(derivedTrans) : null;
       const responsable = estOrigenEstLlegada ? responsableMap[estOrigenEstLlegada] ?? "NA" : null;
-      const diasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
+      const computedDiasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
+      const diasEnel = computedDiasEnel === 0 ? 1 : computedDiasEnel;
 
       const key = `${orderCode}||${nombreIncremento}||${fechaInicio.toISOString()}`;
       latestByKey.set(key, {
@@ -3539,7 +3540,8 @@ carguesRouter.post(
               : estadoActual || estadoAnterior || "0");
           const estOrigenEstLlegada = derivedTrans ? normalizeTransition(derivedTrans) : null;
           const responsable = estOrigenEstLlegada ? responsableMap[estOrigenEstLlegada] ?? "NA" : null;
-          const diasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
+          const computedDiasEnel = responsable === "ENEL" && fechaFin ? computeDias(fechaInicio, fechaFin) : null;
+          const diasEnel = computedDiasEnel === 0 ? 1 : computedDiasEnel;
 
           const key = `${orderCode}||${nombreIncremento}||${fechaInicio.toISOString()}`;
           latestByKey.set(key, {
