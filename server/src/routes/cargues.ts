@@ -457,7 +457,40 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
   } else {
     const buffer = fs.readFileSync(input.filePath);
     const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-    data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]!;
+    const rawData = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: true }) as Record<string, unknown>[];
+    const formattedData = XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+      raw: false,
+      dateNF: "dd/mm/yyyy hh:mm:ss"
+    }) as Record<string, unknown>[];
+    const normalizeKey = (value: string) =>
+      value
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const isDateKey = (key: string) => {
+      const k = normalizeKey(key);
+      return k.includes("fecha") || k === "fecha_inicio" || k === "fecha_fin";
+    };
+    const looksLikeDate = (s: string) =>
+      /^(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(s) ||
+      /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s*\d{1,2}:\d{2}(?::\d{2})?)?$/.test(s);
+    for (let i = 0; i < rawData.length; i++) {
+      const r = rawData[i]!;
+      const f = formattedData[i] ?? {};
+      for (const key of Object.keys(r)) {
+        if (!isDateKey(key)) continue;
+        const fv = f[key];
+        if (typeof fv !== "string") continue;
+        const s = fv.trim();
+        if (!s) continue;
+        if (!looksLikeDate(s)) continue;
+        r[key] = s;
+      }
+    }
+    data = rawData;
   }
   return data;
 }
@@ -494,7 +527,40 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
     }
   } else {
     const workbook = XLSX.read(input.bytes, { type: "buffer", cellDates: true });
-    data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }) as Record<string, unknown>[];
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]!;
+    const rawData = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: true }) as Record<string, unknown>[];
+    const formattedData = XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+      raw: false,
+      dateNF: "dd/mm/yyyy hh:mm:ss"
+    }) as Record<string, unknown>[];
+    const normalizeKey = (value: string) =>
+      value
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const isDateKey = (key: string) => {
+      const k = normalizeKey(key);
+      return k.includes("fecha") || k === "fecha_inicio" || k === "fecha_fin";
+    };
+    const looksLikeDate = (s: string) =>
+      /^(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(s) ||
+      /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s*\d{1,2}:\d{2}(?::\d{2})?)?$/.test(s);
+    for (let i = 0; i < rawData.length; i++) {
+      const r = rawData[i]!;
+      const f = formattedData[i] ?? {};
+      for (const key of Object.keys(r)) {
+        if (!isDateKey(key)) continue;
+        const fv = f[key];
+        if (typeof fv !== "string") continue;
+        const s = fv.trim();
+        if (!s) continue;
+        if (!looksLikeDate(s)) continue;
+        r[key] = s;
+      }
+    }
+    data = rawData;
   }
   return data;
 }
