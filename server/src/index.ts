@@ -10,6 +10,18 @@ import path from "path";
 
 const app = express();
 
+function getBuildInfo() {
+  const commit =
+    process.env.RENDER_GIT_COMMIT ??
+    process.env.GITHUB_SHA ??
+    process.env.VERCEL_GIT_COMMIT_SHA ??
+    process.env.COMMIT_SHA ??
+    null;
+  const service =
+    process.env.RENDER_SERVICE_NAME ?? process.env.RENDER_SERVICE_ID ?? process.env.VERCEL ?? process.env.NODE_ENV ?? null;
+  return { commit, service };
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -32,7 +44,11 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, ...getBuildInfo() });
+});
+
+app.get("/version", (_req, res) => {
+  res.json(getBuildInfo());
 });
 
 // Servir archivos estáticos de soportes
