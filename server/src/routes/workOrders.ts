@@ -1402,6 +1402,13 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
         }
 
         if (diasNovedad === null) {
+          if (note.includes("descuento por devolución") || note.includes("descuento por devolucion")) {
+            const m = /descuento por devoluci[oó]n:\s*(\d+)\s*d[ií]as/i.exec(h.note ?? "");
+            if (m?.[1]) {
+              const n = parseInt(m[1], 10);
+              if (Number.isFinite(n)) diasNovedad = n;
+            }
+          }
           if (note.includes("recorrido incrementos") || detail.includes("diasenel=")) {
             const m = /DiasENEL=([-]?\d+)/.exec(h.noteDetail ?? "");
             if (m?.[1]) {
