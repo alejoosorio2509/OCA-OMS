@@ -500,7 +500,7 @@ async function processActualizacionCsvFile(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = calendarKey(r.date);
+    const key = bogotaDateKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
@@ -783,7 +783,7 @@ async function processActualizacion(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = calendarKey(r.date);
+    const key = bogotaDateKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
