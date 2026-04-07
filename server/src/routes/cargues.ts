@@ -154,6 +154,10 @@ function pickBestDateByMap(raw: unknown, map: Map<string, number>) {
   return candidates[0] ?? null;
 }
 
+function isNotFutureDate(date: Date, now: Date) {
+  return date.getTime() <= now.getTime();
+}
+
 function parseFlexibleDateCandidates(val: unknown) {
   if (val instanceof Date) return [val];
   if (val === null || val === undefined) return [];
@@ -667,6 +671,11 @@ async function processActualizacionCsvFile(input: {
         gestionAt = fechaGestionVal ? (parseDateCandidatesWithSwap(fechaGestionVal)[0] ?? null) : null;
       }
 
+      const assignedAtUpdate = assignedAt && isNotFutureDate(assignedAt, now) ? assignedAt : undefined;
+      const gestionAtUpdate = gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : undefined;
+      const assignedAtCreate = assignedAtUpdate ?? null;
+      const gestionAtCreate = gestionAtUpdate ?? null;
+
       const existing = await prisma.workOrder.findUnique({
         where: { code },
         select: { id: true, status: true }
@@ -694,8 +703,8 @@ async function processActualizacionCsvFile(input: {
           ansOportunidad,
           status: lockStatus ? existing!.status : status,
           estadoSecundario: lockStatus ? undefined : null,
-          assignedAt,
-          gestionAt,
+          assignedAt: assignedAtUpdate,
+          gestionAt: gestionAtUpdate,
           updatedAt: now,
           lastStatusChangeAt: lockStatus ? undefined : now
         },
@@ -710,8 +719,8 @@ async function processActualizacionCsvFile(input: {
           ansOportunidad,
           status,
           estadoSecundario: null,
-          assignedAt,
-          gestionAt,
+          assignedAt: assignedAtCreate,
+          gestionAt: gestionAtCreate,
           createdById: input.userId,
           lastStatusChangeAt: now
         }
@@ -952,6 +961,11 @@ async function processActualizacion(input: {
         gestionAt = fechaGestionVal ? (parseDateCandidatesWithSwap(fechaGestionVal)[0] ?? null) : null;
       }
 
+      const assignedAtUpdate = assignedAt && isNotFutureDate(assignedAt, now) ? assignedAt : undefined;
+      const gestionAtUpdate = gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : undefined;
+      const assignedAtCreate = assignedAtUpdate ?? null;
+      const gestionAtCreate = gestionAtUpdate ?? null;
+
       const existing = await prisma.workOrder.findUnique({
         where: { code },
         select: { id: true, status: true }
@@ -979,8 +993,8 @@ async function processActualizacion(input: {
           ansOportunidad,
           status: lockStatus ? existing!.status : status,
           estadoSecundario: lockStatus ? undefined : null,
-          assignedAt,
-          gestionAt,
+          assignedAt: assignedAtUpdate,
+          gestionAt: gestionAtUpdate,
           updatedAt: now,
           lastStatusChangeAt: lockStatus ? undefined : now
         },
@@ -995,8 +1009,8 @@ async function processActualizacion(input: {
           ansOportunidad,
           status,
           estadoSecundario: null,
-          assignedAt,
-          gestionAt,
+          assignedAt: assignedAtCreate,
+          gestionAt: gestionAtCreate,
           createdById: input.userId,
           lastStatusChangeAt: now
         }
