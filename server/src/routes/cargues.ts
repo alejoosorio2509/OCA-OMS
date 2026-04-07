@@ -581,7 +581,7 @@ async function processActualizacionCsvFile(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = bogotaDateKey(r.date);
+    const key = calendarKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
@@ -864,7 +864,7 @@ async function processActualizacion(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = bogotaDateKey(r.date);
+    const key = calendarKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
@@ -1160,7 +1160,7 @@ async function processDevolucionesJob(input: {
   const calendarFinMap = new Map<string, number>();
   const finNumberToDate = new Map<number, string>();
   calendar.forEach((c) => {
-    const key = bogotaDateKey(c.date);
+    const key = calendarKey(c.date);
     calendarInicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
     calendarFinMap.set(key, finNum);
@@ -2084,7 +2084,7 @@ async function processRecorridoIncrementosJob(input: {
   const calendarInicioMap = new Map<string, number>();
   const calendarFinMap = new Map<string, number>();
   for (const r of calendarRows) {
-    const key = bogotaDateKey(r.date);
+    const key = calendarKey(r.date);
     calendarInicioMap.set(key, r.dayNumber);
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
