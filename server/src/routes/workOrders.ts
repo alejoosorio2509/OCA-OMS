@@ -515,7 +515,7 @@ workOrdersRouter.post("/recalcular-devoluciones/:code", requireAuth, requireAdmi
       continue;
     }
     const devTs = new Date(devIso).getTime();
-    if (devTs <= assignedTs) {
+    if (devTs < assignedTs) {
       omitted.push(h.id);
       continue;
     }

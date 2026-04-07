@@ -1323,7 +1323,7 @@ async function processDevolucionesJob(input: {
       }
 
       const dAsig = order.assignedAt;
-      if (bogotaDateKey(dDev) <= bogotaDateKey(dAsig)) {
+      if (bogotaDateKey(dDev) < bogotaDateKey(dAsig)) {
         ignoredCount++;
         continue;
       }
