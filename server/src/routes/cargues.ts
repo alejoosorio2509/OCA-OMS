@@ -274,7 +274,8 @@ function pickBestAssignedGestionByCalendar(
   asignacionRaw: unknown,
   gestionRaw: unknown,
   calendarInicioMap: Map<string, number>,
-  calendarFinMap: Map<string, number>
+  calendarFinMap: Map<string, number>,
+  now?: Date
 ) {
   const aCandidates = parseDateCandidatesWithSwap(asignacionRaw);
   const gCandidates = parseDateCandidatesWithSwap(gestionRaw);
@@ -288,9 +289,11 @@ function pickBestAssignedGestionByCalendar(
   let bestDiff = Number.POSITIVE_INFINITY;
 
   for (const a of aCandidates) {
+    if (now && !isNotFutureDate(a, now)) continue;
     const aNum = calendarInicioMap.get(bogotaDateKey(a));
     if (aNum === undefined) continue;
     for (const g of gCandidates) {
+      if (now && !isNotFutureDate(g, now)) continue;
       const gNum = calendarFinMap.get(bogotaDateKey(g));
       if (gNum === undefined) continue;
       const diff = gNum - aNum;
@@ -306,6 +309,18 @@ function pickBestAssignedGestionByCalendar(
 
   if (best) return best;
   return { asignacion: aCandidates[0] ?? null, gestion: gCandidates[0] ?? null };
+}
+
+function pickBestSingleDateByCalendar(raw: unknown, calendarMap: Map<string, number>, now: Date) {
+  const candidates = parseDateCandidatesWithSwap(raw);
+  if (candidates.length === 0) return null;
+  const mapped = candidates.filter((d) => calendarMap.has(bogotaDateKey(d)));
+  const mappedNotFuture = mapped.find((d) => isNotFutureDate(d, now));
+  if (mappedNotFuture) return mappedNotFuture;
+  if (mapped.length > 0) return mapped[0]!;
+  const notFuture = candidates.find((d) => isNotFutureDate(d, now));
+  if (notFuture) return notFuture;
+  return candidates[0]!;
 }
 
 async function createJob(input: {
@@ -663,12 +678,12 @@ async function processActualizacionCsvFile(input: {
       let assignedAt: Date | null = null;
       let gestionAt: Date | null = null;
       if (fechaAsignacionVal && fechaGestionVal) {
-        const picked = pickBestAssignedGestionByCalendar(fechaAsignacionVal, fechaGestionVal, calendarInicioMap, calendarFinMap);
+        const picked = pickBestAssignedGestionByCalendar(fechaAsignacionVal, fechaGestionVal, calendarInicioMap, calendarFinMap, now);
         assignedAt = picked.asignacion;
         gestionAt = picked.gestion;
       } else {
-        assignedAt = fechaAsignacionVal ? (parseDateCandidatesWithSwap(fechaAsignacionVal)[0] ?? null) : null;
-        gestionAt = fechaGestionVal ? (parseDateCandidatesWithSwap(fechaGestionVal)[0] ?? null) : null;
+        assignedAt = fechaAsignacionVal ? pickBestSingleDateByCalendar(fechaAsignacionVal, calendarInicioMap, now) : null;
+        gestionAt = fechaGestionVal ? pickBestSingleDateByCalendar(fechaGestionVal, calendarFinMap, now) : null;
       }
 
       const assignedAtUpdate = assignedAt && isNotFutureDate(assignedAt, now) ? assignedAt : undefined;
@@ -953,12 +968,12 @@ async function processActualizacion(input: {
       let assignedAt: Date | null = null;
       let gestionAt: Date | null = null;
       if (fechaAsignacionVal && fechaGestionVal) {
-        const picked = pickBestAssignedGestionByCalendar(fechaAsignacionVal, fechaGestionVal, calendarInicioMap, calendarFinMap);
+        const picked = pickBestAssignedGestionByCalendar(fechaAsignacionVal, fechaGestionVal, calendarInicioMap, calendarFinMap, now);
         assignedAt = picked.asignacion;
         gestionAt = picked.gestion;
       } else {
-        assignedAt = fechaAsignacionVal ? (parseDateCandidatesWithSwap(fechaAsignacionVal)[0] ?? null) : null;
-        gestionAt = fechaGestionVal ? (parseDateCandidatesWithSwap(fechaGestionVal)[0] ?? null) : null;
+        assignedAt = fechaAsignacionVal ? pickBestSingleDateByCalendar(fechaAsignacionVal, calendarInicioMap, now) : null;
+        gestionAt = fechaGestionVal ? pickBestSingleDateByCalendar(fechaGestionVal, calendarFinMap, now) : null;
       }
 
       const assignedAtUpdate = assignedAt && isNotFutureDate(assignedAt, now) ? assignedAt : undefined;
