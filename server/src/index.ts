@@ -68,6 +68,6 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "INTERNAL_ERROR" });
 });
 
-app.listen(env.PORT, () => {
-  console.log(`API listening on http://localhost:${env.PORT}`);
+app.listen(env.PORT, "0.0.0.0", () => {
+  console.log(`API listening on port ${env.PORT} (0.0.0.0)`);
 });
