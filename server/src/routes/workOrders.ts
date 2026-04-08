@@ -222,6 +222,17 @@ function normalizeDay(date: Date) {
   return bogotaDateFmt.format(date);
 }
 
+function parseBogotaDateOnly(value: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const d = parseInt(m[3], 10);
+    return new Date(Date.UTC(y, mo - 1, d, 5, 0, 0));
+  }
+  return new Date(value);
+}
+
 function calendarKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -1039,21 +1050,22 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
       return;
     }
 
-    const dInicio = new Date(fechaInicio);
-    const dFin = fechaFin ? new Date(fechaFin) : new Date();
+    const dInicio = parseBogotaDateOnly(String(fechaInicio ?? ""));
+    const dFin = fechaFin ? parseBogotaDateOnly(String(fechaFin)) : null;
 
-    if (isNaN(dInicio.getTime()) || isNaN(dFin.getTime())) {
+    if (isNaN(dInicio.getTime()) || (dFin && isNaN(dFin.getTime()))) {
       res.status(400).json({ error: "INVALID_DATES" });
       return;
     }
 
     const { inicioMap, finMap } = await loadCalendarMaps();
-    const inicioNum = inicioMap.get(normalizeDay(dInicio));
-    const finNum = finMap.get(normalizeDay(dFin));
-
     let diff = 0;
-    if (inicioNum !== undefined && finNum !== undefined) {
-      diff = finNum - inicioNum;
+    if (dFin) {
+      const inicioNum = inicioMap.get(normalizeDay(dInicio));
+      const finNum = finMap.get(normalizeDay(dFin));
+      if (inicioNum !== undefined && finNum !== undefined) {
+        diff = finNum - inicioNum;
+      }
     }
 
     // Crear novedad
@@ -1061,7 +1073,7 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
       data: {
         workOrderId: id,
         fechaInicio: dInicio,
-        fechaFin: fechaFin ? dFin : null,
+        fechaFin: dFin,
         descripcion,
         detalle,
         soportePath: `/uploads/novedades/${req.file.filename}`
@@ -1128,7 +1140,7 @@ workOrdersRouter.patch("/:id/novedades/:novedadId", requireAuth, requirePermissi
       return;
     }
 
-    const dFin = new Date(fechaFin);
+    const dFin = parseBogotaDateOnly(String(fechaFin ?? ""));
     if (isNaN(dFin.getTime())) {
       res.status(400).json({ error: "INVALID_DATE" });
       return;
