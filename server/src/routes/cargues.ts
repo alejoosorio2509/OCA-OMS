@@ -234,12 +234,10 @@ function pickBestDatePairByCalendar(
       const fNum = calendarFinMap.get(fKey);
       if (fNum === undefined) continue;
 
-      const inicioMinutes = bogotaMinutes(inicio);
       const finMinutes = bogotaMinutes(fin);
       const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
       const sameDay = iKey === fKey;
       let rawDias = sameDay && finMinutes < cutoffMinutes ? 0 : fNum - iNum + extraDay;
-      if (inicioMinutes > cutoffMinutes) rawDias = rawDias - 1;
       rawDias = Math.max(0, rawDias);
       if (rawDias > 400) continue;
 
@@ -2144,13 +2142,11 @@ async function processRecorridoIncrementosJob(input: {
     const fNum = calendarFinMap.get(fKey);
     if (iNum === undefined || fNum === undefined) return null;
     const cutoffMinutes = 17 * 60;
-    const inicioMinutes = bogotaMinutes(inicio);
     const finMinutes = bogotaMinutes(fin);
-    const startAfterCutoff = inicioMinutes > cutoffMinutes;
     const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
     const sameDay = iKey === fKey;
     const base = sameDay && finMinutes < cutoffMinutes ? 0 : Math.max(0, fNum - iNum + extraDay);
-    return Math.max(0, base - (startAfterCutoff ? 1 : 0));
+    return Math.max(0, base);
   };
 
   const latestByKey = new Map<
