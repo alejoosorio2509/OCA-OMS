@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import type { WorkOrderCriticality, WorkOrderDetails, WorkOrderStatus } from "../api";
 import { getWorkOrder, transitionWorkOrder, updateNovedad } from "../api";
 import { useAuth } from "../auth";
+import { API_URL } from "../apiUrl";
 
 function NovedadItem({ novedad, orderId, onUpdated }: { 
   novedad: WorkOrderDetails["novedades"][0], 
@@ -121,6 +122,30 @@ export function OrderDetailsPage() {
     MEDIUM: "Media",
     HIGH: "Alta",
     CRITICAL: "Crítica"
+  };
+
+  const historySoporteUrl = (h: WorkOrderDetails["history"][0]) => {
+    if (!order) return null;
+    const dayKey = (value: string | null) => {
+      if (!value) return null;
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return null;
+    };
+
+    const startKey = dayKey(h.fechaInicio);
+    const endKey = dayKey(h.fechaFin);
+    const nov = order.novedades.find((n) => {
+      if (!n.soportePath) return false;
+      if ((n.descripcion ?? "") !== (h.note ?? "")) return false;
+      if ((n.detalle ?? "") !== (h.noteDetail ?? "")) return false;
+      const nStartKey = dayKey(n.fechaInicio);
+      const nEndKey = dayKey(n.fechaFin);
+      return nStartKey === startKey && nEndKey === endKey;
+    });
+    return nov?.soportePath ? `${API_URL}${nov.soportePath}` : null;
   };
 
   async function refresh() {
@@ -251,6 +276,7 @@ export function OrderDetailsPage() {
                 <th>Inicio Novedad</th>
                 <th>Fin Novedad</th>
                 <th>Días</th>
+                <th>Soporte</th>
                 <th>Descripción</th>
                 <th>Detalle</th>
                 <th>Por</th>
@@ -259,7 +285,7 @@ export function OrderDetailsPage() {
             <tbody>
               {order.history.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ color: "#bdbdbd", textAlign: "center" }}>
+                  <td colSpan={8} style={{ color: "#bdbdbd", textAlign: "center" }}>
                     Sin historial.
                   </td>
                 </tr>
@@ -270,6 +296,18 @@ export function OrderDetailsPage() {
                     <td>{fmtDate(h.fechaInicio)}</td>
                     <td>{fmtDate(h.fechaFin)}</td>
                     <td>{h.diasNovedad !== null ? h.diasNovedad : "—"}</td>
+                    <td>
+                      {(() => {
+                        const url = historySoporteUrl(h);
+                        if (!url) return "—";
+                        return (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <a href={url} target="_blank" rel="noreferrer">Ver</a>
+                            <a href={url} download>Descargar</a>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td>
                       {h.note || (
                         <span className={`badge status-${toKebab(h.toStatus)}`}>

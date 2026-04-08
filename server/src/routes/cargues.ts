@@ -234,11 +234,13 @@ function pickBestDatePairByCalendar(
       const fNum = calendarFinMap.get(fKey);
       if (fNum === undefined) continue;
 
+      const inicioMinutes = bogotaMinutes(inicio);
       const finMinutes = bogotaMinutes(fin);
       const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
       const sameDay = iKey === fKey;
-      const rawDias = sameDay && finMinutes < cutoffMinutes ? 0 : fNum - iNum + extraDay;
-      if (rawDias < 0) continue;
+      let rawDias = sameDay && finMinutes < cutoffMinutes ? 0 : fNum - iNum + extraDay;
+      if (inicioMinutes > cutoffMinutes) rawDias = rawDias - 1;
+      rawDias = Math.max(0, rawDias);
       if (rawDias > 400) continue;
 
       const ms = Math.abs(fin.getTime() - inicio.getTime());
@@ -2142,11 +2144,13 @@ async function processRecorridoIncrementosJob(input: {
     const fNum = calendarFinMap.get(fKey);
     if (iNum === undefined || fNum === undefined) return null;
     const cutoffMinutes = 17 * 60;
+    const inicioMinutes = bogotaMinutes(inicio);
     const finMinutes = bogotaMinutes(fin);
+    const startAfterCutoff = inicioMinutes > cutoffMinutes;
     const extraDay = finMinutes > cutoffMinutes ? 1 : 0;
     const sameDay = iKey === fKey;
-    if (sameDay && finMinutes < cutoffMinutes) return 0;
-    return Math.max(0, fNum - iNum + extraDay);
+    const base = sameDay && finMinutes < cutoffMinutes ? 0 : Math.max(0, fNum - iNum + extraDay);
+    return Math.max(0, base - (startAfterCutoff ? 1 : 0));
   };
 
   const latestByKey = new Map<
@@ -2308,16 +2312,22 @@ async function processRecorridoIncrementosJob(input: {
     existingMap.set(key, r);
   }
 
-  const existingEnelSumRaw = new Map<string, { sum: number; count: number }>();
+  const existingEnelSumByOrder = new Map<string, number>();
+  const existingEnelByOrderAndInc = new Map<string, Map<string, { sum: number; count: number }>>();
   for (const r of existingRows) {
     if (r.responsable !== "ENEL") continue;
     if (r.diasEnel == null) continue;
-    const curr = existingEnelSumRaw.get(r.orderCode) ?? { sum: 0, count: 0 };
-    existingEnelSumRaw.set(r.orderCode, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+    const incMap = existingEnelByOrderAndInc.get(r.orderCode) ?? new Map<string, { sum: number; count: number }>();
+    const curr = incMap.get(r.nombreIncremento) ?? { sum: 0, count: 0 };
+    incMap.set(r.nombreIncremento, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+    existingEnelByOrderAndInc.set(r.orderCode, incMap);
   }
-  const existingEnelSumByOrder = new Map<string, number>();
-  for (const [code, val] of existingEnelSumRaw.entries()) {
-    existingEnelSumByOrder.set(code, val.sum === 0 && val.count > 0 ? 1 : val.sum);
+  for (const [code, incMap] of existingEnelByOrderAndInc.entries()) {
+    let total = 0;
+    for (const val of incMap.values()) {
+      total += val.sum === 0 && val.count > 0 ? 1 : val.sum;
+    }
+    existingEnelSumByOrder.set(code, total);
   }
 
   let createdCount = 0;
@@ -2424,7 +2434,7 @@ async function processRecorridoIncrementosJob(input: {
 
   const newGroups = codes.length
     ? await prisma.recorridoIncremento.groupBy({
-        by: ["orderCode"],
+        by: ["orderCode", "nombreIncremento"],
         where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
         _sum: { diasEnel: true },
         _count: { diasEnel: true },
@@ -2439,10 +2449,15 @@ async function processRecorridoIncrementosJob(input: {
     const sum = g._sum.diasEnel ?? 0;
     const count = g._count.diasEnel ?? 0;
     const finalSum = sum === 0 && count > 0 ? 1 : sum;
-    newEnelSumByOrder.set(g.orderCode, finalSum);
+    newEnelSumByOrder.set(g.orderCode, (newEnelSumByOrder.get(g.orderCode) ?? 0) + finalSum);
+
     const inicio = g._min.fechaInicio ? new Date(g._min.fechaInicio).toISOString() : null;
     const fin = g._max.fechaFin ? new Date(g._max.fechaFin).toISOString() : null;
-    enelWindowByOrder.set(g.orderCode, { fechaInicio: inicio, fechaFin: fin });
+    const curr = enelWindowByOrder.get(g.orderCode) ?? { fechaInicio: null, fechaFin: null };
+    const nextInicio =
+      inicio && (!curr.fechaInicio || new Date(inicio).getTime() < new Date(curr.fechaInicio).getTime()) ? inicio : curr.fechaInicio;
+    const nextFin = fin && (!curr.fechaFin || new Date(fin).getTime() > new Date(curr.fechaFin).getTime()) ? fin : curr.fechaFin;
+    enelWindowByOrder.set(g.orderCode, { fechaInicio: nextInicio, fechaFin: nextFin });
   }
 
   if (codes.length > 0) {
@@ -3825,16 +3840,22 @@ carguesRouter.post(
         existingMap.set(key, r);
       }
 
-      const existingEnelSumRaw = new Map<string, { sum: number; count: number }>();
+      const existingEnelSumByOrder = new Map<string, number>();
+      const existingEnelByOrderAndInc = new Map<string, Map<string, { sum: number; count: number }>>();
       for (const r of existingRows) {
         if (r.responsable !== "ENEL") continue;
         if (r.diasEnel == null) continue;
-        const curr = existingEnelSumRaw.get(r.orderCode) ?? { sum: 0, count: 0 };
-        existingEnelSumRaw.set(r.orderCode, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+        const incMap = existingEnelByOrderAndInc.get(r.orderCode) ?? new Map<string, { sum: number; count: number }>();
+        const curr = incMap.get(r.nombreIncremento) ?? { sum: 0, count: 0 };
+        incMap.set(r.nombreIncremento, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+        existingEnelByOrderAndInc.set(r.orderCode, incMap);
       }
-      const existingEnelSumByOrder = new Map<string, number>();
-      for (const [code, val] of existingEnelSumRaw.entries()) {
-        existingEnelSumByOrder.set(code, val.sum === 0 && val.count > 0 ? 1 : val.sum);
+      for (const [code, incMap] of existingEnelByOrderAndInc.entries()) {
+        let total = 0;
+        for (const val of incMap.values()) {
+          total += val.sum === 0 && val.count > 0 ? 1 : val.sum;
+        }
+        existingEnelSumByOrder.set(code, total);
       }
 
       let createdCount = 0;
@@ -3964,7 +3985,7 @@ carguesRouter.post(
       // Este valor es el que se muestra en Órdenes como "R. Incrementos" y además se suma al "D. Descuento".
       const newGroups = codes.length
         ? await prisma.recorridoIncremento.groupBy({
-            by: ["orderCode"],
+            by: ["orderCode", "nombreIncremento"],
             where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
             _sum: { diasEnel: true },
             _count: { diasEnel: true },
@@ -3979,10 +4000,17 @@ carguesRouter.post(
         const sum = g._sum.diasEnel ?? 0;
         const count = g._count.diasEnel ?? 0;
         const finalSum = sum === 0 && count > 0 ? 1 : sum;
-        newEnelSumByOrder.set(g.orderCode, finalSum);
+        newEnelSumByOrder.set(g.orderCode, (newEnelSumByOrder.get(g.orderCode) ?? 0) + finalSum);
         const inicio = g._min.fechaInicio ? new Date(g._min.fechaInicio).toISOString() : null;
         const fin = g._max.fechaFin ? new Date(g._max.fechaFin).toISOString() : null;
-        enelWindowByOrder.set(g.orderCode, { fechaInicio: inicio, fechaFin: fin });
+        const curr = enelWindowByOrder.get(g.orderCode) ?? { fechaInicio: null, fechaFin: null };
+        const nextInicio =
+          inicio && (!curr.fechaInicio || new Date(inicio).getTime() < new Date(curr.fechaInicio).getTime())
+            ? inicio
+            : curr.fechaInicio;
+        const nextFin =
+          fin && (!curr.fechaFin || new Date(fin).getTime() > new Date(curr.fechaFin).getTime()) ? fin : curr.fechaFin;
+        enelWindowByOrder.set(g.orderCode, { fechaInicio: nextInicio, fechaFin: nextFin });
       }
 
       if (codes.length > 0) {

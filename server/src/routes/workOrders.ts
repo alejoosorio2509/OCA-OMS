@@ -391,18 +391,20 @@ workOrdersRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async
       select: { codigo: true, ansCalc: true }
     }),
     prisma.recorridoIncremento.groupBy({
-      by: ["orderCode"],
+      by: ["orderCode", "nombreIncremento"],
       where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
       _sum: { diasEnel: true },
       _count: { diasEnel: true }
     })
   ]);
   const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
-  const enelSumMap = new Map(enelGroups.map((g) => {
+  const enelSumMap = new Map<string, number>();
+  for (const g of enelGroups) {
     const sum = g._sum.diasEnel ?? 0;
     const count = g._count.diasEnel ?? 0;
-    return [g.orderCode, sum === 0 && count > 0 ? 1 : sum];
-  }));
+    const finalSum = sum === 0 && count > 0 ? 1 : sum;
+    enelSumMap.set(g.orderCode, (enelSumMap.get(g.orderCode) ?? 0) + finalSum);
+  }
 
   const byStatus: Record<string, number> = {};
   let total = 0;
@@ -829,7 +831,7 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
           select: { codigo: true, totalBarSum: true, ansRef: true, ansCalc: true }
         }),
         prisma.recorridoIncremento.groupBy({
-          by: ["orderCode"],
+          by: ["orderCode", "nombreIncremento"],
           where: { orderCode: { in: group }, responsable: "ENEL", diasEnel: { not: null } },
           _sum: { diasEnel: true },
           _count: { diasEnel: true }
@@ -1341,14 +1343,17 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
 
   const baremoInt = typeof baremo?.ansCalc === "number" ? Math.round(baremo.ansCalc) : 0;
   const enelGroup = await prisma.recorridoIncremento.groupBy({
-    by: ["orderCode"],
+    by: ["orderCode", "nombreIncremento"],
     where: { orderCode: dto.code, responsable: "ENEL", diasEnel: { not: null } },
     _sum: { diasEnel: true },
     _count: { diasEnel: true }
   });
-  const sumEnel = enelGroup[0]?._sum.diasEnel ?? 0;
-  const countEnel = enelGroup[0]?._count.diasEnel ?? 0;
-  const diasEnel = sumEnel === 0 && countEnel > 0 ? 1 : sumEnel;
+  let diasEnel = 0;
+  for (const g of enelGroup) {
+    const sum = g._sum.diasEnel ?? 0;
+    const count = g._count.diasEnel ?? 0;
+    diasEnel += sum === 0 && count > 0 ? 1 : sum;
+  }
   const extraDescuento = baremoInt + diasEnel;
 
   const totalDiasDescuento = (dto.totalDiasDescuento ?? 0) + extraDescuento;
