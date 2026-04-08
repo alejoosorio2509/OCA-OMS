@@ -43,6 +43,10 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/", (_req, res) => {
+  res.status(200).json({ ok: true, ...getBuildInfo() });
+});
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true, ...getBuildInfo() });
 });
