@@ -320,7 +320,7 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
   const { inicioMap, finMap, finNumberToDate, maxFinNumber } = buildCalendarMaps(calendar);
 
   const codes = orders.map((o) => o.code);
-  const [baremos, enelGroups] = await Promise.all([
+  const [baremos, enelGroups, novedades, devoluciones] = await Promise.all([
     prisma.actividadBaremo.findMany({
       where: { codigo: { in: codes } },
       select: { codigo: true, totalBarSum: true, ansRef: true, ansCalc: true }
@@ -330,6 +330,19 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
       where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
       _sum: { diasEnel: true },
       _count: { diasEnel: true }
+    }),
+    prisma.novedad.findMany({
+      where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
+      select: { workOrder: { select: { code: true } }, fechaInicio: true, fechaFin: true }
+    }),
+    prisma.workOrderHistory.findMany({
+      where: {
+        workOrder: { code: { in: codes } },
+        note: { contains: "Descuento por devolución" },
+        fechaInicio: { not: null },
+        fechaFin: { not: null }
+      },
+      select: { workOrder: { select: { code: true } }, fechaInicio: true, fechaFin: true }
     })
   ]);
 
@@ -340,6 +353,30 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
     const count = g._count.diasEnel ?? 0;
     const finalSum = sum === 0 && count > 0 ? 1 : sum;
     enelSumMap.set(g.orderCode, (enelSumMap.get(g.orderCode) ?? 0) + finalSum);
+  }
+
+  const novedadSumMap = new Map<string, number>();
+  for (const n of novedades) {
+    const iniNum = inicioMap.get(normalizeDateStr(new Date(n.fechaInicio)));
+    const finNum = n.fechaFin ? finMap.get(normalizeDateStr(new Date(n.fechaFin))) : undefined;
+    if (iniNum !== undefined && finNum !== undefined) {
+      const diff = finNum - iniNum;
+      if (diff > 0) {
+        novedadSumMap.set(n.workOrder.code, (novedadSumMap.get(n.workOrder.code) ?? 0) + diff);
+      }
+    }
+  }
+
+  const devolucionSumMap = new Map<string, number>();
+  for (const d of devoluciones) {
+    const iniNum = d.fechaInicio ? inicioMap.get(normalizeDateStr(new Date(d.fechaInicio))) : undefined;
+    const finNum = d.fechaFin ? finMap.get(normalizeDateStr(new Date(d.fechaFin))) : undefined;
+    if (iniNum !== undefined && finNum !== undefined) {
+      const diff = finNum - iniNum;
+      if (diff > 0) {
+        devolucionSumMap.set(d.workOrder.code, (devolucionSumMap.get(d.workOrder.code) ?? 0) + diff);
+      }
+    }
   }
 
   const headers = [
@@ -355,7 +392,9 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
     "Fecha tentativa/Gestión",
     "Baremo",
     "R. Incrementos",
-    "D. Descuento",
+    "D. Devoluciones",
+    "D. Novedades",
+    "D. Descuento Total",
     "Días Gestión",
     "D. Pasados",
     "Cumple"
@@ -379,6 +418,8 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
       const baremo = baremoMap.get(o.code);
       const baremoInt = typeof baremo?.ansCalc === "number" ? Math.round(baremo.ansCalc) : 0;
       const diasEnel = enelSumMap.get(o.code) ?? 0;
+      const diasNovedades = novedadSumMap.get(o.code) ?? 0;
+      const diasDevoluciones = devolucionSumMap.get(o.code) ?? 0;
       const extraDescuento = baremoInt + diasEnel;
 
       const totalDiasDescuento = o.diasDescuento + extraDescuento;
@@ -421,6 +462,8 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
         fechaTentativaGestion ?? "",
         baremoInt,
         diasEnel,
+        diasDevoluciones,
+        diasNovedades,
         totalDiasDescuento,
         diasGestion ?? "",
         diasPasados ?? "",
