@@ -678,6 +678,10 @@ function NovedadModal({ order, onClose }: { order: WorkOrderListItem, onClose: (
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!file) {
+      alert("Debes adjuntar un soporte para registrar la novedad.");
+      return;
+    }
     setLoading(true);
 
     const body = new FormData();
@@ -685,7 +689,7 @@ function NovedadModal({ order, onClose }: { order: WorkOrderListItem, onClose: (
     if (formData.fechaFin) body.append("fechaFin", formData.fechaFin);
     body.append("descripcion", formData.descripcion);
     body.append("detalle", formData.detalle);
-    if (file) body.append("soporte", file);
+    body.append("soporte", file);
 
     try {
       const res = await fetch(`${API_URL}/work-orders/${order.id}/novedades`, {
@@ -749,10 +753,11 @@ function NovedadModal({ order, onClose }: { order: WorkOrderListItem, onClose: (
             />
           </div>
           <div className="field">
-            <label>Soporte de novedad (Imagen)</label>
+            <label>Soporte de novedad (Imagen) *</label>
             <input 
               type="file" 
               accept="image/*" 
+              required
               onChange={e => setFile(e.target.files?.[0] || null)} 
             />
           </div>

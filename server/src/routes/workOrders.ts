@@ -1034,6 +1034,11 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
       return;
     }
 
+    if (!req.file) {
+      res.status(400).json({ error: "SOPORTE_REQUIRED" });
+      return;
+    }
+
     const dInicio = new Date(fechaInicio);
     const dFin = fechaFin ? new Date(fechaFin) : new Date();
 
@@ -1059,7 +1064,7 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
         fechaFin: fechaFin ? dFin : null,
         descripcion,
         detalle,
-        soportePath: req.file ? `/uploads/novedades/${req.file.filename}` : null
+        soportePath: `/uploads/novedades/${req.file.filename}`
       }
     });
 
