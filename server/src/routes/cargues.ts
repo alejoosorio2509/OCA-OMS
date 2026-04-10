@@ -434,6 +434,24 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
+    const normalizeKey = (value: string) =>
+      value
+        .replace(/\u0000/g, "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const hasCodigoColumn = (rows: Record<string, unknown>[]) =>
+      rows.length > 0 && Object.keys(rows[0] ?? {}).some((k) => normalizeKey(k) === "codigo");
+    const sanitizeRows = (rows: Record<string, unknown>[]) =>
+      rows.map((r) => {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(r)) {
+          const nk = String(k).replace(/\u0000/g, "").trim();
+          out[nk] = typeof v === "string" ? v.replace(/\u0000/g, "") : v;
+        }
+        return out;
+      });
     const parseContent = (content: string, delimiter: string) =>
       parseSync(content, {
         columns: true,
@@ -451,13 +469,36 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
       }
       return first;
     };
-    try {
-      const content = fs.readFileSync(input.filePath, "utf8");
-      data = parseWithFallback(content);
-    } catch {
-      writeLog("WARN: Reintentando con Latin1");
-      const content = fs.readFileSync(input.filePath, "latin1");
-      data = parseWithFallback(content);
+    const bytes = fs.readFileSync(input.filePath);
+    const looksUtf16 =
+      (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) ||
+      (() => {
+        const n = Math.min(bytes.length, 2000);
+        if (n === 0) return false;
+        let zeros = 0;
+        for (let i = 0; i < n; i++) if (bytes[i] === 0x00) zeros++;
+        return zeros / n > 0.2;
+      })();
+    const encodings: BufferEncoding[] = looksUtf16 ? ["utf16le", "utf8", "latin1"] : ["utf8", "utf16le", "latin1"];
+    let lastErr: unknown;
+    for (const enc of encodings) {
+      try {
+        const content = bytes.toString(enc);
+        const parsed = sanitizeRows(parseWithFallback(content));
+        if (input.type === "ACTIVIDADES_BAREMO" && !hasCodigoColumn(parsed)) {
+          continue;
+        }
+        data = parsed;
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (lastErr) {
+      const msg = lastErr instanceof Error ? lastErr.message : "UNKNOWN";
+      writeLog(`ERROR: No se pudo leer CSV (${input.fileName}): ${msg}`);
+      throw lastErr;
     }
   } else {
     const buffer = fs.readFileSync(input.filePath);
@@ -509,6 +550,24 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
+    const normalizeKey = (value: string) =>
+      value
+        .replace(/\u0000/g, "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const hasCodigoColumn = (rows: Record<string, unknown>[]) =>
+      rows.length > 0 && Object.keys(rows[0] ?? {}).some((k) => normalizeKey(k) === "codigo");
+    const sanitizeRows = (rows: Record<string, unknown>[]) =>
+      rows.map((r) => {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(r)) {
+          const nk = String(k).replace(/\u0000/g, "").trim();
+          out[nk] = typeof v === "string" ? v.replace(/\u0000/g, "") : v;
+        }
+        return out;
+      });
     const parseContent = (content: string, delimiter: string) =>
       parseSync(content, {
         columns: true,
@@ -526,13 +585,36 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       }
       return first;
     };
-    try {
-      const content = input.bytes.toString("utf8");
-      data = parseWithFallback(content);
-    } catch {
-      writeLog("WARN: Reintentando con Latin1");
-      const content = input.bytes.toString("latin1");
-      data = parseWithFallback(content);
+    const bytes = input.bytes;
+    const looksUtf16 =
+      (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) ||
+      (() => {
+        const n = Math.min(bytes.length, 2000);
+        if (n === 0) return false;
+        let zeros = 0;
+        for (let i = 0; i < n; i++) if (bytes[i] === 0x00) zeros++;
+        return zeros / n > 0.2;
+      })();
+    const encodings: BufferEncoding[] = looksUtf16 ? ["utf16le", "utf8", "latin1"] : ["utf8", "utf16le", "latin1"];
+    let lastErr: unknown;
+    for (const enc of encodings) {
+      try {
+        const content = bytes.toString(enc);
+        const parsed = sanitizeRows(parseWithFallback(content));
+        if (input.type === "ACTIVIDADES_BAREMO" && !hasCodigoColumn(parsed)) {
+          continue;
+        }
+        data = parsed;
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (lastErr) {
+      const msg = lastErr instanceof Error ? lastErr.message : "UNKNOWN";
+      writeLog(`ERROR: No se pudo leer CSV (${input.fileName}): ${msg}`);
+      throw lastErr;
     }
   } else {
     const workbook = XLSX.read(input.bytes, { type: "buffer", cellDates: true });
