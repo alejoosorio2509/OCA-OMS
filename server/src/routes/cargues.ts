@@ -427,32 +427,37 @@ async function finishJob(jobId: string, input: { ok: true; result: unknown } | {
 
 async function loadRowsFromFile(input: { filePath: string; fileName: string; type: string }) {
   let data: Record<string, unknown>[] = [];
-  if (input.fileName.endsWith(".csv")) {
-    const delimiter =
+  const lowerName = String(input.fileName ?? "").trim().toLowerCase();
+  if (lowerName.endsWith(".csv")) {
+    const primaryDelimiter =
       input.type === "ACTUALIZACION" || input.type === "ACTIVIDADES_BAREMO" || input.type === "RECORRIDO_INCREMENTOS"
         ? ";"
         : ",";
-    try {
-      const content = fs.readFileSync(input.filePath, "utf8");
-      data = parseSync(content, {
+    const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
+    const parseContent = (content: string, delimiter: string) =>
+      parseSync(content, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
-        delimiter: delimiter,
+        delimiter,
         bom: true,
         relax_column_count: true
       }) as Record<string, unknown>[];
+    const parseWithFallback = (content: string) => {
+      const first = parseContent(content, primaryDelimiter);
+      const firstKeys = Object.keys(first[0] ?? {});
+      if (firstKeys.length === 1 && firstKeys[0]?.includes(fallbackDelimiter)) {
+        return parseContent(content, fallbackDelimiter);
+      }
+      return first;
+    };
+    try {
+      const content = fs.readFileSync(input.filePath, "utf8");
+      data = parseWithFallback(content);
     } catch {
       writeLog("WARN: Reintentando con Latin1");
       const content = fs.readFileSync(input.filePath, "latin1");
-      data = parseSync(content, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-        delimiter: delimiter,
-        bom: true,
-        relax_column_count: true
-      }) as Record<string, unknown>[];
+      data = parseWithFallback(content);
     }
   } else {
     const buffer = fs.readFileSync(input.filePath);
@@ -499,31 +504,35 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
   let data: Record<string, unknown>[] = [];
   const lowerName = String(input.fileName ?? "").trim().toLowerCase();
   if (lowerName.endsWith(".csv")) {
-    const delimiter =
+    const primaryDelimiter =
       input.type === "ACTUALIZACION" || input.type === "ACTIVIDADES_BAREMO" || input.type === "RECORRIDO_INCREMENTOS"
         ? ";"
         : ",";
-    try {
-      const content = input.bytes.toString("utf8");
-      data = parseSync(content, {
+    const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
+    const parseContent = (content: string, delimiter: string) =>
+      parseSync(content, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
-        delimiter: delimiter,
+        delimiter,
         bom: true,
         relax_column_count: true
       }) as Record<string, unknown>[];
+    const parseWithFallback = (content: string) => {
+      const first = parseContent(content, primaryDelimiter);
+      const firstKeys = Object.keys(first[0] ?? {});
+      if (firstKeys.length === 1 && firstKeys[0]?.includes(fallbackDelimiter)) {
+        return parseContent(content, fallbackDelimiter);
+      }
+      return first;
+    };
+    try {
+      const content = input.bytes.toString("utf8");
+      data = parseWithFallback(content);
     } catch {
       writeLog("WARN: Reintentando con Latin1");
       const content = input.bytes.toString("latin1");
-      data = parseSync(content, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-        delimiter: delimiter,
-        bom: true,
-        relax_column_count: true
-      }) as Record<string, unknown>[];
+      data = parseWithFallback(content);
     }
   } else {
     const workbook = XLSX.read(input.bytes, { type: "buffer", cellDates: true });
@@ -593,11 +602,24 @@ async function processActualizacionCsvFile(input: {
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
 
+  const detectDelimiter = (bytes: Buffer) => {
+    const sample = bytes.toString("latin1", 0, Math.min(bytes.length, 8192));
+    const firstLine =
+      sample
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .find((s) => s.length > 0) ?? "";
+    const semi = (firstLine.match(/;/g) ?? []).length;
+    const comma = (firstLine.match(/,/g) ?? []).length;
+    return semi >= comma ? ";" : ",";
+  };
+
+  const delimiter = detectDelimiter(input.fileBytes);
   const parser = parseStream({
     columns: true,
     skip_empty_lines: true,
     trim: true,
-    delimiter: ";",
+    delimiter,
     bom: true,
     relax_column_count: true
   });
