@@ -80,7 +80,7 @@ export function OrdersPage() {
     cerradas: 0,
     devueltas: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [gestores, setGestores] = useState<string[]>([]);
@@ -140,7 +140,7 @@ export function OrdersPage() {
     color: (initialParams.get("color") as "" | "red" | "green" | null) || ""
   }));
   const [page, setPage] = useState<number>(initialPage);
-  const pageSize = 100;
+  const pageSize = 50;
 
   type SortKey =
     | "code"
@@ -164,6 +164,7 @@ export function OrdersPage() {
 
   const [selectedOrder, setSelectedOrder] = useState<WorkOrderListItem | null>(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
     const next = new URLSearchParams();
@@ -256,14 +257,32 @@ export function OrdersPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!token || !hasSearched) {
+      setLoading(false);
+      setError(null);
+      setItems([]);
+      setTotalCount(0);
+      return () => {
+        cancelled = true;
+      };
+    }
     setLoading(true);
     setError(null);
-    listWorkOrders(token!, query)
-      .then(data => { if (!cancelled) { setItems(data.items); setTotalCount(data.total); } })
-      .catch(() => { if (!cancelled) setError("No se pudo cargar la lista."); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    listWorkOrders(token, query)
+      .then((data) => {
+        if (!cancelled) {
+          setItems(data.items);
+          setTotalCount(data.total);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudo cargar la lista.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => { cancelled = true; };
-  }, [token, query]);
+  }, [token, query, hasSearched]);
 
   const metricsQuery = useMemo(() => {
     type MetricsQuery = NonNullable<Parameters<typeof getWorkOrderMetrics>[1]>;
@@ -282,7 +301,24 @@ export function OrdersPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!token) return;
+    if (!token || !hasSearched) {
+      setMetrics({
+        total: 0,
+        cumplan: 0,
+        noCumplan: 0,
+        ansPct: 0,
+        asignadas: 0,
+        enEjecucion: 0,
+        pausadas: 0,
+        gestionadas: 0,
+        facturadas: 0,
+        cerradas: 0,
+        devueltas: 0
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     getWorkOrderMetrics(token, metricsQuery)
       .then((data) => {
         if (cancelled) return;
@@ -307,7 +343,7 @@ export function OrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, metricsQuery, appliedKey]);
+  }, [token, metricsQuery, hasSearched]);
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -352,6 +388,9 @@ export function OrdersPage() {
     setSortDir("asc");
     setPage(1);
     sessionStorage.removeItem("orders_filters");
+    setHasSearched(false);
+    setItems([]);
+    setTotalCount(0);
   };
 
   const applyFilters = () => {
@@ -366,6 +405,7 @@ export function OrdersPage() {
       color: draftColorFilter
     });
     setPage(1);
+    setHasSearched(true);
   };
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -441,7 +481,7 @@ export function OrdersPage() {
           </div>
           <div className="field" style={{ width: 160 }}>
             <label>&nbsp;</label>
-            <button className="btn" onClick={applyFilters} type="button" disabled={!hasPendingFilters}>
+            <button className="btn" onClick={applyFilters} type="button" disabled={!hasPendingFilters && hasSearched}>
               Buscar
             </button>
           </div>
