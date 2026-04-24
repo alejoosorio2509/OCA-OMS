@@ -226,6 +226,19 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     ]);
 
     const codes = pageItems.map((r) => r.orderCode);
+    const userId = req.auth!.sub;
+    if (codes.length) {
+      const existingCodes = await prisma.workOrder.findMany({ where: { code: { in: codes } }, select: { code: true } });
+      const existingSet = new Set(existingCodes.map((r) => r.code));
+      const missing = codes.filter((c) => !existingSet.has(c));
+      if (missing.length) {
+        await prisma.workOrder.createMany({
+          data: missing.map((code) => ({ code, title: `OT ${code}`, status: "CREATED", createdById: userId })),
+          skipDuplicates: true
+        });
+      }
+    }
+
     const wo = codes.length
       ? await prisma.workOrder.findMany({
           where: { code: { in: codes } },
@@ -367,5 +380,29 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const total = computed.length;
   const start = (page - 1) * pageSize;
   const items = computed.slice(start, start + pageSize);
+  const userId = req.auth!.sub;
+  const pageCodes = items.map((r) => r.orderCode);
+  if (pageCodes.length) {
+    const existingCodes = await prisma.workOrder.findMany({ where: { code: { in: pageCodes } }, select: { code: true } });
+    const existingSet = new Set(existingCodes.map((r) => r.code));
+    const missing = pageCodes.filter((c) => !existingSet.has(c));
+    if (missing.length) {
+      await prisma.workOrder.createMany({
+        data: missing.map((code) => ({ code, title: `OT ${code}`, status: "CREATED", createdById: userId })),
+        skipDuplicates: true
+      });
+    }
+    const wo = await prisma.workOrder.findMany({
+      where: { code: { in: pageCodes } },
+      select: { id: true, code: true, status: true, estadoSecundario: true }
+    });
+    const woByCode = new Map(wo.map((o) => [o.code, o]));
+    const hydrated = items.map((r) => {
+      const w = woByCode.get(r.orderCode) ?? null;
+      return { ...r, workOrderId: w?.id ?? null, workOrderStatus: w?.status ?? null, estadoSecundario: w?.estadoSecundario ?? null };
+    });
+    res.json({ items: hydrated, total, page, pageSize });
+    return;
+  }
   res.json({ items, total, page, pageSize });
 });

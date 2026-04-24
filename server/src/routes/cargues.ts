@@ -2700,18 +2700,43 @@ async function processLevantamientoJob(input: {
     .filter((v): v is string => typeof v === "string" && v.length > 0);
 
   const existing = new Set<string>();
+  const existingOrders = new Set<string>();
   const chunk = <T,>(arr: T[], size: number) => {
     const out: T[][] = [];
     for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
     return out;
   };
 
-  for (const group of chunk([...new Set(codes)], 500)) {
+  const uniqueCodes = [...new Set(codes)];
+  for (const group of chunk(uniqueCodes, 500)) {
     const rows = await prisma.levantamiento.findMany({
       where: { orderCode: { in: group } },
       select: { orderCode: true }
     });
     for (const r of rows) existing.add(r.orderCode);
+  }
+
+  for (const group of chunk(uniqueCodes, 500)) {
+    const rows = await prisma.workOrder.findMany({
+      where: { code: { in: group } },
+      select: { code: true }
+    });
+    for (const r of rows) existingOrders.add(r.code);
+  }
+
+  const missingOrders = uniqueCodes.filter((c) => !existingOrders.has(c));
+  for (const group of chunk(missingOrders, 500)) {
+    if (group.length === 0) continue;
+    await prisma.workOrder.createMany({
+      data: group.map((code) => ({
+        code,
+        title: `OT ${code}`,
+        status: "CREATED",
+        createdById: input.userId
+      })),
+      skipDuplicates: true
+    });
+    for (const c of group) existingOrders.add(c);
   }
 
   for (let i = 0; i < input.data.length; i++) {

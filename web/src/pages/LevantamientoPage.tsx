@@ -366,35 +366,35 @@ export function LevantamientoPage() {
                     <td style={{ fontWeight: 800, color: it.diasGestionTotalColor === "red" ? "red" : it.diasGestionTotalColor === "green" ? "green" : colorOf(it.diasGestionTotal) }}>
                       {it.diasGestionTotal ?? "—"}
                     </td>
-                    <td>
-                      {it.workOrderId ? (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setSelectedOrder({ id: it.workOrderId!, code: it.orderCode });
-                              setShowPostprocesoModal(false);
-                              setShowNovedadModal(true);
-                            }}
-                          >
-                            Novedades
-                          </button>
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setSelectedOrder({ id: it.workOrderId!, code: it.orderCode });
-                              setShowNovedadModal(false);
-                              setShowPostprocesoModal(true);
-                            }}
-                          >
-                            Cierre SAIT
-                          </button>
-                        </div>
-                      ) : (
-                        "—"
-                      )}
+                    <td style={{ minWidth: 220 }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          disabled={!it.workOrderId}
+                          onClick={() => {
+                            if (!it.workOrderId) return;
+                            setSelectedOrder({ id: it.workOrderId, code: it.orderCode });
+                            setShowPostprocesoModal(false);
+                            setShowNovedadModal(true);
+                          }}
+                        >
+                          Novedades
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          disabled={!it.workOrderId}
+                          onClick={() => {
+                            if (!it.workOrderId) return;
+                            setSelectedOrder({ id: it.workOrderId, code: it.orderCode });
+                            setShowNovedadModal(false);
+                            setShowPostprocesoModal(true);
+                          }}
+                        >
+                          Cierre SAIT
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -474,10 +474,10 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content card">
+    <div className="modal-backdrop">
+      <div className="modal">
         <h3>Registrar Novedad - Orden {order.code}</h3>
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
+        <form onSubmit={handleSubmit} className="modal-form">
           <div className="field">
             <label>Fecha Inicio Novedad *</label>
             <input type="date" value={formData.fechaInicio} onChange={(e) => setFormData((p) => ({ ...p, fechaInicio: e.target.value }))} required />
@@ -509,11 +509,11 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
             <label>Soporte de novedad (Imagen) *</label>
             <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
           </div>
-          <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
-            <button className="btn" type="button" onClick={onClose} disabled={loading}>
+          <div className="actions" style={{ marginTop: "1rem" }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
               Cancelar
             </button>
-            <button className="btn btn-accent" disabled={loading}>
+            <button type="submit" className="btn" disabled={loading}>
               {loading ? "Guardando..." : "Guardar Novedad"}
             </button>
           </div>
@@ -562,10 +562,10 @@ function PostprocesoModal({ order, onClose }: { order: { id: string; code: strin
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content card">
+    <div className="modal-backdrop">
+      <div className="modal">
         <h3>Registrar Cierre SAIT - Orden {order.code}</h3>
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
+        <form onSubmit={handleSubmit} className="modal-form">
           <div className="field">
             <label>Fecha cierre SAIT *</label>
             <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required />
@@ -575,12 +575,8 @@ function PostprocesoModal({ order, onClose }: { order: { id: string; code: strin
             <input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
           </div>
           <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
-            <button className="btn" type="button" onClick={onClose} disabled={loading}>
-              Cancelar
-            </button>
-            <button className="btn btn-accent" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar"}
-            </button>
+            <button className="btn" type="button" onClick={onClose} disabled={loading}>Cancelar</button>
+            <button className="btn btn-accent" disabled={loading}>{loading ? "Guardando..." : "Guardar"}</button>
           </div>
         </form>
       </div>
