@@ -67,7 +67,8 @@ function parseUsersCsv(filePath: string) {
         const hasNombre = keys.includes("nombre");
         const hasEmail = keys.includes("email");
         if (hasNombre && hasEmail) return rows;
-      } catch {
+      } catch (err) {
+        void err;
       }
     }
   }

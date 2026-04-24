@@ -430,13 +430,17 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
   const lowerName = String(input.fileName ?? "").trim().toLowerCase();
   if (lowerName.endsWith(".csv")) {
     const primaryDelimiter =
-      input.type === "ACTUALIZACION" || input.type === "ACTIVIDADES_BAREMO" || input.type === "RECORRIDO_INCREMENTOS"
+      input.type === "ACTUALIZACION" ||
+      input.type === "ACTIVIDADES_BAREMO" ||
+      input.type === "RECORRIDO_INCREMENTOS" ||
+      input.type === "LEVANTAMIENTO"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
     const normalizeKey = (value: string) =>
       value
-        .replace(/\u0000/g, "")
+        .split("\u0000")
+        .join("")
         .trim()
         .toLowerCase()
         .normalize("NFD")
@@ -447,8 +451,8 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
       rows.map((r) => {
         const out: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(r)) {
-          const nk = String(k).replace(/\u0000/g, "").trim();
-          out[nk] = typeof v === "string" ? v.replace(/\u0000/g, "") : v;
+          const nk = String(k).split("\u0000").join("").trim();
+          out[nk] = typeof v === "string" ? v.split("\u0000").join("") : v;
         }
         return out;
       });
@@ -546,13 +550,17 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
   const lowerName = String(input.fileName ?? "").trim().toLowerCase();
   if (lowerName.endsWith(".csv")) {
     const primaryDelimiter =
-      input.type === "ACTUALIZACION" || input.type === "ACTIVIDADES_BAREMO" || input.type === "RECORRIDO_INCREMENTOS"
+      input.type === "ACTUALIZACION" ||
+      input.type === "ACTIVIDADES_BAREMO" ||
+      input.type === "RECORRIDO_INCREMENTOS" ||
+      input.type === "LEVANTAMIENTO"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
     const normalizeKey = (value: string) =>
       value
-        .replace(/\u0000/g, "")
+        .split("\u0000")
+        .join("")
         .trim()
         .toLowerCase()
         .normalize("NFD")
@@ -563,8 +571,8 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       rows.map((r) => {
         const out: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(r)) {
-          const nk = String(k).replace(/\u0000/g, "").trim();
-          out[nk] = typeof v === "string" ? v.replace(/\u0000/g, "") : v;
+          const nk = String(k).split("\u0000").join("").trim();
+          out[nk] = typeof v === "string" ? v.split("\u0000").join("") : v;
         }
         return out;
       });
@@ -1496,6 +1504,7 @@ async function processDevolucionesJob(input: {
     message: `Proceso de Devoluciones finalizado. ${deletedCount} eliminadas, ${updatedCount} actualizadas.`,
     count: updatedCount,
     deleted: deletedCount,
+    ignored: ignoredCount,
     errors: rowErrors.length,
     errorDetails: rowErrors,
     debugSample
@@ -2643,6 +2652,150 @@ async function processRecorridoIncrementosJob(input: {
   };
 }
 
+async function processLevantamientoJob(input: {
+  data: Record<string, unknown>[];
+  userId: string;
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  let createdCount = 0;
+  let updatedCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
+
+  const getVal = (row: Record<string, unknown>, name: string) => {
+    const target = normalizeHeader(name);
+    const key = Object.keys(row).find((k) => normalizeHeader(k) === target);
+    return key ? row[key] : undefined;
+  };
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    for (const n of names) {
+      const v = getVal(row, n);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const parseDate = (val: unknown) => parseFlexibleDateCandidates(val)[0] ?? null;
+
+  const codes = input.data
+    .map((row) => parseText(getValAny(row, ["Orden Trabajo", "Orden de Trabajo", "Orden", "Orden trabajo"])))
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  const existing = new Set<string>();
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (const group of chunk([...new Set(codes)], 500)) {
+    const rows = await prisma.levantamiento.findMany({
+      where: { orderCode: { in: group } },
+      select: { orderCode: true }
+    });
+    for (const r of rows) existing.add(r.orderCode);
+  }
+
+  for (let i = 0; i < input.data.length; i++) {
+    const row = input.data[i];
+    try {
+      const orderCode = parseText(getValAny(row, ["Orden Trabajo", "Orden de Trabajo", "Orden", "Orden trabajo"]));
+      if (!orderCode) {
+        errorCount++;
+        rowErrors.push(`Fila ${i + 1}: Falta Orden Trabajo`);
+        continue;
+      }
+
+      const payload = {
+        nivelTension: parseText(getValAny(row, ["Nivel de Tensión", "Nivel de Tension", "Nivel de tensiÃ³n"])),
+        tipo: parseText(getVal(row, "Tipo")),
+        unidadSolicitante: parseText(getVal(row, "Unidad Solicitante")),
+        proyecto: parseText(getVal(row, "Proyecto")),
+        estado: parseText(getVal(row, "Estado")),
+        subestado: parseText(getValAny(row, ["Subestado", "Sub Estado"])),
+        subestacion: parseText(getValAny(row, ["Subestación", "Subestacion", "SubestaciÃ³n"])),
+        circuito: parseText(getVal(row, "Circuito")),
+        noCd: parseText(getValAny(row, ["No Cd", "No CD", "No. Cd", "No. CD", "NoCd"])),
+        direccion: parseText(getValAny(row, ["Direccion", "Dirección", "DirecciÃ³n"])),
+        municipio: parseText(getVal(row, "Municipio")),
+        zona: parseText(getVal(row, "Zona")),
+        alcance: parseText(getVal(row, "Alcance")),
+        fechaSolicitud: parseDate(getValAny(row, ["Fecha Solicitud", "Fecha solicitud"])),
+        fechaAprobacionAlcanceSt: parseDate(getValAny(row, ["Fecha Aprobación Alcance ST", "Fecha Aprobacion Alcance ST"])),
+        fechaEstimacionCostos: parseDate(getValAny(row, ["Fecha Estimación de Costos", "Fecha Estimacion de Costos"])),
+        fechaAprobacionValorizacionSt: parseDate(
+          getValAny(row, ["Fecha Aprobación Valorización ST", "Fecha Aprobacion Valorizacion ST", "Fecha Aprobación Valorizacion ST"])
+        ),
+        fechaPrevalidacion: parseDate(getValAny(row, ["Fecha Prevalidación", "Fecha Prevalidacion"])),
+        fechaAsignacion: parseDate(getValAny(row, ["Fecha Asignación", "Fecha Asignacion", "Fecha asignaciÃ³n"])),
+        fechaPrimerElemento: parseDate(getValAny(row, ["Fecha Primer Elemento", "Fecha primer elemento"])),
+        fechaEntregaPostproceso: parseDate(getValAny(row, ["Fecha Entrega Postproceso", "Fecha entrega postproceso"])),
+        fechaAprobacionPostproceso: parseDate(getValAny(row, ["Fecha Aprobacion Postproceso", "Fecha Aprobación Postproceso"])),
+        fechaGestion: parseDate(getValAny(row, ["Fecha Gestión", "Fecha Gestion", "Fecha gestiÃ³n"])),
+        fechaDevolucion: parseDate(getValAny(row, ["Fecha Devolución", "Fecha Devolucion"])),
+        usuarioSolicitante: parseText(getValAny(row, ["Usuario Solicitante", "Usuario solicitante"])),
+        usuarioAsigna: parseText(getValAny(row, ["Usuario Asigna", "Usuario asigna"])),
+        gestor: parseText(getValAny(row, ["Gestor", "Gestor "])),
+        observacionGestor: parseText(getValAny(row, ["Observación Gestor", "Observacion Gestor"])),
+        cuadrilla: parseText(getVal(row, "Cuadrilla"))
+      };
+
+      const existed = existing.has(orderCode);
+      await prisma.levantamiento.upsert({
+        where: { orderCode },
+        create: { orderCode, ...payload },
+        update: payload
+      });
+
+      successCount++;
+      if (existed) updatedCount++;
+      else {
+        createdCount++;
+        existing.add(orderCode);
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+
+    if ((i + 1) % 500 === 0 && input.onProgress) {
+      await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+    }
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: input.data.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Levantamiento: ${createdCount} creadas, ${updatedCount} actualizadas.`,
+    count: successCount,
+    updated: updatedCount,
+    created: createdCount,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
 async function runJob(jobId: string) {
   const claimed = await claimJob(jobId);
   if (!claimed) return;
@@ -2692,6 +2845,12 @@ async function runJob(jobId: string) {
                   userId: job.createdById,
                   onProgress: (p) => updateJobProgress(jobId, p)
                 })
+              : job.type === "LEVANTAMIENTO"
+                ? await processLevantamientoJob({
+                    data,
+                    userId: job.createdById,
+                    onProgress: (p) => updateJobProgress(jobId, p)
+                  })
               : (() => {
                   throw new Error("UNSUPPORTED_JOB_TYPE");
                 })();
@@ -2787,7 +2946,14 @@ carguesRouter.post(
     }
     const cleanupMissing = isTruthy((req.body as Record<string, unknown>)?.cleanupMissing, false);
 
-    const asyncTypes = new Set(["ACTUALIZACION", "DEVOLUCIONES", "CALENDARIO", "ACTIVIDADES_BAREMO", "RECORRIDO_INCREMENTOS"]);
+    const asyncTypes = new Set([
+      "ACTUALIZACION",
+      "DEVOLUCIONES",
+      "CALENDARIO",
+      "ACTIVIDADES_BAREMO",
+      "RECORRIDO_INCREMENTOS",
+      "LEVANTAMIENTO"
+    ]);
     if (asyncTypes.has(type) && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
       const normalizedFileName = String(fileName ?? "").trim();
@@ -2803,13 +2969,15 @@ carguesRouter.post(
       res.status(202).json({ jobId: created.id });
 
       setImmediate(() => {
-        runJob(created.id).catch(() => {
+        runJob(created.id).catch((err) => {
+          void err;
         });
       });
 
       try {
         fs.unlinkSync(filePath);
-      } catch {
+      } catch (err) {
+        void err;
       }
 
       filePath = null;
@@ -3635,6 +3803,9 @@ carguesRouter.post(
         errors: errorCount,
         errorDetails: rowErrors
       });
+    } else if (type === "LEVANTAMIENTO") {
+      const payload = await processLevantamientoJob({ data, userId: req.auth!.sub });
+      res.json(payload);
     } else if (type === "RECORRIDO_INCREMENTOS") {
       let successCount = 0;
       let errorCount = 0;
@@ -4205,7 +4376,8 @@ carguesRouter.post(
     if (filePath) {
       try {
         fs.unlinkSync(filePath);
-      } catch {
+      } catch (err) {
+        void err;
       }
     }
   }

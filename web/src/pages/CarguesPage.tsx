@@ -3,7 +3,17 @@ import { useAuth } from "../auth";
 import "./CarguesPage.css";
 import { API_URL } from "../apiUrl";
 
-type UploadType = "ACTUALIZACION" | "DEVOLUCIONES" | "CALENDARIO" | "ACTIVIDADES_BAREMO" | "RECORRIDO_INCREMENTOS";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+type UploadType =
+  | "ACTUALIZACION"
+  | "DEVOLUCIONES"
+  | "CALENDARIO"
+  | "ACTIVIDADES_BAREMO"
+  | "RECORRIDO_INCREMENTOS"
+  | "LEVANTAMIENTO";
 
 export function CarguesPage() {
   const { token, user } = useAuth();
@@ -84,14 +94,19 @@ export function CarguesPage() {
           } catch {
             continue;
           }
-          const job = (await jobRes.json().catch(() => null)) as any;
+          const job = (await jobRes.json().catch(() => null)) as unknown;
           if (!jobRes.ok) {
             if (jobRes.status === 404) continue;
             continue;
           }
-          if (job.status === "RUNNING" || job.status === "QUEUED") continue;
-          if (job.status === "ERROR") throw new Error(job.error || "Error en el cargue");
-          const result = job.result ?? {};
+          const jobObj = isRecord(job) ? job : {};
+          const status = typeof jobObj.status === "string" ? jobObj.status : "";
+          if (status === "RUNNING" || status === "QUEUED") continue;
+          if (status === "ERROR") {
+            const errMsg = typeof jobObj.error === "string" ? jobObj.error : "Error en el cargue";
+            throw new Error(errMsg);
+          }
+          const result = isRecord(jobObj.result) ? jobObj.result : {};
           const errorsCount = typeof result.errors === "number" ? result.errors : 0;
           const message = typeof result.message === "string" ? result.message : "Carga finalizada.";
           setMessage({ text: message, type: errorsCount > 0 ? "error" : "success" });
@@ -146,6 +161,7 @@ export function CarguesPage() {
             <option value="CALENDARIO">Calendario</option>
             <option value="ACTIVIDADES_BAREMO">Actividades Baremo</option>
             <option value="RECORRIDO_INCREMENTOS">Recorrido Incrementos</option>
+            <option value="LEVANTAMIENTO">Levantamiento</option>
           </select>
         </div>
 
@@ -188,6 +204,7 @@ export function CarguesPage() {
         <h3>Instrucciones</h3>
         <ul>
           <li>Asegúrate de que el archivo tenga el formato correcto.</li>
+          <li>Se recomienda cargar el archivo de actualización de bloques de 4k.</li>
           <li>Los archivos permitidos son .csv, .xlsx y .xls.</li>
           <li>Actualización/Devoluciones/Calendario/Recorrido Incrementos: máximo 50MB.</li>
           <li>Actividades Baremo: máximo 100MB.</li>

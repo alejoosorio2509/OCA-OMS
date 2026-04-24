@@ -3,6 +3,31 @@ import type { UserRole } from "../api";
 import { createUser, listUsers, resetUserPassword, updateUser } from "../api";
 import { useAuth } from "../auth";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getApiErrorData(err: unknown): Record<string, unknown> | null {
+  if (!isRecord(err)) return null;
+  if (!("data" in err)) return null;
+  const data = (err as Record<string, unknown>).data;
+  return isRecord(data) ? data : null;
+}
+
+function formatInvalidBody(details: unknown): string | null {
+  if (!Array.isArray(details)) return null;
+  const parts: string[] = [];
+  for (const d of details) {
+    if (!isRecord(d)) continue;
+    const path = d.path;
+    const message = d.message;
+    if (!Array.isArray(path) || typeof message !== "string") continue;
+    if (!path.every((p) => typeof p === "string" || typeof p === "number")) continue;
+    parts.push(`${path.map(String).join(".")}: ${message}`);
+  }
+  return parts.length > 0 ? `Datos inválidos: ${parts.join(", ")}` : null;
+}
+
 export function UsersPage() {
   const { token, user } = useAuth();
   const [items, setItems] = useState<
@@ -77,14 +102,16 @@ export function UsersPage() {
       setCanExportes(true);
       setCanUsers(false);
       await refresh();
-    } catch (err: any) {
+    } catch (err) {
       let msg = "No se pudo crear el usuario (¿email ya existe?).";
-      if (err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details)) {
-        msg = "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ");
-      } else if (err?.data?.error === "EMAIL_IN_USE") {
+      const data = getApiErrorData(err);
+      const code = typeof data?.error === "string" ? data.error : null;
+      if (code === "INVALID_BODY") {
+        msg = formatInvalidBody(data?.details) ?? msg;
+      } else if (code === "EMAIL_IN_USE") {
         msg = "El email ya está en uso.";
-      } else if (err?.data?.error) {
-        msg = err.data.error;
+      } else if (typeof data?.error === "string") {
+        msg = data.error;
       }
       setError(msg);
     } finally {
@@ -191,8 +218,13 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { name: u.name });
                           await refresh();
-                        } catch (err: any) {
-                          setError(err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details) ? "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ") : "No se pudo actualizar el nombre.");
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg =
+                            typeof data?.error === "string" && data.error === "INVALID_BODY"
+                              ? formatInvalidBody(data.details) ?? "No se pudo actualizar el nombre."
+                              : "No se pudo actualizar el nombre.";
+                          setError(msg);
                           await refresh();
                         }
                       }}
@@ -206,14 +238,16 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { email: u.email });
                           await refresh();
-                        } catch (err: any) {
+                        } catch (err) {
                           let msg = "No se pudo actualizar el email (¿ya existe?).";
-                          if (err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details)) {
-                            msg = "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ");
-                          } else if (err?.data?.error === "EMAIL_IN_USE") {
+                          const data = getApiErrorData(err);
+                          const code = typeof data?.error === "string" ? data.error : null;
+                          if (code === "INVALID_BODY") {
+                            msg = formatInvalidBody(data?.details) ?? msg;
+                          } else if (code === "EMAIL_IN_USE") {
                             msg = "El email ya está en uso.";
-                          } else if (err?.data?.error) {
-                            msg = err.data.error;
+                          } else if (typeof data?.error === "string") {
+                            msg = data.error;
                           }
                           setError(msg);
                           await refresh();
@@ -231,14 +265,16 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { role: next });
                           await refresh();
-                        } catch (err: any) {
-                          setError(
-                            err?.data?.error === "INVALID_BODY" && Array.isArray(err.data.details)
-                              ? "Datos inválidos: " + err.data.details.map((d: any) => `${d.path.join(".")}: ${d.message}`).join(", ")
-                              : err?.data?.error
-                                ? String(err.data.error)
-                                : "No se pudo actualizar el rol."
-                          );
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const code = typeof data?.error === "string" ? data.error : null;
+                          const msg =
+                            code === "INVALID_BODY"
+                              ? formatInvalidBody(data?.details) ?? "No se pudo actualizar el rol."
+                              : typeof data?.error === "string"
+                                ? data.error
+                                : "No se pudo actualizar el rol.";
+                          setError(msg);
                           await refresh();
                         }
                       }}
@@ -258,8 +294,10 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { canOrders: next });
                           await refresh();
-                        } catch (err: any) {
-                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Órdenes.");
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Órdenes.";
+                          setError(msg);
                           await refresh();
                         }
                       }}
@@ -276,8 +314,10 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { canCargues: next });
                           await refresh();
-                        } catch (err: any) {
-                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Cargues.");
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Cargues.";
+                          setError(msg);
                           await refresh();
                         }
                       }}
@@ -294,8 +334,10 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { canExportes: next });
                           await refresh();
-                        } catch (err: any) {
-                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Exportes.");
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Exportes.";
+                          setError(msg);
                           await refresh();
                         }
                       }}
@@ -312,8 +354,10 @@ export function UsersPage() {
                         try {
                           await updateUser(token!, u.id, { canUsers: next });
                           await refresh();
-                        } catch (err: any) {
-                          setError(err?.data?.error ? String(err.data.error) : "No se pudo actualizar el permiso de Usuarios.");
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Usuarios.";
+                          setError(msg);
                           await refresh();
                         }
                       }}

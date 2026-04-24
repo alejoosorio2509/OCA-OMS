@@ -104,19 +104,41 @@ export function OrdersPage() {
     return raw.split(",").filter(Boolean) as WorkOrderStatus[];
   }, [initialParams]);
 
-  const [selectedStatuses, setSelectedStatuses] = useState<WorkOrderStatus[]>(initialStatuses);
-  const [search, setSearch] = useState(() => initialParams.get("search") || "");
-  const [gestor, setGestor] = useState(() => initialParams.get("gestor") || "");
-  const [oportunidad, setOportunidad] = useState(() => initialParams.get("oportunidad") || "");
+  const [draftStatuses, setDraftStatuses] = useState<WorkOrderStatus[]>(initialStatuses);
+  const [draftSearch, setDraftSearch] = useState(() => initialParams.get("search") || "");
+  const [draftGestor, setDraftGestor] = useState(() => initialParams.get("gestor") || "");
+  const [draftOportunidad, setDraftOportunidad] = useState(() => initialParams.get("oportunidad") || "");
 
-  const [dateField, setDateField] = useState<"assignedAt" | "gestionAt">(
+  const [draftDateField, setDraftDateField] = useState<"assignedAt" | "gestionAt">(
     () => (initialParams.get("dateField") as "assignedAt" | "gestionAt" | null) || "assignedAt"
   );
-  const [dateStart, setDateStart] = useState(() => initialParams.get("dateStart") || "");
-  const [dateEnd, setDateEnd] = useState(() => initialParams.get("dateEnd") || "");
-  const [colorFilter, setColorFilter] = useState<"red" | "green" | "">(
+  const [draftDateStart, setDraftDateStart] = useState(() => initialParams.get("dateStart") || "");
+  const [draftDateEnd, setDraftDateEnd] = useState(() => initialParams.get("dateEnd") || "");
+  const [draftColorFilter, setDraftColorFilter] = useState<"red" | "green" | "">(
     () => (initialParams.get("color") as "" | "red" | "green" | null) || ""
   );
+
+  type OrdersFilters = {
+    statuses: WorkOrderStatus[];
+    search: string;
+    gestor: string;
+    oportunidad: string;
+    dateField: "assignedAt" | "gestionAt";
+    dateStart: string;
+    dateEnd: string;
+    color: "" | "red" | "green";
+  };
+
+  const [appliedFilters, setAppliedFilters] = useState<OrdersFilters>(() => ({
+    statuses: initialStatuses,
+    search: initialParams.get("search") || "",
+    gestor: initialParams.get("gestor") || "",
+    oportunidad: initialParams.get("oportunidad") || "",
+    dateField: (initialParams.get("dateField") as "assignedAt" | "gestionAt" | null) || "assignedAt",
+    dateStart: initialParams.get("dateStart") || "",
+    dateEnd: initialParams.get("dateEnd") || "",
+    color: (initialParams.get("color") as "" | "red" | "green" | null) || ""
+  }));
   const [page, setPage] = useState<number>(initialPage);
   const pageSize = 100;
 
@@ -145,20 +167,20 @@ export function OrdersPage() {
 
   useEffect(() => {
     const next = new URLSearchParams();
-    if (selectedStatuses.length > 0) next.set("statuses", selectedStatuses.join(","));
-    if (search.trim()) next.set("search", search.trim());
-    if (gestor.trim()) next.set("gestor", gestor.trim());
-    if (oportunidad.trim()) next.set("oportunidad", oportunidad.trim());
-    if (dateStart) next.set("dateStart", dateStart);
-    if (dateEnd) next.set("dateEnd", dateEnd);
-    if (dateStart || dateEnd) next.set("dateField", dateField);
-    if (colorFilter) next.set("color", colorFilter);
+    if (appliedFilters.statuses.length > 0) next.set("statuses", appliedFilters.statuses.join(","));
+    if (appliedFilters.search.trim()) next.set("search", appliedFilters.search.trim());
+    if (appliedFilters.gestor.trim()) next.set("gestor", appliedFilters.gestor.trim());
+    if (appliedFilters.oportunidad.trim()) next.set("oportunidad", appliedFilters.oportunidad.trim());
+    if (appliedFilters.dateStart) next.set("dateStart", appliedFilters.dateStart);
+    if (appliedFilters.dateEnd) next.set("dateEnd", appliedFilters.dateEnd);
+    if (appliedFilters.dateStart || appliedFilters.dateEnd) next.set("dateField", appliedFilters.dateField);
+    if (appliedFilters.color) next.set("color", appliedFilters.color);
     if (sortKey) next.set("sortKey", sortKey);
     if (sortDir) next.set("sortDir", sortDir);
     if (page > 1) next.set("page", String(page));
     sessionStorage.setItem("orders_filters", next.toString());
     setSearchParams(next, { replace: true });
-  }, [selectedStatuses, search, gestor, oportunidad, dateStart, dateEnd, dateField, colorFilter, sortKey, sortDir, page, setSearchParams]);
+  }, [appliedFilters, sortKey, sortDir, page, setSearchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,49 +204,54 @@ export function OrdersPage() {
   }, [token]);
 
   const query = useMemo(() => {
-    const q: Parameters<typeof listWorkOrders>[1] = {
-      search: search.trim() || undefined,
-      gestor: gestor.trim() || undefined,
-      oportunidad: oportunidad.trim() || undefined,
-      dateField: (dateStart || dateEnd) ? dateField : undefined,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-      colorFilter: colorFilter || undefined,
+    type OrdersQuery = NonNullable<Parameters<typeof listWorkOrders>[1]>;
+    const q: OrdersQuery = {
+      search: appliedFilters.search.trim() || undefined,
+      gestor: appliedFilters.gestor.trim() || undefined,
+      oportunidad: appliedFilters.oportunidad.trim() || undefined,
+      dateField: (appliedFilters.dateStart || appliedFilters.dateEnd) ? appliedFilters.dateField : undefined,
+      dateStart: appliedFilters.dateStart || undefined,
+      dateEnd: appliedFilters.dateEnd || undefined,
+      colorFilter: appliedFilters.color || undefined,
       page,
       pageSize,
       sortKey,
       sortDir
     };
-    if (selectedStatuses.length > 0) q.status = selectedStatuses;
+    if (appliedFilters.statuses.length > 0) q.status = appliedFilters.statuses;
     return q;
-  }, [selectedStatuses, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter, page, sortKey, sortDir]);
+  }, [appliedFilters, page, sortKey, sortDir]);
 
-  const filtersKey = useMemo(
-    () =>
-      JSON.stringify({
-        selectedStatuses,
-        search: search.trim(),
-        gestor: gestor.trim(),
-        oportunidad: oportunidad.trim(),
-        dateField: (dateStart || dateEnd) ? dateField : "",
-        dateStart,
-        dateEnd,
-        colorFilter,
-        sortKey,
-        sortDir
-      }),
-    [selectedStatuses, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter, sortKey, sortDir]
-  );
+  const draftKey = useMemo(() => {
+    return JSON.stringify({
+      statuses: draftStatuses,
+      search: draftSearch.trim(),
+      gestor: draftGestor.trim(),
+      oportunidad: draftOportunidad.trim(),
+      dateField: (draftDateStart || draftDateEnd) ? draftDateField : "",
+      dateStart: draftDateStart,
+      dateEnd: draftDateEnd,
+      color: draftColorFilter
+    });
+  }, [draftStatuses, draftSearch, draftGestor, draftOportunidad, draftDateField, draftDateStart, draftDateEnd, draftColorFilter]);
 
-  const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
-  useEffect(() => {
-    if (prevFiltersKey === filtersKey) return;
-    setPrevFiltersKey(filtersKey);
-    setPage(1);
-  }, [filtersKey, prevFiltersKey]);
+  const appliedKey = useMemo(() => {
+    return JSON.stringify({
+      statuses: appliedFilters.statuses,
+      search: appliedFilters.search.trim(),
+      gestor: appliedFilters.gestor.trim(),
+      oportunidad: appliedFilters.oportunidad.trim(),
+      dateField: (appliedFilters.dateStart || appliedFilters.dateEnd) ? appliedFilters.dateField : "",
+      dateStart: appliedFilters.dateStart,
+      dateEnd: appliedFilters.dateEnd,
+      color: appliedFilters.color
+    });
+  }, [appliedFilters]);
+
+  const hasPendingFilters = draftKey !== appliedKey;
 
   const toggleStatus = (s: WorkOrderStatus) => {
-    setSelectedStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+    setDraftStatuses((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   };
 
   useEffect(() => {
@@ -239,18 +266,19 @@ export function OrdersPage() {
   }, [token, query]);
 
   const metricsQuery = useMemo(() => {
-    const q: Parameters<typeof getWorkOrderMetrics>[1] = {
-      search: search.trim() || undefined,
-      gestor: gestor.trim() || undefined,
-      oportunidad: oportunidad.trim() || undefined,
-      dateField: (dateStart || dateEnd) ? dateField : undefined,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-      colorFilter: colorFilter || undefined
+    type MetricsQuery = NonNullable<Parameters<typeof getWorkOrderMetrics>[1]>;
+    const q: MetricsQuery = {
+      search: appliedFilters.search.trim() || undefined,
+      gestor: appliedFilters.gestor.trim() || undefined,
+      oportunidad: appliedFilters.oportunidad.trim() || undefined,
+      dateField: (appliedFilters.dateStart || appliedFilters.dateEnd) ? appliedFilters.dateField : undefined,
+      dateStart: appliedFilters.dateStart || undefined,
+      dateEnd: appliedFilters.dateEnd || undefined,
+      colorFilter: appliedFilters.color || undefined
     };
-    if (selectedStatuses.length > 0) q.status = selectedStatuses;
+    if (appliedFilters.statuses.length > 0) q.status = appliedFilters.statuses;
     return q;
-  }, [selectedStatuses, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter]);
+  }, [appliedFilters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,7 +307,7 @@ export function OrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, metricsQuery, filtersKey]);
+  }, [token, metricsQuery, appliedKey]);
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -302,35 +330,59 @@ export function OrdersPage() {
   };
 
   const clearFilters = () => {
-    setSelectedStatuses([]);
-    setSearch("");
-    setGestor("");
-    setOportunidad("");
-    setDateField("assignedAt");
-    setDateStart("");
-    setDateEnd("");
-    setColorFilter("");
+    setDraftStatuses([]);
+    setDraftSearch("");
+    setDraftGestor("");
+    setDraftOportunidad("");
+    setDraftDateField("assignedAt");
+    setDraftDateStart("");
+    setDraftDateEnd("");
+    setDraftColorFilter("");
+    setAppliedFilters({
+      statuses: [],
+      search: "",
+      gestor: "",
+      oportunidad: "",
+      dateField: "assignedAt",
+      dateStart: "",
+      dateEnd: "",
+      color: ""
+    });
     setSortKey("fechaTentativaGestion");
     setSortDir("asc");
     setPage(1);
     sessionStorage.removeItem("orders_filters");
   };
 
+  const applyFilters = () => {
+    setAppliedFilters({
+      statuses: draftStatuses,
+      search: draftSearch,
+      gestor: draftGestor,
+      oportunidad: draftOportunidad,
+      dateField: draftDateField,
+      dateStart: draftDateStart,
+      dateEnd: draftDateEnd,
+      color: draftColorFilter
+    });
+    setPage(1);
+  };
+
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const exportQuery = useMemo(() => {
     const qs = new URLSearchParams();
-    selectedStatuses.forEach((s) => qs.append("status", s));
-    if (search.trim()) qs.set("search", search.trim());
-    if (gestor.trim()) qs.set("gestor", gestor.trim());
-    if (oportunidad.trim()) qs.set("oportunidad", oportunidad.trim());
-    if (dateStart || dateEnd) qs.set("dateField", dateField);
-    if (dateStart) qs.set("dateStart", dateStart);
-    if (dateEnd) qs.set("dateEnd", dateEnd);
-    if (colorFilter) qs.set("colorFilter", colorFilter);
+    appliedFilters.statuses.forEach((s) => qs.append("status", s));
+    if (appliedFilters.search.trim()) qs.set("search", appliedFilters.search.trim());
+    if (appliedFilters.gestor.trim()) qs.set("gestor", appliedFilters.gestor.trim());
+    if (appliedFilters.oportunidad.trim()) qs.set("oportunidad", appliedFilters.oportunidad.trim());
+    if (appliedFilters.dateStart || appliedFilters.dateEnd) qs.set("dateField", appliedFilters.dateField);
+    if (appliedFilters.dateStart) qs.set("dateStart", appliedFilters.dateStart);
+    if (appliedFilters.dateEnd) qs.set("dateEnd", appliedFilters.dateEnd);
+    if (appliedFilters.color) qs.set("colorFilter", appliedFilters.color);
     const s = qs.toString();
     return s ? `?${s}` : "";
-  }, [selectedStatuses, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter]);
+  }, [appliedFilters]);
 
   const handleExport = async () => {
     if (!token) return;
@@ -346,46 +398,52 @@ export function OrdersPage() {
         <div className="row" style={{ alignItems: "end", gap: 10 }}>
           <div className="field" style={{ flex: 1 }}>
             <label>Buscar</label>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Código..." />
+            <input value={draftSearch} onChange={(e) => setDraftSearch(e.target.value)} placeholder="Código..." />
           </div>
           <div className="field" style={{ flex: 1 }}>
             <label>Gestor</label>
-            <select style={{ width: "100%" }} value={gestor} onChange={e => setGestor(e.target.value)}>
+            <select style={{ width: "100%" }} value={draftGestor} onChange={(e) => setDraftGestor(e.target.value)}>
               <option value="">Todos</option>
-              {gestor && !gestores.includes(gestor) && <option value={gestor}>{gestor}</option>}
+              {draftGestor && !gestores.includes(draftGestor) && <option value={draftGestor}>{draftGestor}</option>}
               {gestores.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
           <div className="field" style={{ flex: 1 }}>
             <label>Oportunidad</label>
-            <select style={{ width: "100%" }} value={oportunidad} onChange={e => setOportunidad(e.target.value)}>
+            <select style={{ width: "100%" }} value={draftOportunidad} onChange={(e) => setDraftOportunidad(e.target.value)}>
               <option value="">Todas</option>
-              {oportunidad && !oportunidades.includes(oportunidad) && <option value={oportunidad}>{oportunidad}</option>}
+              {draftOportunidad && !oportunidades.includes(draftOportunidad) && <option value={draftOportunidad}>{draftOportunidad}</option>}
               {oportunidades.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
           <div className="field" style={{ width: 160 }}>
             <label>Tipo Fecha</label>
-            <select value={dateField} onChange={e => setDateField(e.target.value as "assignedAt" | "gestionAt")}>
+            <select value={draftDateField} onChange={(e) => setDraftDateField(e.target.value as "assignedAt" | "gestionAt")}>
               <option value="assignedAt">Asignación</option>
               <option value="gestionAt">Gestión</option>
             </select>
           </div>
           <div className="field" style={{ width: 130 }}>
             <label>Inicio</label>
-            <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
+            <input type="date" value={draftDateStart} onChange={(e) => setDraftDateStart(e.target.value)} />
           </div>
           <div className="field" style={{ width: 130 }}>
             <label>Fin</label>
-            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
+            <input type="date" value={draftDateEnd} onChange={(e) => setDraftDateEnd(e.target.value)} />
           </div>
           <div className="field" style={{ width: 140 }}>
             <label>ANS</label>
-            <select value={colorFilter} onChange={e => setColorFilter(e.target.value as "" | "red" | "green")}>
+            <select value={draftColorFilter} onChange={(e) => setDraftColorFilter(e.target.value as "" | "red" | "green")}>
               <option value="">Todos</option>
               <option value="green">Cumple</option>
               <option value="red">No cumple</option>
             </select>
+          </div>
+          <div className="field" style={{ width: 160 }}>
+            <label>&nbsp;</label>
+            <button className="btn" onClick={applyFilters} type="button" disabled={!hasPendingFilters}>
+              Buscar
+            </button>
           </div>
           <div className="field" style={{ width: 180 }}>
             <label>&nbsp;</label>
@@ -401,9 +459,12 @@ export function OrdersPage() {
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
               <label style={{ fontWeight: "bold", fontSize: "0.85rem" }}>Estados:</label>
-              {selectedStatuses.length > 0 && (
+              {draftStatuses.length > 0 && (
                 <button onClick={clearFilters} className="btn-link" style={{ fontSize: "0.75rem" }}>Limpiar</button>
               )}
+              {hasPendingFilters ? (
+                <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Cambios sin aplicar</span>
+              ) : null}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {statuses.map(s => (
@@ -412,8 +473,8 @@ export function OrdersPage() {
                   className={`badge status-${toKebab(s.value as string)}`}
                   style={{ 
                     cursor: "pointer", 
-                    opacity: selectedStatuses.includes(s.value as WorkOrderStatus) ? 1 : 0.4,
-                    border: selectedStatuses.includes(s.value as WorkOrderStatus) ? "2px solid #fff" : "2px solid transparent",
+                    opacity: draftStatuses.includes(s.value as WorkOrderStatus) ? 1 : 0.4,
+                    border: draftStatuses.includes(s.value as WorkOrderStatus) ? "2px solid #fff" : "2px solid transparent",
                     transition: "all 0.2s"
                   }}
                   onClick={() => toggleStatus(s.value as WorkOrderStatus)}

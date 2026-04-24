@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["node", "multer"]
   },
-  "include": ["src", "prisma", "*.ts"]
+  "include": ["src", "prisma", "scripts", "*.ts"]
 }

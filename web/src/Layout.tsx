@@ -28,7 +28,6 @@ export function Layout() {
         </div>
         <nav className="nav">
           {canOrders ? <NavLink to="/orders" end>Órdenes</NavLink> : null}
-          {canOrders ? <NavLink to="/orders/new">Crear</NavLink> : null}
           {canCargues ? <NavLink to="/cargues">Cargues</NavLink> : null}
           {canExportes ? <NavLink to="/exportes">Exportes</NavLink> : null}
           {canUsers ? <NavLink to="/users">Usuarios</NavLink> : null}

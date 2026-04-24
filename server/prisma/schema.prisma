@@ -231,3 +231,41 @@ model RecorridoIncremento {
   @@index([orderCode])
   @@unique([orderCode, nombreIncremento, fechaInicio])
 }
+
+model Levantamiento {
+  id                        String   @id @default(cuid())
+  orderCode                 String   @unique
+  nivelTension              String?
+  tipo                      String?
+  unidadSolicitante         String?
+  proyecto                  String?
+  estado                    String?
+  subestado                 String?
+  subestacion               String?
+  circuito                  String?
+  noCd                      String?
+  direccion                 String?
+  municipio                 String?
+  zona                      String?
+  alcance                   String?
+  fechaSolicitud            DateTime?
+  fechaAprobacionAlcanceSt  DateTime?
+  fechaEstimacionCostos     DateTime?
+  fechaAprobacionValorizacionSt DateTime?
+  fechaPrevalidacion        DateTime?
+  fechaAsignacion           DateTime?
+  fechaPrimerElemento       DateTime?
+  fechaEntregaPostproceso   DateTime?
+  fechaAprobacionPostproceso DateTime?
+  fechaGestion              DateTime?
+  fechaDevolucion           DateTime?
+  usuarioSolicitante        String?
+  usuarioAsigna             String?
+  gestor                    String?
+  observacionGestor         String?
+  cuadrilla                 String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([orderCode])
+}
