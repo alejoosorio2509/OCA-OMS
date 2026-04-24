@@ -1426,39 +1426,7 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
 
   const dto = toDto(item, inicioMap, finMap, finNumberToDate, maxFinNumber);
   const levantamiento = await prisma.levantamiento.findUnique({
-    where: { orderCode: dto.code },
-    select: {
-      orderCode: true,
-      nivelTension: true,
-      tipo: true,
-      unidadSolicitante: true,
-      proyecto: true,
-      estado: true,
-      subestado: true,
-      subestacion: true,
-      circuito: true,
-      noCd: true,
-      direccion: true,
-      municipio: true,
-      zona: true,
-      alcance: true,
-      fechaSolicitud: true,
-      fechaAprobacionAlcanceSt: true,
-      fechaEstimacionCostos: true,
-      fechaAprobacionValorizacionSt: true,
-      fechaPrevalidacion: true,
-      fechaAsignacion: true,
-      fechaPrimerElemento: true,
-      fechaEntregaPostproceso: true,
-      fechaAprobacionPostproceso: true,
-      fechaGestion: true,
-      fechaDevolucion: true,
-      usuarioSolicitante: true,
-      usuarioAsigna: true,
-      gestor: true,
-      observacionGestor: true,
-      cuadrilla: true
-    }
+    where: { orderCode: dto.code }
   });
   const baremo = await prisma.actividadBaremo.findUnique({
     where: { codigo: dto.code },

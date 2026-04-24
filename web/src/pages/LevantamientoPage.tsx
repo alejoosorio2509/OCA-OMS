@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import type { LevantamientoListItem } from "../api";
 import { listLevantamientoNivelesTension, listLevantamientos } from "../api";
 import { useAuth } from "../auth";
+import { Link } from "react-router-dom";
 import { API_URL } from "../apiUrl";
 
 function fmtDate(value: string | null) {
@@ -20,6 +20,42 @@ function colorOf(v: number | null) {
   return "var(--text)";
 }
 
+const NOVEDAD_OPCIONES = [
+  "Aplicación diagrama unifilar",
+  "Aplicación retardada",
+  "Asociación de incrementos por BDE",
+  "Cambio de propiedad",
+  "Creación de componentes",
+  "Desalineación STM y QGIS",
+  "Desviación Topológica",
+  "Error cargue de documentos QGIS",
+  "Error elementos borrados",
+  "Error SE - Levantamiento de restricciones",
+  "Incremento en ticket",
+  "Incremento Energy Consumer",
+  "Incremento ERROR -20400",
+  "Incremento FKC, UNIC",
+  "Incremento LOCKED",
+  "Incremento OWMC",
+  "Incrementos",
+  "Indisponibilidad sistema",
+  "OT Cancelada por el cliente",
+  "Otro",
+  "PDL Anulado",
+  "PDL con traslado de carga",
+  "Pendiente ejecución de otra OT",
+  "Pendiente ejecución de otro incremento",
+  "Proyectos especiales",
+  "Rechazo automático - No reporte STAMS",
+  "Rechazo manual inconsistente",
+  "Refresh",
+  "Retido de CD",
+  "Rótulo duplicado",
+  "Sincronización AGUI STM AT",
+  "Sincronización estado incremento SAIT",
+  "Sobre dimensión"
+];
+
 export function LevantamientoPage() {
   const { token, user } = useAuth();
   const canOrders = user?.role === "ADMIN" || !!user?.canOrders;
@@ -30,6 +66,9 @@ export function LevantamientoPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<{ id: string; code: string } | null>(null);
+  const [showNovedadModal, setShowNovedadModal] = useState(false);
+  const [showPostprocesoModal, setShowPostprocesoModal] = useState(false);
 
   const [draftSearch, setDraftSearch] = useState("");
   const [draftNivelTension, setDraftNivelTension] = useState("");
@@ -73,10 +112,6 @@ export function LevantamientoPage() {
 
   const [sortKey, setSortKey] = useState<SortKey>("fechaAsignacion");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-
-  const [selected, setSelected] = useState<{ id: string; code: string } | null>(null);
-  const [showNovedadModal, setShowNovedadModal] = useState(false);
-  const [showPostprocesoModal, setShowPostprocesoModal] = useState(false);
 
   const applyFilters = () => {
     setApplied({
@@ -307,7 +342,13 @@ export function LevantamientoPage() {
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
-                    <td>{it.orderCode}</td>
+                    <td>
+                      {it.workOrderId ? (
+                        <Link to={`/orders/${it.workOrderId}`}>{it.orderCode}</Link>
+                      ) : (
+                        it.orderCode
+                      )}
+                    </td>
                     <td>{fmtVal(it.nivelTension)}</td>
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>
@@ -328,14 +369,11 @@ export function LevantamientoPage() {
                     <td>
                       {it.workOrderId ? (
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <Link className="btn btn-sm" to={`/orders/${it.workOrderId}`}>
-                            Ver
-                          </Link>
                           <button
                             className="btn btn-sm"
                             type="button"
                             onClick={() => {
-                              setSelected({ id: it.workOrderId!, code: it.orderCode });
+                              setSelectedOrder({ id: it.workOrderId!, code: it.orderCode });
                               setShowPostprocesoModal(false);
                               setShowNovedadModal(true);
                             }}
@@ -346,7 +384,7 @@ export function LevantamientoPage() {
                             className="btn btn-sm"
                             type="button"
                             onClick={() => {
-                              setSelected({ id: it.workOrderId!, code: it.orderCode });
+                              setSelectedOrder({ id: it.workOrderId!, code: it.orderCode });
                               setShowNovedadModal(false);
                               setShowPostprocesoModal(true);
                             }}
@@ -355,7 +393,7 @@ export function LevantamientoPage() {
                           </button>
                         </div>
                       ) : (
-                        <span style={{ color: "var(--muted)" }}>—</span>
+                        "—"
                       )}
                     </td>
                   </tr>
@@ -366,68 +404,30 @@ export function LevantamientoPage() {
         </div>
       </div>
 
-      {showNovedadModal && selected && (
+      {showNovedadModal && selectedOrder && (
         <NovedadModal
-          order={selected}
+          order={selectedOrder}
           onClose={() => {
             setShowNovedadModal(false);
             setShowPostprocesoModal(false);
-            setSelected(null);
-            window.location.reload();
+            setSelectedOrder(null);
           }}
         />
       )}
 
-      {showPostprocesoModal && selected && (
+      {showPostprocesoModal && selectedOrder && (
         <PostprocesoModal
-          order={selected}
+          order={selectedOrder}
           onClose={() => {
             setShowPostprocesoModal(false);
             setShowNovedadModal(false);
-            setSelected(null);
-            window.location.reload();
+            setSelectedOrder(null);
           }}
         />
       )}
     </div>
   );
 }
-
-const NOVEDAD_OPCIONES = [
-  "Aplicación diagrama unifilar",
-  "Aplicación retardada",
-  "Asociación de incrementos por BDE",
-  "Cambio de propiedad",
-  "Creación de componentes",
-  "Desalineación STM y QGIS",
-  "Desviación Topológica",
-  "Error cargue de documentos QGIS",
-  "Error elementos borrados",
-  "Error SE - Levantamiento de restricciones",
-  "Incremento en ticket",
-  "Incremento Energy Consumer",
-  "Incremento ERROR -20400",
-  "Incremento FKC, UNIC",
-  "Incremento LOCKED",
-  "Incremento OWMC",
-  "Incrementos",
-  "Indisponibilidad sistema",
-  "OT Cancelada por el cliente",
-  "Otro",
-  "PDL Anulado",
-  "PDL con traslado de carga",
-  "Pendiente ejecución de otra OT",
-  "Pendiente ejecución de otro incremento",
-  "Proyectos especiales",
-  "Rechazo automático - No reporte STAMS",
-  "Rechazo manual inconsistente",
-  "Refresh",
-  "Retido de CD",
-  "Rótulo duplicado",
-  "Sincronización AGUI STM AT",
-  "Sincronización estado incremento SAIT",
-  "Sobre dimensión",
-];
 
 function NovedadModal({ order, onClose }: { order: { id: string; code: string }; onClose: () => void }) {
   const { token } = useAuth();
@@ -463,7 +463,6 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
         },
         body
       });
-
       if (!res.ok) throw new Error("Error al guardar novedad");
       onClose();
     } catch (err) {
@@ -475,43 +474,41 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
+    <div className="modal-overlay">
+      <div className="modal-content card">
         <h3>Registrar Novedad - Orden {order.code}</h3>
-        <form onSubmit={handleSubmit} className="modal-form">
-          <div className="row" style={{ gap: 10 }}>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Fecha Inicio Novedad *</label>
-              <input type="date" value={formData.fechaInicio} onChange={(e) => setFormData({ ...formData, fechaInicio: e.target.value })} required />
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Fecha Fin Novedad (Opcional - Pausará la orden si se deja vacía)</label>
-              <input type="date" value={formData.fechaFin} onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })} />
-            </div>
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
+          <div className="field">
+            <label>Fecha Inicio Novedad *</label>
+            <input type="date" value={formData.fechaInicio} onChange={(e) => setFormData((p) => ({ ...p, fechaInicio: e.target.value }))} required />
           </div>
-
+          <div className="field">
+            <label>Fecha Fin Novedad (Opcional - Pausará la orden si se deja vacía)</label>
+            <input type="date" value={formData.fechaFin} onChange={(e) => setFormData((p) => ({ ...p, fechaFin: e.target.value }))} />
+          </div>
           <div className="field">
             <label>Descripción de la novedad *</label>
-            <select value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required>
+            <select
+              value={formData.descripcion}
+              onChange={(e) => setFormData((p) => ({ ...p, descripcion: e.target.value }))}
+              required
+            >
               <option value="">Selecciona una opción</option>
-              {NOVEDAD_OPCIONES.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
+              {NOVEDAD_OPCIONES.map((o) => (
+                <option key={o} value={o}>
+                  {o}
                 </option>
               ))}
             </select>
           </div>
-
           <div className="field">
             <label>Detalle de la novedad *</label>
-            <textarea value={formData.detalle} onChange={(e) => setFormData({ ...formData, detalle: e.target.value })} rows={3} required />
+            <textarea value={formData.detalle} onChange={(e) => setFormData((p) => ({ ...p, detalle: e.target.value }))} required />
           </div>
-
           <div className="field">
             <label>Soporte de novedad (Imagen) *</label>
             <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
           </div>
-
           <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
             <button className="btn" type="button" onClick={onClose} disabled={loading}>
               Cancelar
@@ -565,10 +562,10 @@ function PostprocesoModal({ order, onClose }: { order: { id: string; code: strin
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
+    <div className="modal-overlay">
+      <div className="modal-content card">
         <h3>Registrar Cierre SAIT - Orden {order.code}</h3>
-        <form onSubmit={handleSubmit} className="modal-form">
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>
           <div className="field">
             <label>Fecha cierre SAIT *</label>
             <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required />

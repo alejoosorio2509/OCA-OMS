@@ -156,7 +156,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     fechaGestion: Date | null;
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
-  }, extra: { cierreSaitAt: Date | null; workOrderId: string | null }) => {
+  }, extra: { cierreSaitAt: Date | null }) => {
     const fechaGestionCalculada =
       !row.fechaGestion && row.fechaAsignacion
         ? (() => {
@@ -180,7 +180,6 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
     return {
       orderCode: row.orderCode,
-      workOrderId: extra.workOrderId,
       nivelTension: row.nivelTension,
       estado: row.estado,
       subestado: row.subestado,
@@ -230,10 +229,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const wo = codes.length
       ? await prisma.workOrder.findMany({
           where: { code: { in: codes } },
-          select: { id: true, code: true }
+          select: { id: true, code: true, status: true, estadoSecundario: true }
         })
       : [];
-    const codeToId = new Map(wo.map((o) => [o.code, o.id]));
+    const woByCode = new Map(wo.map((o) => [o.code, o]));
     const idToCode = new Map(wo.map((o) => [o.id, o.code]));
     const histories = wo.length
       ? await prisma.workOrderHistory.findMany({
@@ -251,9 +250,16 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
     }
 
-    const items = pageItems.map((r) =>
-      computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null, workOrderId: codeToId.get(r.orderCode) ?? null })
-    );
+    const items = pageItems.map((r) => {
+      const computed = computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null });
+      const w = woByCode.get(r.orderCode) ?? null;
+      return {
+        ...computed,
+        workOrderId: w?.id ?? null,
+        workOrderStatus: w?.status ?? null,
+        estadoSecundario: w?.estadoSecundario ?? null
+      };
+    });
     res.json({ items, total, page, pageSize });
     return;
   }
@@ -276,10 +282,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const wo = codes.length
     ? await prisma.workOrder.findMany({
         where: { code: { in: codes } },
-        select: { id: true, code: true }
+        select: { id: true, code: true, status: true, estadoSecundario: true }
       })
     : [];
-  const codeToId = new Map(wo.map((o) => [o.code, o.id]));
+  const woByCode = new Map(wo.map((o) => [o.code, o]));
   const idToCode = new Map(wo.map((o) => [o.id, o.code]));
   const histories = wo.length
     ? await prisma.workOrderHistory.findMany({
@@ -297,9 +303,16 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
   }
 
-  let computed = base.map((r) =>
-    computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null, workOrderId: codeToId.get(r.orderCode) ?? null })
-  );
+  let computed = base.map((r) => {
+    const row = computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null });
+    const w = woByCode.get(r.orderCode) ?? null;
+    return {
+      ...row,
+      workOrderId: w?.id ?? null,
+      workOrderStatus: w?.status ?? null,
+      estadoSecundario: w?.estadoSecundario ?? null
+    };
+  });
 
   const applyColorFilter = (key: "diasAsignaColor" | "diasAprobacionPostColor" | "diasCierreColor" | "diasGestionTotalColor", val?: "red" | "green") => {
     if (!val) return;

@@ -95,6 +95,7 @@ export type WorkOrderDetails = WorkOrderListItem & {
     createdAt: string;
   }[];
   levantamiento?: {
+    id: string;
     orderCode: string;
     nivelTension: string | null;
     tipo: string | null;
@@ -125,15 +126,19 @@ export type WorkOrderDetails = WorkOrderListItem & {
     gestor: string | null;
     observacionGestor: string | null;
     cuadrilla: string | null;
+    createdAt: string;
+    updatedAt: string;
   } | null;
 };
 
 export type LevantamientoListItem = {
   orderCode: string;
-  workOrderId: string | null;
   nivelTension: string | null;
   estado: string | null;
   subestado: string | null;
+  workOrderId: string | null;
+  workOrderStatus: WorkOrderStatus | null;
+  estadoSecundario: string | null;
   fechaAsignacion: string | null;
   fechaGestion: string | null;
   fechaGestionCalculada: string | null;

@@ -126,10 +126,6 @@ export function OrderDetailsPage() {
 
   const historySoporteUrl = (h: WorkOrderDetails["history"][0]) => {
     if (!order) return null;
-    if ((h.note ?? "") === "Cierre SAIT") {
-      const p = h.noteDetail ?? "";
-      if (p.startsWith("/uploads/")) return `${API_URL}${p}`;
-    }
     const dayKey = (value: string | null) => {
       if (!value) return null;
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -208,8 +204,8 @@ export function OrderDetailsPage() {
               {order.code} — {order.title}
             </h2>
             <div className="row" style={{ marginTop: 10 }}>
-              <span className={`badge status-${toKebab(order.status)}`}>
-                {statusLabels[order.status] || order.status}
+              <span className={`badge status-${toKebab(order.estadoSecundario === "POSTPROCESO" ? "POSTPROCESO" : order.status)}`}>
+                {order.estadoSecundario === "POSTPROCESO" ? "Postproceso" : (statusLabels[order.status] || order.status)}
               </span>
               <span className={`badge crit-${toKebab(order.criticality)}`}>
                 {criticalityLabels[order.criticality] || order.criticality}
@@ -236,43 +232,57 @@ export function OrderDetailsPage() {
           <div style={{ color: "#bdbdbd", marginBottom: 4 }}>Descripción de la orden</div>
           <div style={{ whiteSpace: "pre-wrap", minHeight: 40 }}>{order.description || "Sin descripción."}</div>
         </div>
-
-        {order.levantamiento ? (
-          <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
-            <div style={{ color: "#bdbdbd", marginBottom: 8 }}>Datos de Levantamiento (cargue)</div>
-            <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Nivel de Tensión</div>
-                <div>{order.levantamiento.nivelTension || "—"}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Estado</div>
-                <div>{order.levantamiento.estado || "—"}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Subestado</div>
-                <div>{order.levantamiento.subestado || "—"}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Fecha Asignación</div>
-                <div>{fmtDate(order.levantamiento.fechaAsignacion)}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Fecha Primer Elemento</div>
-                <div>{fmtDate(order.levantamiento.fechaPrimerElemento)}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Fecha Aprobación Postproceso</div>
-                <div>{fmtDate(order.levantamiento.fechaAprobacionPostproceso)}</div>
-              </div>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ color: "#bdbdbd" }}>Fecha Gestión</div>
-                <div>{fmtDate(order.levantamiento.fechaGestion)}</div>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
+
+      {order.levantamiento ? (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Levantamiento (cargue)</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", gap: 10 }}>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Orden Trabajo</div><div style={{ fontWeight: 700 }}>{order.levantamiento.orderCode}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Nivel de Tensión</div><div>{order.levantamiento.nivelTension || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Tipo</div><div>{order.levantamiento.tipo || "—"}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Unidad Solicitante</div><div>{order.levantamiento.unidadSolicitante || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Proyecto</div><div>{order.levantamiento.proyecto || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Estado</div><div>{order.levantamiento.estado || "—"}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Subestado</div><div>{order.levantamiento.subestado || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Subestación</div><div>{order.levantamiento.subestacion || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Circuito</div><div>{order.levantamiento.circuito || "—"}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>No Cd</div><div>{order.levantamiento.noCd || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Dirección</div><div>{order.levantamiento.direccion || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Municipio</div><div>{order.levantamiento.municipio || "—"}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Zona</div><div>{order.levantamiento.zona || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Alcance</div><div>{order.levantamiento.alcance || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Solicitud</div><div>{fmtDate(order.levantamiento.fechaSolicitud)}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Aprobación Alcance ST</div><div>{fmtDate(order.levantamiento.fechaAprobacionAlcanceSt)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Estimación de Costos</div><div>{fmtDate(order.levantamiento.fechaEstimacionCostos)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Aprobación Valorización ST</div><div>{fmtDate(order.levantamiento.fechaAprobacionValorizacionSt)}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Prevalidación</div><div>{fmtDate(order.levantamiento.fechaPrevalidacion)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Asignación</div><div>{fmtDate(order.levantamiento.fechaAsignacion)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Primer Elemento</div><div>{fmtDate(order.levantamiento.fechaPrimerElemento)}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Entrega Postproceso</div><div>{fmtDate(order.levantamiento.fechaEntregaPostproceso)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Aprobación Postproceso</div><div>{fmtDate(order.levantamiento.fechaAprobacionPostproceso)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Gestión</div><div>{fmtDate(order.levantamiento.fechaGestion)}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Devolución</div><div>{fmtDate(order.levantamiento.fechaDevolucion)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Usuario Solicitante</div><div>{order.levantamiento.usuarioSolicitante || "—"}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Usuario Asigna</div><div>{order.levantamiento.usuarioAsigna || "—"}</div></div>
+
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Gestor</div><div>{order.levantamiento.gestor || "—"}</div></div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Observación Gestor</div>
+              <div style={{ whiteSpace: "pre-wrap" }}>{order.levantamiento.observacionGestor || "—"}</div>
+            </div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Cuadrilla</div><div>{order.levantamiento.cuadrilla || "—"}</div></div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Exclusión</h3>
