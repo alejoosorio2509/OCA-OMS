@@ -336,6 +336,8 @@ export async function listLevantamientos(
     sortKey?:
       | "orderCode"
       | "nivelTension"
+      | "estado"
+      | "subestado"
       | "fechaAsignacion"
       | "fechaGestion"
       | "diasAsigna"

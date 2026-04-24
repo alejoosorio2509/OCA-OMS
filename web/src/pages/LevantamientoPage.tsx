@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { LevantamientoListItem } from "../api";
 import { listLevantamientoNivelesTension, listLevantamientos } from "../api";
 import { useAuth } from "../auth";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { API_URL } from "../apiUrl";
 
 function fmtDate(value: string | null) {
@@ -59,25 +59,48 @@ const NOVEDAD_OPCIONES = [
 export function LevantamientoPage() {
   const { token, user } = useAuth();
   const canOrders = user?.role === "ADMIN" || !!user?.canOrders;
+  const location = useLocation();
+  const [, setSearchParams] = useSearchParams();
+
+  const initialParams = useMemo(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.toString()) return p;
+    const stored = sessionStorage.getItem("levantamiento_filters");
+    return stored ? new URLSearchParams(stored) : p;
+  }, [location.search]);
+
+  const initialPage = useMemo(() => {
+    const raw = initialParams.get("page");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }, [initialParams]);
 
   const [items, setItems] = useState<LevantamientoListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(() => initialParams.toString().length > 0);
   const [selectedOrder, setSelectedOrder] = useState<{ id: string; code: string } | null>(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
   const [showPostprocesoModal, setShowPostprocesoModal] = useState(false);
 
-  const [draftSearch, setDraftSearch] = useState("");
-  const [draftNivelTension, setDraftNivelTension] = useState("");
+  const [draftSearch, setDraftSearch] = useState(() => initialParams.get("search") || "");
+  const [draftNivelTension, setDraftNivelTension] = useState(() => initialParams.get("nivelTension") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
 
-  const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "green">("");
-  const [draftDiasAprobacionPostColor, setDraftDiasAprobacionPostColor] = useState<"" | "red" | "green">("");
-  const [draftDiasCierreColor, setDraftDiasCierreColor] = useState<"" | "red" | "green">("");
-  const [draftDiasGestionTotalColor, setDraftDiasGestionTotalColor] = useState<"" | "red" | "green">("");
+  const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "green">(
+    () => (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || ""
+  );
+  const [draftDiasAprobacionPostColor, setDraftDiasAprobacionPostColor] = useState<"" | "red" | "green">(
+    () => (initialParams.get("diasAprobacionPostColor") as "" | "red" | "green" | null) || ""
+  );
+  const [draftDiasCierreColor, setDraftDiasCierreColor] = useState<"" | "red" | "green">(
+    () => (initialParams.get("diasCierreColor") as "" | "red" | "green" | null) || ""
+  );
+  const [draftDiasGestionTotalColor, setDraftDiasGestionTotalColor] = useState<"" | "red" | "green">(
+    () => (initialParams.get("diasGestionTotalColor") as "" | "red" | "green" | null) || ""
+  );
 
   type Filters = {
     search: string;
@@ -88,16 +111,16 @@ export function LevantamientoPage() {
     diasGestionTotalColor: "" | "red" | "green";
   };
 
-  const [applied, setApplied] = useState<Filters>({
-    search: "",
-    nivelTension: "",
-    diasAsignaColor: "",
-    diasAprobacionPostColor: "",
-    diasCierreColor: "",
-    diasGestionTotalColor: ""
-  });
+  const [applied, setApplied] = useState<Filters>(() => ({
+    search: initialParams.get("search") || "",
+    nivelTension: initialParams.get("nivelTension") || "",
+    diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || "",
+    diasAprobacionPostColor: (initialParams.get("diasAprobacionPostColor") as "" | "red" | "green" | null) || "",
+    diasCierreColor: (initialParams.get("diasCierreColor") as "" | "red" | "green" | null) || "",
+    diasGestionTotalColor: (initialParams.get("diasGestionTotalColor") as "" | "red" | "green" | null) || ""
+  }));
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const pageSize = 50;
 
   type SortKey =
@@ -105,13 +128,15 @@ export function LevantamientoPage() {
     | "fechaGestion"
     | "orderCode"
     | "nivelTension"
+    | "estado"
+    | "subestado"
     | "diasAsigna"
     | "diasAprobacionPost"
     | "diasCierre"
     | "diasGestionTotal";
 
-  const [sortKey, setSortKey] = useState<SortKey>("fechaAsignacion");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<SortKey>(() => (initialParams.get("sortKey") as SortKey | null) || "fechaAsignacion");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => (initialParams.get("sortDir") as "asc" | "desc" | null) || "desc");
 
   const applyFilters = () => {
     setApplied({
@@ -145,7 +170,24 @@ export function LevantamientoPage() {
     setItems([]);
     setTotalCount(0);
     setPage(1);
+    sessionStorage.removeItem("levantamiento_filters");
+    setSearchParams(new URLSearchParams(), { replace: true });
   };
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (applied.search.trim()) next.set("search", applied.search.trim());
+    if (applied.nivelTension.trim()) next.set("nivelTension", applied.nivelTension.trim());
+    if (applied.diasAsignaColor) next.set("diasAsignaColor", applied.diasAsignaColor);
+    if (applied.diasAprobacionPostColor) next.set("diasAprobacionPostColor", applied.diasAprobacionPostColor);
+    if (applied.diasCierreColor) next.set("diasCierreColor", applied.diasCierreColor);
+    if (applied.diasGestionTotalColor) next.set("diasGestionTotalColor", applied.diasGestionTotalColor);
+    if (sortKey) next.set("sortKey", sortKey);
+    if (sortDir) next.set("sortDir", sortDir);
+    if (page > 1) next.set("page", String(page));
+    sessionStorage.setItem("levantamiento_filters", next.toString());
+    setSearchParams(next, { replace: true });
+  }, [applied, sortKey, sortDir, page, setSearchParams]);
 
   const query = useMemo(() => {
     return {
@@ -323,8 +365,8 @@ export function LevantamientoPage() {
               <tr>
                 <th><button className="table-sort" type="button" onClick={() => onSort("orderCode")}>Orden Trabajo</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
-                <th>Estado</th>
-                <th>Subestado</th>
+                <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
+                <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaAsignacion")}>Fecha Asignación</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaGestion")}>Fecha Gestión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días Asigna</button></th>
@@ -344,7 +386,9 @@ export function LevantamientoPage() {
                   <tr key={it.orderCode}>
                     <td>
                       {it.workOrderId ? (
-                        <Link to={`/orders/${it.workOrderId}`}>{it.orderCode}</Link>
+                        <Link to={`/orders/${it.workOrderId}`} state={{ from: `${location.pathname}${location.search}` }}>
+                          {it.orderCode}
+                        </Link>
                       ) : (
                         it.orderCode
                       )}

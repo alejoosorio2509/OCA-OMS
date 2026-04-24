@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { WorkOrderCriticality, WorkOrderDetails, WorkOrderStatus } from "../api";
 import { getWorkOrder, transitionWorkOrder, updateNovedad } from "../api";
 import { useAuth } from "../auth";
@@ -94,6 +94,9 @@ export function OrderDetailsPage() {
   const { id } = useParams();
   const { token } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const backTo = (location.state as { from?: unknown } | null | undefined)?.from;
 
   const [order, setOrder] = useState<WorkOrderDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -198,7 +201,19 @@ export function OrderDetailsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <div style={{ color: "#bdbdbd", fontSize: 13 }}>
-              <Link to={`/orders${location.search}`}>← Volver</Link>
+              <button
+                type="button"
+                className="btn-link"
+                onClick={() => {
+                  if (typeof backTo === "string" && backTo.startsWith("/")) {
+                    navigate(backTo);
+                    return;
+                  }
+                  navigate(-1);
+                }}
+              >
+                ← Volver
+              </button>
             </div>
             <h2 style={{ margin: "6px 0" }}>
               {order.code} — {order.title}

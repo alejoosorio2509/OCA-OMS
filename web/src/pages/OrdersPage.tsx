@@ -690,7 +690,14 @@ export function OrdersPage() {
                 <tr><td colSpan={16} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : items.map(it => (
                 <tr key={it.id}>
-                  <td><Link to={`/orders/${it.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`}>{it.code}</Link></td>
+                  <td>
+                    <Link
+                      to={`/orders/${it.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`}
+                      state={{ from: `${location.pathname}${location.search}` }}
+                    >
+                      {it.code}
+                    </Link>
+                  </td>
                   <td>
                     <span className={`badge status-${toKebab(it.estadoSecundario === "POSTPROCESO" ? "POSTPROCESO" : it.status)}`}>
                       {it.estadoSecundario === "POSTPROCESO" ? "Postproceso" : (statusLabels[it.status] || it.status)}

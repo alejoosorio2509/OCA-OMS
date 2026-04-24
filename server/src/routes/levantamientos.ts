@@ -97,6 +97,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       .enum([
         "orderCode",
         "nivelTension",
+        "estado",
+        "subestado",
         "fechaAsignacion",
         "fechaGestion",
         "diasAsigna",
@@ -203,6 +205,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         ? { orderCode: sortDir }
         : sortKey === "nivelTension"
           ? { nivelTension: sortDir }
+          : sortKey === "estado"
+            ? { estado: sortDir }
+            : sortKey === "subestado"
+              ? { subestado: sortDir }
           : { fechaAsignacion: sortDir };
 
     const [total, pageItems] = await Promise.all([
@@ -346,6 +352,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         ? a.orderCode
         : sortKey === "nivelTension"
           ? (a.nivelTension ?? "")
+          : sortKey === "estado"
+            ? (a.estado ?? "")
+            : sortKey === "subestado"
+              ? (a.subestado ?? "")
           : sortKey === "fechaAsignacion"
                 ? (parseDateMs(a.fechaAsignacion) ?? 0)
                 : sortKey === "fechaGestion"
@@ -362,6 +372,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         ? b.orderCode
         : sortKey === "nivelTension"
           ? (b.nivelTension ?? "")
+          : sortKey === "estado"
+            ? (b.estado ?? "")
+            : sortKey === "subestado"
+              ? (b.subestado ?? "")
           : sortKey === "fechaAsignacion"
                 ? (parseDateMs(b.fechaAsignacion) ?? 0)
                 : sortKey === "fechaGestion"
