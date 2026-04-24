@@ -156,7 +156,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     fechaGestion: Date | null;
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
-  }, extra: { cierreSaitAt: Date | null }) => {
+  }, extra: { cierreSaitAt: Date | null; workOrderId: string | null }) => {
     const fechaGestionCalculada =
       !row.fechaGestion && row.fechaAsignacion
         ? (() => {
@@ -180,6 +180,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
     return {
       orderCode: row.orderCode,
+      workOrderId: extra.workOrderId,
       nivelTension: row.nivelTension,
       estado: row.estado,
       subestado: row.subestado,
@@ -232,6 +233,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
           select: { id: true, code: true }
         })
       : [];
+    const codeToId = new Map(wo.map((o) => [o.code, o.id]));
     const idToCode = new Map(wo.map((o) => [o.id, o.code]));
     const histories = wo.length
       ? await prisma.workOrderHistory.findMany({
@@ -249,7 +251,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
     }
 
-    const items = pageItems.map((r) => computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null }));
+    const items = pageItems.map((r) =>
+      computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null, workOrderId: codeToId.get(r.orderCode) ?? null })
+    );
     res.json({ items, total, page, pageSize });
     return;
   }
@@ -275,6 +279,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         select: { id: true, code: true }
       })
     : [];
+  const codeToId = new Map(wo.map((o) => [o.code, o.id]));
   const idToCode = new Map(wo.map((o) => [o.id, o.code]));
   const histories = wo.length
     ? await prisma.workOrderHistory.findMany({
@@ -292,7 +297,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
   }
 
-  let computed = base.map((r) => computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null }));
+  let computed = base.map((r) =>
+    computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null, workOrderId: codeToId.get(r.orderCode) ?? null })
+  );
 
   const applyColorFilter = (key: "diasAsignaColor" | "diasAprobacionPostColor" | "diasCierreColor" | "diasGestionTotalColor", val?: "red" | "green") => {
     if (!val) return;

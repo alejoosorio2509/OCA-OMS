@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { LevantamientoListItem } from "../api";
 import { listLevantamientoNivelesTension, listLevantamientos } from "../api";
 import { useAuth } from "../auth";
+import { API_URL } from "../apiUrl";
 
 function fmtDate(value: string | null) {
   if (!value) return "—";
@@ -71,6 +73,10 @@ export function LevantamientoPage() {
 
   const [sortKey, setSortKey] = useState<SortKey>("fechaAsignacion");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const [selected, setSelected] = useState<{ id: string; code: string } | null>(null);
+  const [showNovedadModal, setShowNovedadModal] = useState(false);
+  const [showPostprocesoModal, setShowPostprocesoModal] = useState(false);
 
   const applyFilters = () => {
     setApplied({
@@ -290,13 +296,14 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAprobacionPost")}>Días aprobación Post</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasCierre")}>Días cierre</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasGestionTotal")}>Días gestión total</button></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -318,12 +325,267 @@ export function LevantamientoPage() {
                     <td style={{ fontWeight: 800, color: it.diasGestionTotalColor === "red" ? "red" : it.diasGestionTotalColor === "green" ? "green" : colorOf(it.diasGestionTotal) }}>
                       {it.diasGestionTotal ?? "—"}
                     </td>
+                    <td>
+                      {it.workOrderId ? (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <Link className="btn btn-sm" to={`/orders/${it.workOrderId}`}>
+                            Ver
+                          </Link>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setSelected({ id: it.workOrderId!, code: it.orderCode });
+                              setShowPostprocesoModal(false);
+                              setShowNovedadModal(true);
+                            }}
+                          >
+                            Novedades
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setSelected({ id: it.workOrderId!, code: it.orderCode });
+                              setShowNovedadModal(false);
+                              setShowPostprocesoModal(true);
+                            }}
+                          >
+                            Cierre SAIT
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--muted)" }}>—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+      </div>
+
+      {showNovedadModal && selected && (
+        <NovedadModal
+          order={selected}
+          onClose={() => {
+            setShowNovedadModal(false);
+            setShowPostprocesoModal(false);
+            setSelected(null);
+            window.location.reload();
+          }}
+        />
+      )}
+
+      {showPostprocesoModal && selected && (
+        <PostprocesoModal
+          order={selected}
+          onClose={() => {
+            setShowPostprocesoModal(false);
+            setShowNovedadModal(false);
+            setSelected(null);
+            window.location.reload();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+const NOVEDAD_OPCIONES = [
+  "Aplicación diagrama unifilar",
+  "Aplicación retardada",
+  "Asociación de incrementos por BDE",
+  "Cambio de propiedad",
+  "Creación de componentes",
+  "Desalineación STM y QGIS",
+  "Desviación Topológica",
+  "Error cargue de documentos QGIS",
+  "Error elementos borrados",
+  "Error SE - Levantamiento de restricciones",
+  "Incremento en ticket",
+  "Incremento Energy Consumer",
+  "Incremento ERROR -20400",
+  "Incremento FKC, UNIC",
+  "Incremento LOCKED",
+  "Incremento OWMC",
+  "Incrementos",
+  "Indisponibilidad sistema",
+  "OT Cancelada por el cliente",
+  "Otro",
+  "PDL Anulado",
+  "PDL con traslado de carga",
+  "Pendiente ejecución de otra OT",
+  "Pendiente ejecución de otro incremento",
+  "Proyectos especiales",
+  "Rechazo automático - No reporte STAMS",
+  "Rechazo manual inconsistente",
+  "Refresh",
+  "Retido de CD",
+  "Rótulo duplicado",
+  "Sincronización AGUI STM AT",
+  "Sincronización estado incremento SAIT",
+  "Sobre dimensión",
+];
+
+function NovedadModal({ order, onClose }: { order: { id: string; code: string }; onClose: () => void }) {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    fechaInicio: "",
+    fechaFin: "",
+    descripcion: "",
+    detalle: ""
+  });
+  const [file, setFile] = useState<File | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) {
+      alert("Debes adjuntar un soporte para registrar la novedad.");
+      return;
+    }
+    setLoading(true);
+
+    const body = new FormData();
+    body.append("fechaInicio", formData.fechaInicio);
+    if (formData.fechaFin) body.append("fechaFin", formData.fechaFin);
+    body.append("descripcion", formData.descripcion);
+    body.append("detalle", formData.detalle);
+    body.append("soporte", file);
+
+    try {
+      const res = await fetch(`${API_URL}/work-orders/${order.id}/novedades`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body
+      });
+
+      if (!res.ok) throw new Error("Error al guardar novedad");
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error de conexión";
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <h3>Registrar Novedad - Orden {order.code}</h3>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="row" style={{ gap: 10 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Fecha Inicio Novedad *</label>
+              <input type="date" value={formData.fechaInicio} onChange={(e) => setFormData({ ...formData, fechaInicio: e.target.value })} required />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Fecha Fin Novedad (Opcional - Pausará la orden si se deja vacía)</label>
+              <input type="date" value={formData.fechaFin} onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })} />
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Descripción de la novedad *</label>
+            <select value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required>
+              <option value="">Selecciona una opción</option>
+              {NOVEDAD_OPCIONES.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label>Detalle de la novedad *</label>
+            <textarea value={formData.detalle} onChange={(e) => setFormData({ ...formData, detalle: e.target.value })} rows={3} required />
+          </div>
+
+          <div className="field">
+            <label>Soporte de novedad (Imagen) *</label>
+            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+          </div>
+
+          <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
+            <button className="btn" type="button" onClick={onClose} disabled={loading}>
+              Cancelar
+            </button>
+            <button className="btn btn-accent" disabled={loading}>
+              {loading ? "Guardando..." : "Guardar Novedad"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function PostprocesoModal({ order, onClose }: { order: { id: string; code: string }; onClose: () => void }) {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [fecha, setFecha] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fecha) {
+      alert("Debes seleccionar la fecha de cierre en SAIT.");
+      return;
+    }
+    if (!file) {
+      alert("Debes adjuntar el soporte de cierre en SAIT.");
+      return;
+    }
+    setLoading(true);
+    const body = new FormData();
+    body.append("fecha", fecha);
+    body.append("soporte", file);
+    try {
+      const res = await fetch(`${API_URL}/work-orders/${order.id}/postproceso`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body
+      });
+      if (!res.ok) throw new Error("Error al registrar cierre SAIT");
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error de conexión";
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <h3>Registrar Cierre SAIT - Orden {order.code}</h3>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="field">
+            <label>Fecha cierre SAIT *</label>
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label>Soporte cierre SAIT *</label>
+            <input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+          </div>
+          <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
+            <button className="btn" type="button" onClick={onClose} disabled={loading}>
+              Cancelar
+            </button>
+            <button className="btn btn-accent" disabled={loading}>
+              {loading ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

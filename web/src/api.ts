@@ -94,10 +94,43 @@ export type WorkOrderDetails = WorkOrderListItem & {
     soportePath: string | null;
     createdAt: string;
   }[];
+  levantamiento?: {
+    orderCode: string;
+    nivelTension: string | null;
+    tipo: string | null;
+    unidadSolicitante: string | null;
+    proyecto: string | null;
+    estado: string | null;
+    subestado: string | null;
+    subestacion: string | null;
+    circuito: string | null;
+    noCd: string | null;
+    direccion: string | null;
+    municipio: string | null;
+    zona: string | null;
+    alcance: string | null;
+    fechaSolicitud: string | null;
+    fechaAprobacionAlcanceSt: string | null;
+    fechaEstimacionCostos: string | null;
+    fechaAprobacionValorizacionSt: string | null;
+    fechaPrevalidacion: string | null;
+    fechaAsignacion: string | null;
+    fechaPrimerElemento: string | null;
+    fechaEntregaPostproceso: string | null;
+    fechaAprobacionPostproceso: string | null;
+    fechaGestion: string | null;
+    fechaDevolucion: string | null;
+    usuarioSolicitante: string | null;
+    usuarioAsigna: string | null;
+    gestor: string | null;
+    observacionGestor: string | null;
+    cuadrilla: string | null;
+  } | null;
 };
 
 export type LevantamientoListItem = {
   orderCode: string;
+  workOrderId: string | null;
   nivelTension: string | null;
   estado: string | null;
   subestado: string | null;

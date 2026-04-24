@@ -126,6 +126,10 @@ export function OrderDetailsPage() {
 
   const historySoporteUrl = (h: WorkOrderDetails["history"][0]) => {
     if (!order) return null;
+    if ((h.note ?? "") === "Cierre SAIT") {
+      const p = h.noteDetail ?? "";
+      if (p.startsWith("/uploads/")) return `${API_URL}${p}`;
+    }
     const dayKey = (value: string | null) => {
       if (!value) return null;
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -232,6 +236,42 @@ export function OrderDetailsPage() {
           <div style={{ color: "#bdbdbd", marginBottom: 4 }}>Descripción de la orden</div>
           <div style={{ whiteSpace: "pre-wrap", minHeight: 40 }}>{order.description || "Sin descripción."}</div>
         </div>
+
+        {order.levantamiento ? (
+          <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
+            <div style={{ color: "#bdbdbd", marginBottom: 8 }}>Datos de Levantamiento (cargue)</div>
+            <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Nivel de Tensión</div>
+                <div>{order.levantamiento.nivelTension || "—"}</div>
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Estado</div>
+                <div>{order.levantamiento.estado || "—"}</div>
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Subestado</div>
+                <div>{order.levantamiento.subestado || "—"}</div>
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Fecha Asignación</div>
+                <div>{fmtDate(order.levantamiento.fechaAsignacion)}</div>
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Fecha Primer Elemento</div>
+                <div>{fmtDate(order.levantamiento.fechaPrimerElemento)}</div>
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Fecha Aprobación Postproceso</div>
+                <div>{fmtDate(order.levantamiento.fechaAprobacionPostproceso)}</div>
+              </div>
+              <div style={{ minWidth: 220 }}>
+                <div style={{ color: "#bdbdbd" }}>Fecha Gestión</div>
+                <div>{fmtDate(order.levantamiento.fechaGestion)}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
