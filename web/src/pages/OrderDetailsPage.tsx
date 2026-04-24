@@ -129,6 +129,9 @@ export function OrderDetailsPage() {
 
   const historySoporteUrl = (h: WorkOrderDetails["history"][0]) => {
     if (!order) return null;
+    if (h.note === "Cierre SAIT" && h.noteDetail && h.noteDetail.startsWith("/uploads/")) {
+      return `${API_URL}${h.noteDetail}`;
+    }
     const dayKey = (value: string | null) => {
       if (!value) return null;
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
