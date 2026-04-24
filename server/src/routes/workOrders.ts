@@ -24,6 +24,22 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+const postStorage = multer.diskStorage({
+  destination: (_req: Request, _file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
+    const uploadDir = path.join(process.cwd(), "uploads", "postproceso");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const uploadPost = multer({ storage: postStorage });
+
 const statusSchema = z.enum([
   "DRAFT",
   "CREATED",
@@ -1115,6 +1131,62 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
     });
 
     res.json({ novedad, diasDescontados: diff });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "UNKNOWN";
+    res.status(500).json({ error: "INTERNAL_ERROR", details: msg });
+  }
+});
+
+workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS"), uploadPost.single("soporte"), async (req, res) => {
+  try {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const userId = req.auth!.sub;
+    const { fecha } = req.body as { fecha?: string };
+
+    const order = await prisma.workOrder.findUnique({ where: { id } });
+    if (!order) {
+      res.status(404).json({ error: "ORDER_NOT_FOUND" });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: "SOPORTE_REQUIRED" });
+      return;
+    }
+
+    const dFecha = parseBogotaDateOnly(String(fecha ?? ""));
+    if (Number.isNaN(dFecha.getTime())) {
+      res.status(400).json({ error: "INVALID_DATE" });
+      return;
+    }
+
+    const now = new Date();
+    const soportePath = `/uploads/postproceso/${req.file.filename}`;
+    const updated = await prisma.workOrder.update({
+      where: { id },
+      data: {
+        estadoSecundario: "POSTPROCESO",
+        lastStatusChangeAt: now,
+        history: {
+          create: {
+            fromStatus: order.status,
+            toStatus: order.status,
+            note: "Cierre SAIT",
+            noteDetail: soportePath,
+            fechaInicio: String(fecha ?? ""),
+            fechaFin: null,
+            changedById: userId
+          }
+        }
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        assignee: { select: { id: true, name: true, email: true } },
+        novedades: true
+      }
+    });
+
+    res.json(toDto(updated));
   } catch (error) {
     const msg = error instanceof Error ? error.message : "UNKNOWN";
     res.status(500).json({ error: "INTERNAL_ERROR", details: msg });

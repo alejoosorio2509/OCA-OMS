@@ -96,6 +96,24 @@ export type WorkOrderDetails = WorkOrderListItem & {
   }[];
 };
 
+export type LevantamientoListItem = {
+  orderCode: string;
+  nivelTension: string | null;
+  estado: string | null;
+  subestado: string | null;
+  fechaAsignacion: string | null;
+  fechaGestion: string | null;
+  fechaGestionCalculada: string | null;
+  diasAsigna: number | null;
+  diasAprobacionPost: number | null;
+  diasCierre: number | null;
+  diasGestionTotal: number | null;
+  diasAsignaColor: "red" | "green" | null;
+  diasAprobacionPostColor: "red" | "green" | null;
+  diasCierreColor: "red" | "green" | null;
+  diasGestionTotalColor: "red" | "green" | null;
+};
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
@@ -264,6 +282,53 @@ export async function getWorkOrderMetrics(
     cerradas: number;
     devueltas: number;
   }>(`/work-orders/metrics${suffix}`, { token });
+}
+
+export async function listLevantamientos(
+  token: string,
+  query: {
+    search?: string;
+    estado?: string;
+    subestado?: string;
+    nivelTension?: string;
+    diasAsignaColor?: "red" | "green";
+    diasAprobacionPostColor?: "red" | "green";
+    diasCierreColor?: "red" | "green";
+    diasGestionTotalColor?: "red" | "green";
+    page?: number;
+    pageSize?: number;
+    sortKey?:
+      | "orderCode"
+      | "nivelTension"
+      | "estado"
+      | "subestado"
+      | "fechaAsignacion"
+      | "fechaGestion"
+      | "diasAsigna"
+      | "diasAprobacionPost"
+      | "diasCierre"
+      | "diasGestionTotal";
+    sortDir?: "asc" | "desc";
+  } = {}
+) {
+  const qs = new URLSearchParams();
+  if (query.search) qs.set("search", query.search);
+  if (query.estado) qs.set("estado", query.estado);
+  if (query.subestado) qs.set("subestado", query.subestado);
+  if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
+  if (query.diasAsignaColor) qs.set("diasAsignaColor", query.diasAsignaColor);
+  if (query.diasAprobacionPostColor) qs.set("diasAprobacionPostColor", query.diasAprobacionPostColor);
+  if (query.diasCierreColor) qs.set("diasCierreColor", query.diasCierreColor);
+  if (query.diasGestionTotalColor) qs.set("diasGestionTotalColor", query.diasGestionTotalColor);
+  if (query.page) qs.set("page", String(query.page));
+  if (query.pageSize) qs.set("pageSize", String(query.pageSize));
+  if (query.sortKey) qs.set("sortKey", query.sortKey);
+  if (query.sortDir) qs.set("sortDir", query.sortDir);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<{ items: LevantamientoListItem[]; total: number; page: number; pageSize: number }>(
+    `/levantamientos${suffix}`,
+    { token }
+  );
 }
 
 export async function createWorkOrder(

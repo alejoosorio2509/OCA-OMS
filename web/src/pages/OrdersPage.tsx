@@ -164,6 +164,7 @@ export function OrdersPage() {
 
   const [selectedOrder, setSelectedOrder] = useState<WorkOrderListItem | null>(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
+  const [showPostprocesoModal, setShowPostprocesoModal] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
@@ -543,7 +544,7 @@ export function OrdersPage() {
             </svg>
           </div>
           <div className="metric-body">
-            <div className="metric-label">Total Órdenes</div>
+            <div className="metric-label">Total Actualización</div>
             <div className="metric-value">{metrics.total}</div>
           </div>
         </div>
@@ -691,7 +692,11 @@ export function OrdersPage() {
               ) : items.map(it => (
                 <tr key={it.id}>
                   <td><Link to={`/orders/${it.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`}>{it.code}</Link></td>
-                  <td><span className={`badge status-${toKebab(it.status)}`}>{statusLabels[it.status] || it.status}</span></td>
+                  <td>
+                    <span className={`badge status-${toKebab(it.estadoSecundario === "POSTPROCESO" ? "POSTPROCESO" : it.status)}`}>
+                      {it.estadoSecundario === "POSTPROCESO" ? "Postproceso" : (statusLabels[it.status] || it.status)}
+                    </span>
+                  </td>
                   <td>{fmtDate(it.assignedAt)}</td>
                   <td>{fmtDate(it.fechaTentativaGestion ?? null)}</td>
                   <td title={it.gestorCc || ""}>{it.gestorNombre || "—"}</td>
@@ -711,7 +716,28 @@ export function OrdersPage() {
                     {it.cumplimiento ?? "—"}
                   </td>
                   <td>
-                    <button className="btn btn-sm" onClick={() => { setSelectedOrder(it); setShowNovedadModal(true); }}>Novedades</button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => {
+                          setSelectedOrder(it);
+                          setShowPostprocesoModal(false);
+                          setShowNovedadModal(true);
+                        }}
+                      >
+                        Novedades
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => {
+                          setSelectedOrder(it);
+                          setShowNovedadModal(false);
+                          setShowPostprocesoModal(true);
+                        }}
+                      >
+                        Cierre SAIT
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -723,7 +749,14 @@ export function OrdersPage() {
       {showNovedadModal && selectedOrder && (
         <NovedadModal 
           order={selectedOrder} 
-          onClose={() => { setShowNovedadModal(false); setSelectedOrder(null); window.location.reload(); }} 
+          onClose={() => { setShowNovedadModal(false); setShowPostprocesoModal(false); setSelectedOrder(null); window.location.reload(); }} 
+        />
+      )}
+
+      {showPostprocesoModal && selectedOrder && (
+        <PostprocesoModal
+          order={selectedOrder}
+          onClose={() => { setShowPostprocesoModal(false); setShowNovedadModal(false); setSelectedOrder(null); window.location.reload(); }}
         />
       )}
     </div>
@@ -867,6 +900,67 @@ function NovedadModal({ order, onClose }: { order: WorkOrderListItem, onClose: (
             <button type="submit" className="btn" disabled={loading}>
               {loading ? "Guardando..." : "Guardar Novedad"}
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function PostprocesoModal({ order, onClose }: { order: WorkOrderListItem; onClose: () => void }) {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [fecha, setFecha] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fecha) {
+      alert("Debes seleccionar la fecha de cierre en SAIT.");
+      return;
+    }
+    if (!file) {
+      alert("Debes adjuntar el soporte de cierre en SAIT.");
+      return;
+    }
+    setLoading(true);
+    const body = new FormData();
+    body.append("fecha", fecha);
+    body.append("soporte", file);
+    try {
+      const res = await fetch(`${API_URL}/work-orders/${order.id}/postproceso`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body
+      });
+      if (!res.ok) throw new Error("Error al registrar cierre SAIT");
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error de conexión";
+      alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <h3>Registrar Cierre SAIT - Orden {order.code}</h3>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="field">
+            <label>Fecha cierre SAIT *</label>
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label>Soporte cierre SAIT *</label>
+            <input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+          </div>
+          <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
+            <button className="btn" type="button" onClick={onClose} disabled={loading}>Cancelar</button>
+            <button className="btn btn-accent" disabled={loading}>{loading ? "Guardando..." : "Guardar"}</button>
           </div>
         </form>
       </div>

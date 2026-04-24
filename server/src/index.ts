@@ -6,6 +6,7 @@ import { usersRouter } from "./routes/users.js";
 import { workOrdersRouter } from "./routes/workOrders.js";
 import { carguesRouter } from "./routes/cargues.js";
 import { exportsRouter } from "./routes/exports.js";
+import { levantamientosRouter } from "./routes/levantamientos.js";
 import path from "path";
 
 const app = express();
@@ -62,6 +63,7 @@ app.use("/auth", authRouter);
 app.use("/users", usersRouter);
 app.use("/work-orders", workOrdersRouter);
 app.use("/cargues", carguesRouter);
+app.use("/levantamientos", levantamientosRouter);
 app.use("/exports", exportsRouter);
 
 app.use((_req, res) => {
