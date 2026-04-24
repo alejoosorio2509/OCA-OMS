@@ -129,8 +129,12 @@ export function OrderDetailsPage() {
 
   const historySoporteUrl = (h: WorkOrderDetails["history"][0]) => {
     if (!order) return null;
-    if (h.note === "Cierre SAIT" && h.noteDetail && h.noteDetail.startsWith("/uploads/")) {
-      return `${API_URL}${h.noteDetail}`;
+    const note = (h.note ?? "").trim().toLowerCase();
+    if (note === "cierre sait") {
+      const p = (h.noteDetail ?? "").trim();
+      if (p.startsWith("/")) return `${API_URL}${p}`;
+      if (p.startsWith("http://") || p.startsWith("https://")) return p;
+      return null;
     }
     const dayKey = (value: string | null) => {
       if (!value) return null;

@@ -518,8 +518,8 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
+    <div className="modal-overlay">
+      <div className="modal-content card">
         <h3>Registrar Novedad - Orden {order.code}</h3>
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="field">
@@ -606,8 +606,8 @@ function PostprocesoModal({ order, onClose }: { order: { id: string; code: strin
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
+    <div className="modal-overlay">
+      <div className="modal-content card">
         <h3>Registrar Cierre SAIT - Orden {order.code}</h3>
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="field">

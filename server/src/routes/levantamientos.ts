@@ -172,7 +172,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
     const diasAsigna = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento);
     const diasGestionTotal = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, fechaGestionEfectiva);
-    const diasAprobacionPost = diffByCalendar(inicioMap, finMap, extra.cierreSaitAt, row.fechaPrimerElemento);
+    const diasAprobacionPost = diffByCalendar(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso);
     const diasCierre = diffByCalendar(inicioMap, finMap, row.fechaAprobacionPostproceso, fechaGestionEfectiva);
 
     const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
