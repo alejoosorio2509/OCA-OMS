@@ -288,8 +288,6 @@ export async function listLevantamientos(
   token: string,
   query: {
     search?: string;
-    estado?: string;
-    subestado?: string;
     nivelTension?: string;
     diasAsignaColor?: "red" | "green";
     diasAprobacionPostColor?: "red" | "green";
@@ -300,8 +298,6 @@ export async function listLevantamientos(
     sortKey?:
       | "orderCode"
       | "nivelTension"
-      | "estado"
-      | "subestado"
       | "fechaAsignacion"
       | "fechaGestion"
       | "diasAsigna"
@@ -313,8 +309,6 @@ export async function listLevantamientos(
 ) {
   const qs = new URLSearchParams();
   if (query.search) qs.set("search", query.search);
-  if (query.estado) qs.set("estado", query.estado);
-  if (query.subestado) qs.set("subestado", query.subestado);
   if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
   if (query.diasAsignaColor) qs.set("diasAsignaColor", query.diasAsignaColor);
   if (query.diasAprobacionPostColor) qs.set("diasAprobacionPostColor", query.diasAprobacionPostColor);
@@ -329,6 +323,10 @@ export async function listLevantamientos(
     `/levantamientos${suffix}`,
     { token }
   );
+}
+
+export async function listLevantamientoNivelesTension(token: string) {
+  return apiFetch<string[]>("/levantamientos/nivel-tension", { token });
 }
 
 export async function createWorkOrder(

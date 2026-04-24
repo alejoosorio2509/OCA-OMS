@@ -71,11 +71,21 @@ function colorByThreshold(value: number | null, threshold: number): "green" | "r
   return value <= threshold ? "green" : "red";
 }
 
+levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+  const rows = await prisma.levantamiento.findMany({
+    select: { nivelTension: true }
+  });
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = (r.nivelTension ?? "").trim();
+    if (v) set.add(v);
+  }
+  res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
+});
+
 levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const querySchema = z.object({
     search: z.string().min(1).optional(),
-    estado: z.string().min(1).optional(),
-    subestado: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
     diasAsignaColor: z.enum(["red", "green"]).optional(),
     diasAprobacionPostColor: z.enum(["red", "green"]).optional(),
@@ -87,8 +97,6 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       .enum([
         "orderCode",
         "nivelTension",
-        "estado",
-        "subestado",
         "fechaAsignacion",
         "fechaGestion",
         "diasAsigna",
@@ -108,8 +116,6 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const {
     search,
-    estado,
-    subestado,
     nivelTension,
     diasAsignaColor,
     diasAprobacionPostColor,
@@ -122,8 +128,6 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const sortDir = parsed.data.sortDir ?? "desc";
 
   const where: Prisma.LevantamientoWhereInput = {
-    ...(estado ? { estado: { contains: estado } } : {}),
-    ...(subestado ? { subestado: { contains: subestado } } : {}),
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(search ? { orderCode: { contains: search } } : {})
   };
@@ -199,11 +203,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         ? { orderCode: sortDir }
         : sortKey === "nivelTension"
           ? { nivelTension: sortDir }
-          : sortKey === "estado"
-            ? { estado: sortDir }
-            : sortKey === "subestado"
-              ? { subestado: sortDir }
-              : { fechaAsignacion: sortDir };
+          : { fechaAsignacion: sortDir };
 
     const [total, pageItems] = await Promise.all([
       prisma.levantamiento.count({ where }),
@@ -313,11 +313,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         ? a.orderCode
         : sortKey === "nivelTension"
           ? (a.nivelTension ?? "")
-          : sortKey === "estado"
-            ? (a.estado ?? "")
-            : sortKey === "subestado"
-              ? (a.subestado ?? "")
-              : sortKey === "fechaAsignacion"
+          : sortKey === "fechaAsignacion"
                 ? (parseDateMs(a.fechaAsignacion) ?? 0)
                 : sortKey === "fechaGestion"
                   ? (parseDateMs(a.fechaGestion) ?? 0)
@@ -333,11 +329,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         ? b.orderCode
         : sortKey === "nivelTension"
           ? (b.nivelTension ?? "")
-          : sortKey === "estado"
-            ? (b.estado ?? "")
-            : sortKey === "subestado"
-              ? (b.subestado ?? "")
-              : sortKey === "fechaAsignacion"
+          : sortKey === "fechaAsignacion"
                 ? (parseDateMs(b.fechaAsignacion) ?? 0)
                 : sortKey === "fechaGestion"
                   ? (parseDateMs(b.fechaGestion) ?? 0)

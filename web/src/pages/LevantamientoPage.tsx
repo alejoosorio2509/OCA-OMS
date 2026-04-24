@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LevantamientoListItem } from "../api";
-import { listLevantamientos } from "../api";
+import { listLevantamientoNivelesTension, listLevantamientos } from "../api";
 import { useAuth } from "../auth";
 
 function fmtDate(value: string | null) {
@@ -31,8 +31,7 @@ export function LevantamientoPage() {
 
   const [draftSearch, setDraftSearch] = useState("");
   const [draftNivelTension, setDraftNivelTension] = useState("");
-  const [draftEstado, setDraftEstado] = useState("");
-  const [draftSubestado, setDraftSubestado] = useState("");
+  const [nivelesTension, setNivelesTension] = useState<string[]>([]);
 
   const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "green">("");
   const [draftDiasAprobacionPostColor, setDraftDiasAprobacionPostColor] = useState<"" | "red" | "green">("");
@@ -42,8 +41,6 @@ export function LevantamientoPage() {
   type Filters = {
     search: string;
     nivelTension: string;
-    estado: string;
-    subestado: string;
     diasAsignaColor: "" | "red" | "green";
     diasAprobacionPostColor: "" | "red" | "green";
     diasCierreColor: "" | "red" | "green";
@@ -53,8 +50,6 @@ export function LevantamientoPage() {
   const [applied, setApplied] = useState<Filters>({
     search: "",
     nivelTension: "",
-    estado: "",
-    subestado: "",
     diasAsignaColor: "",
     diasAprobacionPostColor: "",
     diasCierreColor: "",
@@ -69,8 +64,6 @@ export function LevantamientoPage() {
     | "fechaGestion"
     | "orderCode"
     | "nivelTension"
-    | "estado"
-    | "subestado"
     | "diasAsigna"
     | "diasAprobacionPost"
     | "diasCierre"
@@ -83,8 +76,6 @@ export function LevantamientoPage() {
     setApplied({
       search: draftSearch,
       nivelTension: draftNivelTension,
-      estado: draftEstado,
-      subestado: draftSubestado,
       diasAsignaColor: draftDiasAsignaColor,
       diasAprobacionPostColor: draftDiasAprobacionPostColor,
       diasCierreColor: draftDiasCierreColor,
@@ -97,8 +88,6 @@ export function LevantamientoPage() {
   const clearFilters = () => {
     setDraftSearch("");
     setDraftNivelTension("");
-    setDraftEstado("");
-    setDraftSubestado("");
     setDraftDiasAsignaColor("");
     setDraftDiasAprobacionPostColor("");
     setDraftDiasCierreColor("");
@@ -106,8 +95,6 @@ export function LevantamientoPage() {
     setApplied({
       search: "",
       nivelTension: "",
-      estado: "",
-      subestado: "",
       diasAsignaColor: "",
       diasAprobacionPostColor: "",
       diasCierreColor: "",
@@ -123,8 +110,6 @@ export function LevantamientoPage() {
     return {
       search: applied.search.trim() || undefined,
       nivelTension: applied.nivelTension.trim() || undefined,
-      estado: applied.estado.trim() || undefined,
-      subestado: applied.subestado.trim() || undefined,
       diasAsignaColor: applied.diasAsignaColor || undefined,
       diasAprobacionPostColor: applied.diasAprobacionPostColor || undefined,
       diasCierreColor: applied.diasCierreColor || undefined,
@@ -135,6 +120,21 @@ export function LevantamientoPage() {
       sortDir
     };
   }, [applied, page, sortKey, sortDir]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token) return;
+    listLevantamientoNivelesTension(token)
+      .then((data) => {
+        if (!cancelled) setNivelesTension(data);
+      })
+      .catch(() => {
+        if (!cancelled) setNivelesTension([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,15 +191,14 @@ export function LevantamientoPage() {
           </div>
           <div className="field" style={{ flex: 1, minWidth: 220 }}>
             <label>Nivel de Tensión</label>
-            <input value={draftNivelTension} onChange={(e) => setDraftNivelTension(e.target.value)} placeholder="Ej: MT..." />
-          </div>
-          <div className="field" style={{ flex: 1, minWidth: 220 }}>
-            <label>Estado</label>
-            <input value={draftEstado} onChange={(e) => setDraftEstado(e.target.value)} placeholder="Estado..." />
-          </div>
-          <div className="field" style={{ flex: 1, minWidth: 220 }}>
-            <label>Subestado</label>
-            <input value={draftSubestado} onChange={(e) => setDraftSubestado(e.target.value)} placeholder="Subestado..." />
+            <select value={draftNivelTension} onChange={(e) => setDraftNivelTension(e.target.value)} style={{ width: "100%" }}>
+              <option value="">Todos</option>
+              {nivelesTension.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="field" style={{ width: 200 }}>
@@ -283,8 +282,8 @@ export function LevantamientoPage() {
               <tr>
                 <th><button className="table-sort" type="button" onClick={() => onSort("orderCode")}>Orden Trabajo</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
-                <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
-                <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
+                <th>Estado</th>
+                <th>Subestado</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaAsignacion")}>Fecha Asignación</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaGestion")}>Fecha Gestión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días Asigna</button></th>
@@ -329,4 +328,3 @@ export function LevantamientoPage() {
     </div>
   );
 }
-
