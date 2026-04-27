@@ -338,7 +338,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const { inicioMap, finMap, finNumberToDate } = await loadCalendarMaps();
 
   const THRESHOLD_DIAS_ASIGNA = 8;
-  const THRESHOLD_DIAS_APROBACION_POST = 8;
+  const THRESHOLD_DIAS_APROBACION_POST = 3;
   const THRESHOLD_DIAS_CIERRE = 8;
   const THRESHOLD_DIAS_GESTION_TOTAL = 8;
 
@@ -351,6 +351,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     subestado: string | null;
     cuadrilla: string | null;
     fechaAsignacion: Date | null;
+    fechaEntregaPostproceso: Date | null;
     fechaGestion: Date | null;
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
@@ -367,12 +368,31 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         : null;
     const fechaGestionEfectiva = row.fechaGestion ?? fechaGestionCalculada;
 
-    const diasAsigna = diffByCalendarEndNow(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento, now);
+    const applyNovedades = (v: number | null) => (v === null ? null : Math.max(0, v - diasNovedades));
+
+    const diasAsignaRaw = row.fechaAsignacion
+      ? row.fechaPrimerElemento
+        ? diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento)
+        : 1
+      : null;
+    const diasAsigna = applyNovedades(diasAsignaRaw);
     const refDate = row.fechaGestion ?? now;
     const refNum = finMap.get(normalizeDay(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
-    const diasAprobacionPost = diffByCalendarEndNow(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso, now);
-    const diasCierre = diffByCalendarEndNow(inicioMap, finMap, row.fechaAprobacionPostproceso, row.fechaGestion, now);
+    const entregaPost = extra.cierreSaitAt ?? row.fechaEntregaPostproceso;
+    const aprobEndNum = finMap.get(normalizeDay(row.fechaAprobacionPostproceso ?? now));
+    const diasAprobacionPostRaw =
+      entregaPost
+        ? diffByCalendarEndNow(inicioMap, finMap, entregaPost, row.fechaAprobacionPostproceso, now)
+        : assignedNum !== undefined && aprobEndNum !== undefined
+          ? Math.max(0, aprobEndNum - (assignedNum + 3))
+          : null;
+    const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
+    const cierreStartNum = row.fechaAprobacionPostproceso ? inicioMap.get(normalizeDay(row.fechaAprobacionPostproceso)) : undefined;
+    const cierreEndNum = row.fechaGestion ? finMap.get(normalizeDay(row.fechaGestion)) : assignedNum !== undefined ? assignedNum + 8 : undefined;
+    const diasCierreRaw =
+      cierreStartNum !== undefined && cierreEndNum !== undefined ? Math.max(0, cierreEndNum - cierreStartNum) : null;
+    const diasCierre = applyNovedades(diasCierreRaw);
 
     const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
     const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
