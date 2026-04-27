@@ -360,6 +360,7 @@ export async function listLevantamientos(
     search?: string;
     nivelTension?: string;
     cuadrilla?: string;
+    etapa?: "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     asignacionStart?: string;
     asignacionEnd?: string;
     diasAsignaColor?: "red" | "green";
@@ -386,6 +387,7 @@ export async function listLevantamientos(
   if (query.search) qs.set("search", query.search);
   if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
   if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
+  if (query.etapa) qs.set("etapa", query.etapa);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
   if (query.diasAsignaColor) qs.set("diasAsignaColor", query.diasAsignaColor);

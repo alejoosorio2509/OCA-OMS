@@ -94,6 +94,7 @@ export function LevantamientoPage() {
   const [draftSearch, setDraftSearch] = useState(() => initialParams.get("search") || "");
   const [draftNivelTension, setDraftNivelTension] = useState(() => initialParams.get("nivelTension") || "");
   const [draftCuadrilla, setDraftCuadrilla] = useState(() => initialParams.get("cuadrilla") || "");
+  const [draftEtapa, setDraftEtapa] = useState(() => initialParams.get("etapa") || "");
   const [draftAsignacionStart, setDraftAsignacionStart] = useState(() => initialParams.get("asignacionStart") || "");
   const [draftAsignacionEnd, setDraftAsignacionEnd] = useState(() => initialParams.get("asignacionEnd") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
@@ -115,6 +116,7 @@ export function LevantamientoPage() {
     search: string;
     nivelTension: string;
     cuadrilla: string;
+    etapa: "" | "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     asignacionStart: string;
     asignacionEnd: string;
     diasAsignaColor: "" | "red" | "green";
@@ -127,6 +129,7 @@ export function LevantamientoPage() {
     search: initialParams.get("search") || "",
     nivelTension: initialParams.get("nivelTension") || "",
     cuadrilla: initialParams.get("cuadrilla") || "",
+    etapa: (initialParams.get("etapa") as Filters["etapa"] | null) || "",
     asignacionStart: initialParams.get("asignacionStart") || "",
     asignacionEnd: initialParams.get("asignacionEnd") || "",
     diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || "",
@@ -158,6 +161,7 @@ export function LevantamientoPage() {
       search: draftSearch,
       nivelTension: draftNivelTension,
       cuadrilla: draftCuadrilla,
+      etapa: (draftEtapa as Filters["etapa"]) || "",
       asignacionStart: draftAsignacionStart,
       asignacionEnd: draftAsignacionEnd,
       diasAsignaColor: draftDiasAsignaColor,
@@ -169,10 +173,19 @@ export function LevantamientoPage() {
     setPage(1);
   };
 
+  const toggleEtapa = (value: Exclude<Filters["etapa"], "">) => {
+    const next = applied.etapa === value ? "" : value;
+    setDraftEtapa(next);
+    setApplied((prev) => ({ ...prev, etapa: next }));
+    setHasSearched(true);
+    setPage(1);
+  };
+
   const clearFilters = () => {
     setDraftSearch("");
     setDraftNivelTension("");
     setDraftCuadrilla("");
+    setDraftEtapa("");
     setDraftAsignacionStart("");
     setDraftAsignacionEnd("");
     setDraftDiasAsignaColor("");
@@ -183,6 +196,7 @@ export function LevantamientoPage() {
       search: "",
       nivelTension: "",
       cuadrilla: "",
+      etapa: "",
       asignacionStart: "",
       asignacionEnd: "",
       diasAsignaColor: "",
@@ -203,6 +217,7 @@ export function LevantamientoPage() {
     if (applied.search.trim()) next.set("search", applied.search.trim());
     if (applied.nivelTension.trim()) next.set("nivelTension", applied.nivelTension.trim());
     if (applied.cuadrilla.trim()) next.set("cuadrilla", applied.cuadrilla.trim());
+    if (applied.etapa) next.set("etapa", applied.etapa);
     if (applied.asignacionStart) next.set("asignacionStart", applied.asignacionStart);
     if (applied.asignacionEnd) next.set("asignacionEnd", applied.asignacionEnd);
     if (applied.diasAsignaColor) next.set("diasAsignaColor", applied.diasAsignaColor);
@@ -221,6 +236,7 @@ export function LevantamientoPage() {
       search: applied.search.trim() || undefined,
       nivelTension: applied.nivelTension.trim() || undefined,
       cuadrilla: applied.cuadrilla.trim() || undefined,
+      etapa: applied.etapa || undefined,
       asignacionStart: applied.asignacionStart || undefined,
       asignacionEnd: applied.asignacionEnd || undefined,
       diasAsignaColor: applied.diasAsignaColor || undefined,
@@ -317,19 +333,39 @@ export function LevantamientoPage() {
               <div style={{ color: "var(--muted)", fontSize: 12 }}>Total</div>
               <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.total}</div>
             </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => toggleEtapa("ASIGNACION")}
+              style={{ padding: 12, border: `1px solid ${applied.etapa === "ASIGNACION" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+            >
               <div style={{ color: "var(--muted)", fontSize: 12 }}>Asignación</div>
               <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.asignacion}</div>
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            </button>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => toggleEtapa("PRIMER_ELEMENTO")}
+              style={{ padding: 12, border: `1px solid ${applied.etapa === "PRIMER_ELEMENTO" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+            >
               <div style={{ color: "var(--muted)", fontSize: 12 }}>Primer elemento</div>
               <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.primerElemento}</div>
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            </button>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => toggleEtapa("ENTREGA_POSTPROCESO")}
+              style={{ padding: 12, border: `1px solid ${applied.etapa === "ENTREGA_POSTPROCESO" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+            >
               <div style={{ color: "var(--muted)", fontSize: 12 }}>Entrega postproceso</div>
               <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.entregaPostproceso}</div>
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            </button>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => toggleEtapa("APROBACION_POSTPROCESO")}
+              style={{ padding: 12, border: `1px solid ${applied.etapa === "APROBACION_POSTPROCESO" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+            >
               <div style={{ color: "var(--muted)", fontSize: 12 }}>Aprobación postproceso</div>
               <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.aprobacionPostproceso}</div>
               <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>3 días máx</div>
@@ -339,11 +375,16 @@ export function LevantamientoPage() {
               <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
                 Cumplen: {metrics.aprobacionCumple} · No cumplen: {metrics.aprobacionNoCumple} · {metrics.aprobacionPct}%
               </div>
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+            </button>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => toggleEtapa("GESTION")}
+              style={{ padding: 12, border: `1px solid ${applied.etapa === "GESTION" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+            >
               <div style={{ color: "var(--muted)", fontSize: 12 }}>Gestión</div>
               <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.gestion}</div>
-            </div>
+            </button>
           </div>
         </div>
       ) : null}

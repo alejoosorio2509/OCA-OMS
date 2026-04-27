@@ -235,6 +235,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
     cuadrilla: z.string().min(1).optional(),
+    etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
     diasAsignaColor: z.enum(["red", "green"]).optional(),
@@ -270,6 +271,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     search,
     nivelTension,
     cuadrilla,
+    etapa,
     asignacionStart,
     asignacionEnd,
     diasAsignaColor,
@@ -312,6 +314,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   };
 
   const requiresComputedFilter = !!(
+    etapa ||
     diasAsignaColor ||
     diasAprobacionPostColor ||
     diasCierreColor ||
@@ -411,6 +414,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
           subestado: true,
           cuadrilla: true,
           fechaAsignacion: true,
+          fechaEntregaPostproceso: true,
           fechaGestion: true,
           fechaPrimerElemento: true,
           fechaAprobacionPostproceso: true
@@ -498,6 +502,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       subestado: true,
       cuadrilla: true,
       fechaAsignacion: true,
+      fechaEntregaPostproceso: true,
       fechaGestion: true,
       fechaPrimerElemento: true,
       fechaAprobacionPostproceso: true
@@ -529,6 +534,24 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
   }
 
+  const etapaByCode = new Map<string, "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION" | "SIN">();
+  for (const r of base) {
+    const entrega = cierreSaitByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+    const e =
+      r.fechaGestion
+        ? "GESTION"
+        : r.fechaAprobacionPostproceso
+          ? "APROBACION_POSTPROCESO"
+          : entrega
+            ? "ENTREGA_POSTPROCESO"
+            : r.fechaPrimerElemento
+              ? "PRIMER_ELEMENTO"
+              : r.fechaAsignacion
+                ? "ASIGNACION"
+                : "SIN";
+    etapaByCode.set(r.orderCode, e);
+  }
+
   const novedades = codes.length
     ? await prisma.novedad.findMany({
         where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
@@ -558,6 +581,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       estadoSecundario: w?.estadoSecundario ?? null
     };
   });
+
+  if (etapa) {
+    computed = computed.filter((r) => etapaByCode.get(r.orderCode) === etapa);
+  }
 
   const applyColorFilter = (key: "diasAsignaColor" | "diasAprobacionPostColor" | "diasCierreColor" | "diasGestionTotalColor", val?: "red" | "green") => {
     if (!val) return;
