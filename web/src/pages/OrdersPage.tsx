@@ -22,6 +22,19 @@ async function downloadCsv(token: string, path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+async function readApiError(res: Response) {
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const data = (await res.json().catch(() => null)) as null | { error?: unknown; details?: unknown };
+    const e = typeof data?.error === "string" ? data.error : "";
+    const d = typeof data?.details === "string" ? data.details : "";
+    const core = [e, d].filter(Boolean).join(": ").trim();
+    return core || `Error HTTP ${res.status}`;
+  }
+  const text = (await res.text().catch(() => "")).trim();
+  return text || `Error HTTP ${res.status}`;
+}
+
 const statuses: { value: WorkOrderStatus | ""; label: string }[] = [
   { value: "ASIGNADA", label: "Asignada" },
   { value: "EN_EJECUCION", label: "En Ejecución" },
@@ -820,10 +833,11 @@ function NovedadModal({ order, onClose }: { order: WorkOrderListItem, onClose: (
         body
       });
 
-      if (!res.ok) throw new Error("Error al guardar novedad");
+      if (!res.ok) throw new Error(await readApiError(res));
       onClose();
-    } catch {
-      alert("No se pudo guardar la novedad");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "No se pudo guardar la novedad";
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -873,10 +887,10 @@ function NovedadModal({ order, onClose }: { order: WorkOrderListItem, onClose: (
             />
           </div>
           <div className="field">
-            <label>Soporte de novedad (Imagen) *</label>
+            <label>Soporte de novedad (Imagen/PDF) *</label>
             <input 
               type="file" 
-              accept="image/*" 
+              accept="image/*,.pdf" 
               required
               onChange={e => setFile(e.target.files?.[0] || null)} 
             />

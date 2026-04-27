@@ -923,8 +923,8 @@ function NovedadModal({ order, onSaved, onClose }: { order: { id: string; code: 
             <textarea value={formData.detalle} onChange={(e) => setFormData((p) => ({ ...p, detalle: e.target.value }))} required />
           </div>
           <div className="field">
-            <label>Soporte de novedad (Imagen) *</label>
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+            <label>Soporte de novedad (Imagen/PDF) *</label>
+            <input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
           </div>
           <div className="actions" style={{ marginTop: "1rem" }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
