@@ -66,7 +66,7 @@ const supabase =
       })
     : null;
 
-app.get("/uploads/*", async (req, res) => {
+app.get("/uploads/*path", async (req, res) => {
   try {
     if (!supabase) {
       res.status(404).end();
