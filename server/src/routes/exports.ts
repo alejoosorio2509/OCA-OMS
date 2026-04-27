@@ -145,6 +145,35 @@ function statusLabel(status: WorkOrderStatus) {
   return map[status] ?? status;
 }
 
+function parseBogotaDateOnly(value: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const d = parseInt(m[3], 10);
+    return new Date(Date.UTC(y, mo - 1, d, 5, 0, 0));
+  }
+  return new Date(value);
+}
+
+function diffByCalendar(inicioMap: Map<string, number>, finMap: Map<string, number>, start: Date | null, end: Date | null) {
+  if (!start || !end) return null;
+  const startNum = inicioMap.get(normalizeDateStr(start));
+  const endNum = finMap.get(normalizeDateStr(end));
+  if (startNum === undefined || endNum === undefined) return null;
+  return Math.max(0, endNum - startNum);
+}
+
+function diffByCalendarEndNow(inicioMap: Map<string, number>, finMap: Map<string, number>, start: Date | null, end: Date | null, now: Date) {
+  if (!start) return null;
+  return diffByCalendar(inicioMap, finMap, start, end ?? now);
+}
+
+function colorByThreshold(value: number | null, threshold: number): "green" | "red" | null {
+  if (value === null) return null;
+  return value <= threshold ? "green" : "red";
+}
+
 exportsRouter.get("/general.csv", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
   const parsed = dateRangeSchema.safeParse(req.query);
   if (!parsed.success) {
@@ -475,6 +504,262 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
   const csv = toCsv(headers, rows);
   res.setHeader("content-type", "text/csv; charset=utf-8");
   res.setHeader("content-disposition", `attachment; filename="ordenes.csv"`);
+  res.send(csv);
+});
+
+exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
+  const querySchema = z.object({
+    search: z.string().min(1).optional(),
+    nivelTension: z.string().min(1).optional(),
+    cuadrilla: z.string().min(1).optional(),
+    etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
+    asignacionStart: z.string().min(1).optional(),
+    asignacionEnd: z.string().min(1).optional(),
+    dateStart: z.string().optional(),
+    dateEnd: z.string().optional(),
+    diasAsignaColor: z.enum(["red", "green"]).optional(),
+    diasAprobacionPostColor: z.enum(["red", "green"]).optional(),
+    diasCierreColor: z.enum(["red", "green"]).optional(),
+    diasGestionTotalColor: z.enum(["red", "green"]).optional()
+  });
+
+  const parsed = querySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "INVALID_QUERY" });
+    return;
+  }
+
+  const {
+    search,
+    nivelTension,
+    cuadrilla,
+    etapa,
+    asignacionStart,
+    asignacionEnd,
+    dateStart,
+    dateEnd,
+    diasAsignaColor,
+    diasAprobacionPostColor,
+    diasCierreColor,
+    diasGestionTotalColor
+  } = parsed.data;
+
+  const parseDay = (value: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!m) return null;
+    const d = parseBogotaDateOnly(value.trim());
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const startRaw = asignacionStart ?? dateStart;
+  const endRaw = asignacionEnd ?? dateEnd;
+  const startDate = startRaw ? parseDay(startRaw) : null;
+  const endDate = endRaw ? parseDay(endRaw) : null;
+  if ((startRaw && !startDate) || (endRaw && !endDate)) {
+    res.status(400).json({ error: "INVALID_DATE_FILTER" });
+    return;
+  }
+  const endExclusive = endDate ? new Date(endDate.getTime() + 24 * 60 * 60 * 1000) : null;
+
+  const where: Prisma.LevantamientoWhereInput = {
+    ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
+    ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
+    ...(search ? { orderCode: { contains: search } } : {}),
+    ...(startDate || endExclusive
+      ? {
+          fechaAsignacion: {
+            ...(startDate ? { gte: startDate } : {}),
+            ...(endExclusive ? { lt: endExclusive } : {})
+          }
+        }
+      : {})
+  };
+
+  const [rows, calendar] = await Promise.all([
+    prisma.levantamiento.findMany({
+      where,
+      orderBy: { fechaAsignacion: "desc" },
+      select: {
+        orderCode: true,
+        nivelTension: true,
+        estado: true,
+        subestado: true,
+        cuadrilla: true,
+        fechaAsignacion: true,
+        fechaPrimerElemento: true,
+        fechaEntregaPostproceso: true,
+        fechaAprobacionPostproceso: true,
+        fechaGestion: true
+      }
+    }),
+    prisma.calendar.findMany({ select: { date: true, dayNumber: true, dayNumberFin: true } })
+  ]);
+
+  const inicioMap = new Map<string, number>();
+  const finMap = new Map<string, number>();
+  const finNumberToDate = new Map<number, string>();
+  for (const c of calendar) {
+    const key = normalizeDateStr(c.date);
+    inicioMap.set(key, c.dayNumber);
+    const finNum = c.dayNumberFin ?? c.dayNumber;
+    finMap.set(key, finNum);
+    finNumberToDate.set(finNum, key);
+  }
+
+  const codes = rows.map((r) => r.orderCode);
+  const [wo, novedades] = await Promise.all([
+    codes.length ? prisma.workOrder.findMany({ where: { code: { in: codes } }, select: { id: true, code: true } }) : [],
+    codes.length
+      ? prisma.novedad.findMany({
+          where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
+          select: { workOrder: { select: { code: true } }, fechaInicio: true, fechaFin: true }
+        })
+      : []
+  ]);
+
+  const idToCode = new Map(wo.map((o) => [o.id, o.code]));
+  const histories = wo.length
+    ? await prisma.workOrderHistory.findMany({
+        where: { workOrderId: { in: wo.map((o) => o.id) }, note: "Cierre SAIT", fechaInicio: { not: null } },
+        select: { workOrderId: true, fechaInicio: true, changedAt: true },
+        orderBy: { changedAt: "desc" }
+      })
+    : [];
+  const cierreSaitByCode = new Map<string, Date>();
+  for (const h of histories) {
+    const code = idToCode.get(h.workOrderId);
+    if (!code) continue;
+    if (cierreSaitByCode.has(code)) continue;
+    const d = parseBogotaDateOnly(String(h.fechaInicio ?? ""));
+    if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
+  }
+
+  const novedadSumByCode = new Map<string, number>();
+  for (const n of novedades) {
+    const iniNum = inicioMap.get(normalizeDateStr(n.fechaInicio));
+    const finNum = n.fechaFin ? finMap.get(normalizeDateStr(n.fechaFin)) : undefined;
+    if (iniNum !== undefined && finNum !== undefined) {
+      const diff = finNum - iniNum;
+      if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+    }
+  }
+
+  const THRESHOLD_DIAS_ASIGNA = 8;
+  const THRESHOLD_DIAS_APROBACION_POST = 3;
+  const THRESHOLD_DIAS_CIERRE = 8;
+  const now = new Date();
+
+  const headers = [
+    "Orden Trabajo",
+    "Nivel de Tensión",
+    "Estado",
+    "Subestado",
+    "Cuadrilla",
+    "Fecha Asignación",
+    "Fecha Primer Elemento",
+    "Fecha Entrega Postproceso",
+    "Fecha Aprobación Postproceso",
+    "Fecha Gestión",
+    "Fecha Gestión Calculada",
+    "Días Asigna",
+    "Días aprobación Post",
+    "Días cierre",
+    "Días novedades",
+    "Días gestión total",
+    "Etapa"
+  ];
+
+  const items = rows
+    .map((r) => {
+      const assignedNum = r.fechaAsignacion ? inicioMap.get(normalizeDateStr(r.fechaAsignacion)) : undefined;
+      const diasNovedades = novedadSumByCode.get(r.orderCode) ?? 0;
+      const vencimientoNum = assignedNum !== undefined ? assignedNum + 8 + diasNovedades : undefined;
+      const fechaGestionCalculada =
+        !r.fechaGestion && vencimientoNum !== undefined
+          ? (() => {
+              const targetKey = finNumberToDate.get(vencimientoNum) ?? null;
+              return targetKey ? parseBogotaDateOnly(targetKey) : null;
+            })()
+          : null;
+      const fechaGestionEfectiva = r.fechaGestion ?? fechaGestionCalculada;
+
+      const applyNovedades = (v: number | null) => (v === null ? null : Math.max(0, v - diasNovedades));
+
+      const diasAsignaRaw = r.fechaAsignacion
+        ? r.fechaPrimerElemento
+          ? diffByCalendar(inicioMap, finMap, r.fechaAsignacion, r.fechaPrimerElemento)
+          : 1
+        : null;
+      const diasAsigna = applyNovedades(diasAsignaRaw);
+
+      const entregaPost = cierreSaitByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+      const aprobEndNum = finMap.get(normalizeDateStr(r.fechaAprobacionPostproceso ?? now));
+      const diasAprobacionPostRaw =
+        entregaPost
+          ? diffByCalendarEndNow(inicioMap, finMap, entregaPost, r.fechaAprobacionPostproceso, now)
+          : assignedNum !== undefined && aprobEndNum !== undefined
+            ? Math.max(0, aprobEndNum - (assignedNum + 3))
+            : null;
+      const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
+
+      const cierreStartNum = r.fechaAprobacionPostproceso ? inicioMap.get(normalizeDateStr(r.fechaAprobacionPostproceso)) : undefined;
+      const cierreEndNum = r.fechaGestion ? finMap.get(normalizeDateStr(r.fechaGestion)) : assignedNum !== undefined ? assignedNum + 8 : undefined;
+      const diasCierreRaw = cierreStartNum !== undefined && cierreEndNum !== undefined ? Math.max(0, cierreEndNum - cierreStartNum) : null;
+      const diasCierre = applyNovedades(diasCierreRaw);
+
+      const refDate = r.fechaGestion ?? now;
+      const refNum = finMap.get(normalizeDateStr(refDate));
+      const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
+
+      const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
+      const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
+      const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
+      const diasGestionTotalColorCalc = diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : "green";
+
+      const etapaCalc =
+        r.fechaGestion
+          ? "GESTION"
+          : r.fechaAprobacionPostproceso
+            ? "APROBACION_POSTPROCESO"
+            : entregaPost
+              ? "ENTREGA_POSTPROCESO"
+              : r.fechaPrimerElemento
+                ? "PRIMER_ELEMENTO"
+                : r.fechaAsignacion
+                  ? "ASIGNACION"
+                  : "SIN";
+
+      if (etapa && etapaCalc !== etapa) return null;
+      if (diasAsignaColor && diasAsignaColorCalc !== diasAsignaColor) return null;
+      if (diasAprobacionPostColor && diasAprobacionPostColorCalc !== diasAprobacionPostColor) return null;
+      if (diasCierreColor && diasCierreColorCalc !== diasCierreColor) return null;
+      if (diasGestionTotalColor && diasGestionTotalColorCalc !== diasGestionTotalColor) return null;
+
+      return [
+        r.orderCode,
+        r.nivelTension ?? "",
+        r.estado ?? "",
+        r.subestado ?? "",
+        r.cuadrilla ?? "",
+        r.fechaAsignacion?.toISOString() ?? "",
+        r.fechaPrimerElemento?.toISOString() ?? "",
+        entregaPost?.toISOString() ?? "",
+        r.fechaAprobacionPostproceso?.toISOString() ?? "",
+        fechaGestionEfectiva?.toISOString() ?? "",
+        fechaGestionCalculada?.toISOString() ?? "",
+        diasAsigna ?? "",
+        diasAprobacionPost ?? "",
+        diasCierre ?? "",
+        diasNovedades,
+        diasGestionTotal ?? "",
+        etapaCalc
+      ];
+    })
+    .filter((x): x is (string | number)[] => x !== null);
+
+  const csv = toCsv(headers, items);
+  res.setHeader("content-type", "text/csv; charset=utf-8");
+  res.setHeader("content-disposition", `attachment; filename="levantamientos.csv"`);
   res.send(csv);
 });
 

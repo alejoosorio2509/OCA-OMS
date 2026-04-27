@@ -5,6 +5,22 @@ import { useAuth } from "../auth";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { API_URL } from "../apiUrl";
 
+async function downloadCsv(token: string, path: string, filename: string) {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function fmtDate(value: string | null) {
   if (!value) return "—";
   const d = new Date(value);
@@ -660,7 +676,39 @@ export function LevantamientoPage() {
 
         <div className="row" style={{ marginBottom: 10, justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 800 }}>Total: {totalCount}</div>
-          <div className="row" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={!token || !hasSearched || loading}
+              onClick={async () => {
+                if (!token) return;
+                try {
+                  const qs = new URLSearchParams();
+                  if (applied.search.trim()) qs.set("search", applied.search.trim());
+                  if (applied.nivelTension.trim()) qs.set("nivelTension", applied.nivelTension.trim());
+                  if (applied.cuadrilla.trim()) qs.set("cuadrilla", applied.cuadrilla.trim());
+                  if (applied.etapa) qs.set("etapa", applied.etapa);
+                  if (applied.asignacionStart) qs.set("asignacionStart", applied.asignacionStart);
+                  if (applied.asignacionEnd) qs.set("asignacionEnd", applied.asignacionEnd);
+                  if (applied.diasAsignaColor) qs.set("diasAsignaColor", applied.diasAsignaColor);
+                  if (applied.diasAprobacionPostColor) qs.set("diasAprobacionPostColor", applied.diasAprobacionPostColor);
+                  if (applied.diasCierreColor) qs.set("diasCierreColor", applied.diasCierreColor);
+                  if (applied.diasGestionTotalColor) qs.set("diasGestionTotalColor", applied.diasGestionTotalColor);
+                  const queryStr = qs.toString() ? `?${qs.toString()}` : "";
+                  const range =
+                    applied.asignacionStart || applied.asignacionEnd
+                      ? `${applied.asignacionStart || "inicio"}-${applied.asignacionEnd || "fin"}`
+                      : "todas";
+                  await downloadCsv(token, `/exports/levantamientos.csv${queryStr}`, `levantamiento_${range}.csv`);
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : "No se pudo descargar el reporte.";
+                  alert(msg);
+                }
+              }}
+            >
+              Exportar
+            </button>
             <button className="btn btn-sm" type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
               Anterior
             </button>

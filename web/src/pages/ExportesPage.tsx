@@ -33,7 +33,7 @@ export function ExportesPage() {
 
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
-  const [loading, setLoading] = useState<"" | "general" | "devoluciones" | "historial">("");
+  const [loading, setLoading] = useState<"" | "general" | "devoluciones" | "historial" | "levantamiento">("");
   const [error, setError] = useState<string | null>(null);
 
   const query = useMemo(
@@ -47,7 +47,7 @@ export function ExportesPage() {
 
   if (!canExportes) return <div className="card">No autorizado.</div>;
 
-  const handle = async (kind: "general" | "devoluciones" | "historial") => {
+  const handle = async (kind: "general" | "devoluciones" | "historial" | "levantamiento") => {
     if (!token) return;
     setError(null);
     setLoading(kind);
@@ -61,6 +61,9 @@ export function ExportesPage() {
       }
       if (kind === "historial") {
         await downloadCsv(token, `/exports/historial.csv${query}`, `reporte_historial_${range}.csv`);
+      }
+      if (kind === "levantamiento") {
+        await downloadCsv(token, `/exports/levantamientos.csv${query}`, `levantamiento_${range}.csv`);
       }
     } catch {
       setError("No se pudo descargar el reporte.");
@@ -97,6 +100,9 @@ export function ExportesPage() {
           </button>
           <button className="btn" onClick={() => handle("historial")} disabled={!!loading}>
             {loading === "historial" ? "Generando..." : "Exportar historial de órdenes"}
+          </button>
+          <button className="btn" onClick={() => handle("levantamiento")} disabled={!!loading}>
+            {loading === "levantamiento" ? "Generando..." : "Exportar levantamiento"}
           </button>
         </div>
       </div>
