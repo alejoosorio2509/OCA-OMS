@@ -20,6 +20,19 @@ function colorOf(v: number | null) {
   return "var(--text)";
 }
 
+const CUADRILLA_LABELS: Record<string, string> = {
+  CUA_1: "RAFAEL DURAN",
+  CUA_2: "OSCAR CASTELBLANCO",
+  CUA_3: "DANNY BRICEÑO",
+  CUA_4: "JIMMY CRUZ",
+  SUP: "WILMER MARTINEZ"
+};
+
+function cuadrillaLabel(code: string | null) {
+  if (!code) return "—";
+  return CUADRILLA_LABELS[code] ?? code;
+}
+
 const NOVEDAD_OPCIONES = [
   "STOP WORK POR LLUVIAS EN EL SECTOR",
   "STOP WORK POR DERRUMBES EN LA VIA",
@@ -68,6 +81,7 @@ export function LevantamientoPage() {
 
   const [draftSearch, setDraftSearch] = useState(() => initialParams.get("search") || "");
   const [draftNivelTension, setDraftNivelTension] = useState(() => initialParams.get("nivelTension") || "");
+  const [draftCuadrilla, setDraftCuadrilla] = useState(() => initialParams.get("cuadrilla") || "");
   const [draftAsignacionStart, setDraftAsignacionStart] = useState(() => initialParams.get("asignacionStart") || "");
   const [draftAsignacionEnd, setDraftAsignacionEnd] = useState(() => initialParams.get("asignacionEnd") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
@@ -88,6 +102,7 @@ export function LevantamientoPage() {
   type Filters = {
     search: string;
     nivelTension: string;
+    cuadrilla: string;
     asignacionStart: string;
     asignacionEnd: string;
     diasAsignaColor: "" | "red" | "green";
@@ -99,6 +114,7 @@ export function LevantamientoPage() {
   const [applied, setApplied] = useState<Filters>(() => ({
     search: initialParams.get("search") || "",
     nivelTension: initialParams.get("nivelTension") || "",
+    cuadrilla: initialParams.get("cuadrilla") || "",
     asignacionStart: initialParams.get("asignacionStart") || "",
     asignacionEnd: initialParams.get("asignacionEnd") || "",
     diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || "",
@@ -129,6 +145,7 @@ export function LevantamientoPage() {
     setApplied({
       search: draftSearch,
       nivelTension: draftNivelTension,
+      cuadrilla: draftCuadrilla,
       asignacionStart: draftAsignacionStart,
       asignacionEnd: draftAsignacionEnd,
       diasAsignaColor: draftDiasAsignaColor,
@@ -143,6 +160,7 @@ export function LevantamientoPage() {
   const clearFilters = () => {
     setDraftSearch("");
     setDraftNivelTension("");
+    setDraftCuadrilla("");
     setDraftAsignacionStart("");
     setDraftAsignacionEnd("");
     setDraftDiasAsignaColor("");
@@ -152,6 +170,7 @@ export function LevantamientoPage() {
     setApplied({
       search: "",
       nivelTension: "",
+      cuadrilla: "",
       asignacionStart: "",
       asignacionEnd: "",
       diasAsignaColor: "",
@@ -171,6 +190,7 @@ export function LevantamientoPage() {
     const next = new URLSearchParams();
     if (applied.search.trim()) next.set("search", applied.search.trim());
     if (applied.nivelTension.trim()) next.set("nivelTension", applied.nivelTension.trim());
+    if (applied.cuadrilla.trim()) next.set("cuadrilla", applied.cuadrilla.trim());
     if (applied.asignacionStart) next.set("asignacionStart", applied.asignacionStart);
     if (applied.asignacionEnd) next.set("asignacionEnd", applied.asignacionEnd);
     if (applied.diasAsignaColor) next.set("diasAsignaColor", applied.diasAsignaColor);
@@ -188,6 +208,7 @@ export function LevantamientoPage() {
     return {
       search: applied.search.trim() || undefined,
       nivelTension: applied.nivelTension.trim() || undefined,
+      cuadrilla: applied.cuadrilla.trim() || undefined,
       asignacionStart: applied.asignacionStart || undefined,
       asignacionEnd: applied.asignacionEnd || undefined,
       diasAsignaColor: applied.diasAsignaColor || undefined,
@@ -276,6 +297,17 @@ export function LevantamientoPage() {
               {nivelesTension.map((v) => (
                 <option key={v} value={v}>
                   {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 220 }}>
+            <label>Cuadrilla</label>
+            <select value={draftCuadrilla} onChange={(e) => setDraftCuadrilla(e.target.value)} style={{ width: "100%" }}>
+              <option value="">Todas</option>
+              {Object.entries(CUADRILLA_LABELS).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -373,6 +405,7 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
+                <th>Cuadrilla</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaAsignacion")}>Fecha Asignación</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaGestion")}>Fecha Gestión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días Asigna</button></th>
@@ -385,9 +418,9 @@ export function LevantamientoPage() {
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -403,6 +436,7 @@ export function LevantamientoPage() {
                     <td>{fmtVal(it.nivelTension)}</td>
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>
+                    <td>{cuadrillaLabel(it.cuadrilla)}</td>
                     <td>{fmtDate(it.fechaAsignacion)}</td>
                     <td title={it.fechaGestionCalculada ? "Calculado con +8 días calendario" : ""}>{fmtDate(it.fechaGestion)}</td>
                     <td style={{ fontWeight: 800, color: it.diasAsignaColor === "red" ? "red" : it.diasAsignaColor === "green" ? "green" : colorOf(it.diasAsigna) }}>

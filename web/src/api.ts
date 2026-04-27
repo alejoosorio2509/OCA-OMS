@@ -136,6 +136,7 @@ export type LevantamientoListItem = {
   nivelTension: string | null;
   estado: string | null;
   subestado: string | null;
+  cuadrilla: string | null;
   workOrderId: string | null;
   workOrderStatus: WorkOrderStatus | null;
   estadoSecundario: string | null;
@@ -328,6 +329,7 @@ export async function listLevantamientos(
   query: {
     search?: string;
     nivelTension?: string;
+    cuadrilla?: string;
     asignacionStart?: string;
     asignacionEnd?: string;
     diasAsignaColor?: "red" | "green";
@@ -353,6 +355,7 @@ export async function listLevantamientos(
   const qs = new URLSearchParams();
   if (query.search) qs.set("search", query.search);
   if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
+  if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
   if (query.diasAsignaColor) qs.set("diasAsignaColor", query.diasAsignaColor);

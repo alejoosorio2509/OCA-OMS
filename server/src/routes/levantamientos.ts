@@ -87,6 +87,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const querySchema = z.object({
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
+    cuadrilla: z.string().min(1).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
     diasAsignaColor: z.enum(["red", "green"]).optional(),
@@ -121,6 +122,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const {
     search,
     nivelTension,
+    cuadrilla,
     asignacionStart,
     asignacionEnd,
     diasAsignaColor,
@@ -150,6 +152,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
+    ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -183,6 +186,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     nivelTension: string | null;
     estado: string | null;
     subestado: string | null;
+    cuadrilla: string | null;
     fechaAsignacion: Date | null;
     fechaGestion: Date | null;
     fechaPrimerElemento: Date | null;
@@ -218,6 +222,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       nivelTension: row.nivelTension,
       estado: row.estado,
       subestado: row.subestado,
+      cuadrilla: row.cuadrilla,
       fechaAsignacion: row.fechaAsignacion,
       fechaGestion: fechaGestionEfectiva,
       fechaGestionCalculada: row.fechaGestion ? null : fechaGestionCalculada,
@@ -257,6 +262,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
           nivelTension: true,
           estado: true,
           subestado: true,
+          cuadrilla: true,
           fechaAsignacion: true,
           fechaGestion: true,
           fechaPrimerElemento: true,
@@ -343,6 +349,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       nivelTension: true,
       estado: true,
       subestado: true,
+      cuadrilla: true,
       fechaAsignacion: true,
       fechaGestion: true,
       fechaPrimerElemento: true,
