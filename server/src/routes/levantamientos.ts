@@ -167,6 +167,22 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   })();
 
   const codes = rows.map((r) => r.orderCode);
+  const novedades = codes.length
+    ? await prisma.novedad.findMany({
+        where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
+        select: { workOrder: { select: { code: true } }, fechaInicio: true, fechaFin: true }
+      })
+    : [];
+  const novedadSumByCode = new Map<string, number>();
+  for (const n of novedades) {
+    const iniNum = inicioMap.get(normalizeDay(n.fechaInicio));
+    const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+    if (iniNum !== undefined && finNum !== undefined) {
+      const diff = finNum - iniNum;
+      if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+    }
+  }
+
   const wo = codes.length
     ? await prisma.workOrder.findMany({ where: { code: { in: codes } }, select: { id: true, code: true } })
     : [];
@@ -199,6 +215,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
 
   for (const r of rows) {
     const entrega = entregaByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+    const diasNovedades = novedadSumByCode.get(r.orderCode) ?? 0;
     const etapa =
       r.fechaGestion
         ? "GESTION"
@@ -218,12 +235,17 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (etapa === "APROBACION") aprobacionPostproceso++;
     if (etapa === "GESTION") gestion++;
 
-    if (entrega) {
-      const dias = diffByCalendarEndNow(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso, now);
-      if (dias !== null) {
-        if (dias <= 3) aprobacionCumple++;
-        else aprobacionNoCumple++;
-      }
+    const aprobEndNum = finMap.get(normalizeDay(r.fechaAprobacionPostproceso ?? now));
+    const assignedNum = r.fechaAsignacion ? inicioMap.get(normalizeDay(r.fechaAsignacion)) : undefined;
+    const diasRaw = entrega
+      ? diffByCalendarEndNow(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso, now)
+      : assignedNum !== undefined && aprobEndNum !== undefined
+        ? Math.max(0, aprobEndNum - (assignedNum + 3))
+        : null;
+    const dias = diasRaw === null ? null : Math.max(0, diasRaw - diasNovedades);
+    if (dias !== null) {
+      if (dias <= 3) aprobacionCumple++;
+      else aprobacionNoCumple++;
     }
   }
 
