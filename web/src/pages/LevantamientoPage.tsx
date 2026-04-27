@@ -20,6 +20,19 @@ function colorOf(v: number | null) {
   return "var(--text)";
 }
 
+async function readApiError(res: Response) {
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const data = (await res.json().catch(() => null)) as null | { error?: unknown; details?: unknown };
+    const e = typeof data?.error === "string" ? data.error : "";
+    const d = typeof data?.details === "string" ? data.details : "";
+    const core = [e, d].filter(Boolean).join(": ").trim();
+    return core || `Error HTTP ${res.status}`;
+  }
+  const text = (await res.text().catch(() => "")).trim();
+  return text || `Error HTTP ${res.status}`;
+}
+
 const DASH_BLUE = "#0B3356";
 const DASH_RED = "#DE473C";
 
@@ -818,7 +831,7 @@ function NovedadModal({ order, onSaved, onClose }: { order: { id: string; code: 
         },
         body
       });
-      if (!res.ok) throw new Error("Error al guardar novedad");
+      if (!res.ok) throw new Error(await readApiError(res));
       onSaved();
       onClose();
     } catch (err) {
@@ -907,7 +920,7 @@ function PostprocesoModal({ order, onSaved, onClose }: { order: { id: string; co
         },
         body
       });
-      if (!res.ok) throw new Error("Error al registrar cierre SAIT");
+      if (!res.ok) throw new Error(await readApiError(res));
       onSaved();
       onClose();
     } catch (err) {

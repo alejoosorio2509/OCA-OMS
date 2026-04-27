@@ -52,15 +52,20 @@ const supabase =
 const requirePersistentSoportes = Boolean(process.env.RENDER_SERVICE_ID || process.env.RENDER_SERVICE_NAME);
 
 async function uploadSoporteToSupabase(input: { localPath: string; storageKey: string; contentType?: string | undefined }) {
-  if (!supabase) return false;
-  const body = await fs.promises.readFile(input.localPath);
-  const { error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).upload(input.storageKey, body, {
-    contentType: input.contentType,
-    upsert: false
-  });
-  if (error) return false;
-  await fs.promises.unlink(input.localPath).catch(() => null);
-  return true;
+  if (!supabase) return { ok: false as const, error: "SUPABASE_NOT_CONFIGURED" };
+  try {
+    const body = await fs.promises.readFile(input.localPath);
+    const { error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).upload(input.storageKey, body, {
+      contentType: input.contentType,
+      upsert: false
+    });
+    if (error) return { ok: false as const, error: error.message || "UPLOAD_FAILED" };
+    await fs.promises.unlink(input.localPath).catch(() => null);
+    return { ok: true as const };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "UPLOAD_FAILED";
+    return { ok: false as const, error: msg };
+  }
 }
 
 async function cleanupLocalUpload(filePath: string | undefined) {
@@ -1095,7 +1100,7 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
     }
     if (requirePersistentSoportes && !supabase) {
       await cleanupLocalUpload(req.file.path);
-      res.status(503).json({ error: "STORAGE_NOT_CONFIGURED" });
+      res.status(503).json({ error: "STORAGE_NOT_CONFIGURED", details: "SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing" });
       return;
     }
 
@@ -1119,14 +1124,14 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
 
     const soportePath = `/uploads/novedades/${req.file.filename}`;
     if (supabase) {
-      const ok = await uploadSoporteToSupabase({
+      const r = await uploadSoporteToSupabase({
         localPath: req.file.path,
         storageKey: `novedades/${req.file.filename}`,
         contentType: req.file.mimetype
       });
-      if (!ok) {
+      if (!r.ok) {
         await cleanupLocalUpload(req.file.path);
-        res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED" });
+        res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED", details: r.error });
         return;
       }
     }
@@ -1202,7 +1207,7 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
     }
     if (requirePersistentSoportes && !supabase) {
       await cleanupLocalUpload(req.file.path);
-      res.status(503).json({ error: "STORAGE_NOT_CONFIGURED" });
+      res.status(503).json({ error: "STORAGE_NOT_CONFIGURED", details: "SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing" });
       return;
     }
 
@@ -1215,14 +1220,14 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
     const now = new Date();
     const soportePath = `/uploads/postproceso/${req.file.filename}`;
     if (supabase) {
-      const ok = await uploadSoporteToSupabase({
+      const r = await uploadSoporteToSupabase({
         localPath: req.file.path,
         storageKey: `postproceso/${req.file.filename}`,
         contentType: req.file.mimetype
       });
-      if (!ok) {
+      if (!r.ok) {
         await cleanupLocalUpload(req.file.path);
-        res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED" });
+        res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED", details: r.error });
         return;
       }
     }
