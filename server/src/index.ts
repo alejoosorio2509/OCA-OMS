@@ -8,6 +8,7 @@ import { carguesRouter } from "./routes/cargues.js";
 import { exportsRouter } from "./routes/exports.js";
 import { levantamientosRouter } from "./routes/levantamientos.js";
 import path from "path";
+import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 
@@ -58,6 +59,38 @@ app.get("/version", (_req, res) => {
 
 // Servir archivos estáticos de soportes
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+const supabase =
+  env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      })
+    : null;
+
+app.get("/uploads/*", async (req, res) => {
+  try {
+    if (!supabase) {
+      res.status(404).end();
+      return;
+    }
+    const key = req.path.startsWith("/uploads/") ? decodeURIComponent(req.path.slice("/uploads/".length)) : "";
+    if (!key) {
+      res.status(404).end();
+      return;
+    }
+
+    const { data, error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).download(key);
+    if (error || !data) {
+      res.status(404).end();
+      return;
+    }
+
+    const buf = Buffer.from(await data.arrayBuffer());
+    if (data.type) res.setHeader("content-type", data.type);
+    res.status(200).send(buf);
+  } catch {
+    res.status(500).end();
+  }
+});
 
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);

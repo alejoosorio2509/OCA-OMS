@@ -1,9 +1,11 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
+import { env } from "../env.js";
 import { requireAdmin, requireAuth, requirePermission } from "../auth.js";
 import type { Prisma, WorkOrderStatus } from "@prisma/client";
 import { canTransition } from "../workOrderStateMachine.js";
+import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -39,6 +41,25 @@ const postStorage = multer.diskStorage({
 });
 
 const uploadPost = multer({ storage: postStorage });
+
+const supabase =
+  env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      })
+    : null;
+
+async function uploadSoporteToSupabase(input: { localPath: string; storageKey: string; contentType?: string | undefined }) {
+  if (!supabase) return false;
+  const body = await fs.promises.readFile(input.localPath);
+  const { error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).upload(input.storageKey, body, {
+    contentType: input.contentType,
+    upsert: false
+  });
+  if (error) return false;
+  await fs.promises.unlink(input.localPath).catch(() => null);
+  return true;
+}
 
 const statusSchema = z.enum([
   "DRAFT",
@@ -1084,6 +1105,19 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
       }
     }
 
+    const soportePath = `/uploads/novedades/${req.file.filename}`;
+    if (supabase) {
+      const ok = await uploadSoporteToSupabase({
+        localPath: req.file.path,
+        storageKey: `novedades/${req.file.filename}`,
+        contentType: req.file.mimetype
+      });
+      if (!ok) {
+        res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED" });
+        return;
+      }
+    }
+
     // Crear novedad
     const novedad = await prisma.novedad.create({
       data: {
@@ -1092,7 +1126,7 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
         fechaFin: dFin,
         descripcion,
         detalle,
-        soportePath: `/uploads/novedades/${req.file.filename}`
+        soportePath
       }
     });
 
@@ -1162,6 +1196,17 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
 
     const now = new Date();
     const soportePath = `/uploads/postproceso/${req.file.filename}`;
+    if (supabase) {
+      const ok = await uploadSoporteToSupabase({
+        localPath: req.file.path,
+        storageKey: `postproceso/${req.file.filename}`,
+        contentType: req.file.mimetype
+      });
+      if (!ok) {
+        res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED" });
+        return;
+      }
+    }
     const updated = await prisma.workOrder.update({
       where: { id },
       data: {
