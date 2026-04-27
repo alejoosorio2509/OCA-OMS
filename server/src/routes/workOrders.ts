@@ -1207,6 +1207,12 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
         return;
       }
     }
+
+    await prisma.levantamiento.updateMany({
+      where: { orderCode: order.code },
+      data: { fechaEntregaPostproceso: dFecha }
+    });
+
     const updated = await prisma.workOrder.update({
       where: { id },
       data: {

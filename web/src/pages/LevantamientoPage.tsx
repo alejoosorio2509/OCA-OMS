@@ -88,6 +88,7 @@ export function LevantamientoPage() {
     aprobacionNoCumple: number;
     aprobacionPct: number;
   }>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const [hasSearched, setHasSearched] = useState(() => initialParams.toString().length > 0);
   const [selectedOrder, setSelectedOrder] = useState<{ id: string; code: string } | null>(null);
@@ -310,7 +311,7 @@ export function LevantamientoPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, query, hasSearched]);
+  }, [token, query, hasSearched, refreshTick]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -632,6 +633,7 @@ export function LevantamientoPage() {
       {showNovedadModal && selectedOrder && (
         <NovedadModal
           order={selectedOrder}
+          onSaved={() => setRefreshTick((v) => v + 1)}
           onClose={() => {
             setShowNovedadModal(false);
             setShowPostprocesoModal(false);
@@ -643,6 +645,7 @@ export function LevantamientoPage() {
       {showPostprocesoModal && selectedOrder && (
         <PostprocesoModal
           order={selectedOrder}
+          onSaved={() => setRefreshTick((v) => v + 1)}
           onClose={() => {
             setShowPostprocesoModal(false);
             setShowNovedadModal(false);
@@ -654,7 +657,7 @@ export function LevantamientoPage() {
   );
 }
 
-function NovedadModal({ order, onClose }: { order: { id: string; code: string }; onClose: () => void }) {
+function NovedadModal({ order, onSaved, onClose }: { order: { id: string; code: string }; onSaved: () => void; onClose: () => void }) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -689,6 +692,7 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
         body
       });
       if (!res.ok) throw new Error("Error al guardar novedad");
+      onSaved();
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error de conexión";
@@ -748,7 +752,7 @@ function NovedadModal({ order, onClose }: { order: { id: string; code: string };
   );
 }
 
-function PostprocesoModal({ order, onClose }: { order: { id: string; code: string }; onClose: () => void }) {
+function PostprocesoModal({ order, onSaved, onClose }: { order: { id: string; code: string }; onSaved: () => void; onClose: () => void }) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fecha, setFecha] = useState("");
@@ -777,6 +781,7 @@ function PostprocesoModal({ order, onClose }: { order: { id: string; code: strin
         body
       });
       if (!res.ok) throw new Error("Error al registrar cierre SAIT");
+      onSaved();
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error de conexión";
