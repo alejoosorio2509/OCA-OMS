@@ -210,7 +210,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
     const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
     const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
-    const diasGestionTotalColorCalc = colorByThreshold(diasGestionTotal, THRESHOLD_DIAS_GESTION_TOTAL);
+    const diasGestionTotalColorCalc =
+      diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : "green";
 
     return {
       orderCode: row.orderCode,
