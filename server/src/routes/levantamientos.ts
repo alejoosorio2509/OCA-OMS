@@ -87,6 +87,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const querySchema = z.object({
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
+    asignacionStart: z.string().min(1).optional(),
+    asignacionEnd: z.string().min(1).optional(),
     diasAsignaColor: z.enum(["red", "green"]).optional(),
     diasAprobacionPostColor: z.enum(["red", "green"]).optional(),
     diasCierreColor: z.enum(["red", "green"]).optional(),
@@ -119,6 +121,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const {
     search,
     nivelTension,
+    asignacionStart,
+    asignacionEnd,
     diasAsignaColor,
     diasAprobacionPostColor,
     diasCierreColor,
@@ -129,9 +133,32 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const sortKey = parsed.data.sortKey ?? "fechaAsignacion";
   const sortDir = parsed.data.sortDir ?? "desc";
 
+  const parseDay = (value: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!m) return null;
+    const d = parseBogotaDateOnly(value.trim());
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const startDate = asignacionStart ? parseDay(asignacionStart) : null;
+  const endDate = asignacionEnd ? parseDay(asignacionEnd) : null;
+  if ((asignacionStart && !startDate) || (asignacionEnd && !endDate)) {
+    res.status(400).json({ error: "INVALID_DATE_FILTER" });
+    return;
+  }
+  const endExclusive = endDate ? new Date(endDate.getTime() + 24 * 60 * 60 * 1000) : null;
+
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
-    ...(search ? { orderCode: { contains: search } } : {})
+    ...(search ? { orderCode: { contains: search } } : {}),
+    ...(startDate || endExclusive
+      ? {
+          fechaAsignacion: {
+            ...(startDate ? { gte: startDate } : {}),
+            ...(endExclusive ? { lt: endExclusive } : {})
+          }
+        }
+      : {})
   };
 
   const requiresComputedFilter = !!(

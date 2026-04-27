@@ -87,6 +87,8 @@ export function LevantamientoPage() {
 
   const [draftSearch, setDraftSearch] = useState(() => initialParams.get("search") || "");
   const [draftNivelTension, setDraftNivelTension] = useState(() => initialParams.get("nivelTension") || "");
+  const [draftAsignacionStart, setDraftAsignacionStart] = useState(() => initialParams.get("asignacionStart") || "");
+  const [draftAsignacionEnd, setDraftAsignacionEnd] = useState(() => initialParams.get("asignacionEnd") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
 
   const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "green">(
@@ -105,6 +107,8 @@ export function LevantamientoPage() {
   type Filters = {
     search: string;
     nivelTension: string;
+    asignacionStart: string;
+    asignacionEnd: string;
     diasAsignaColor: "" | "red" | "green";
     diasAprobacionPostColor: "" | "red" | "green";
     diasCierreColor: "" | "red" | "green";
@@ -114,6 +118,8 @@ export function LevantamientoPage() {
   const [applied, setApplied] = useState<Filters>(() => ({
     search: initialParams.get("search") || "",
     nivelTension: initialParams.get("nivelTension") || "",
+    asignacionStart: initialParams.get("asignacionStart") || "",
+    asignacionEnd: initialParams.get("asignacionEnd") || "",
     diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || "",
     diasAprobacionPostColor: (initialParams.get("diasAprobacionPostColor") as "" | "red" | "green" | null) || "",
     diasCierreColor: (initialParams.get("diasCierreColor") as "" | "red" | "green" | null) || "",
@@ -142,6 +148,8 @@ export function LevantamientoPage() {
     setApplied({
       search: draftSearch,
       nivelTension: draftNivelTension,
+      asignacionStart: draftAsignacionStart,
+      asignacionEnd: draftAsignacionEnd,
       diasAsignaColor: draftDiasAsignaColor,
       diasAprobacionPostColor: draftDiasAprobacionPostColor,
       diasCierreColor: draftDiasCierreColor,
@@ -154,6 +162,8 @@ export function LevantamientoPage() {
   const clearFilters = () => {
     setDraftSearch("");
     setDraftNivelTension("");
+    setDraftAsignacionStart("");
+    setDraftAsignacionEnd("");
     setDraftDiasAsignaColor("");
     setDraftDiasAprobacionPostColor("");
     setDraftDiasCierreColor("");
@@ -161,6 +171,8 @@ export function LevantamientoPage() {
     setApplied({
       search: "",
       nivelTension: "",
+      asignacionStart: "",
+      asignacionEnd: "",
       diasAsignaColor: "",
       diasAprobacionPostColor: "",
       diasCierreColor: "",
@@ -178,6 +190,8 @@ export function LevantamientoPage() {
     const next = new URLSearchParams();
     if (applied.search.trim()) next.set("search", applied.search.trim());
     if (applied.nivelTension.trim()) next.set("nivelTension", applied.nivelTension.trim());
+    if (applied.asignacionStart) next.set("asignacionStart", applied.asignacionStart);
+    if (applied.asignacionEnd) next.set("asignacionEnd", applied.asignacionEnd);
     if (applied.diasAsignaColor) next.set("diasAsignaColor", applied.diasAsignaColor);
     if (applied.diasAprobacionPostColor) next.set("diasAprobacionPostColor", applied.diasAprobacionPostColor);
     if (applied.diasCierreColor) next.set("diasCierreColor", applied.diasCierreColor);
@@ -193,6 +207,8 @@ export function LevantamientoPage() {
     return {
       search: applied.search.trim() || undefined,
       nivelTension: applied.nivelTension.trim() || undefined,
+      asignacionStart: applied.asignacionStart || undefined,
+      asignacionEnd: applied.asignacionEnd || undefined,
       diasAsignaColor: applied.diasAsignaColor || undefined,
       diasAprobacionPostColor: applied.diasAprobacionPostColor || undefined,
       diasCierreColor: applied.diasCierreColor || undefined,
@@ -282,6 +298,15 @@ export function LevantamientoPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="field" style={{ width: 180 }}>
+            <label>Asignación desde</label>
+            <input type="date" value={draftAsignacionStart} onChange={(e) => setDraftAsignacionStart(e.target.value)} />
+          </div>
+          <div className="field" style={{ width: 180 }}>
+            <label>Asignación hasta</label>
+            <input type="date" value={draftAsignacionEnd} onChange={(e) => setDraftAsignacionEnd(e.target.value)} />
           </div>
 
           <div className="field" style={{ width: 200 }}>

@@ -327,6 +327,8 @@ export async function listLevantamientos(
   query: {
     search?: string;
     nivelTension?: string;
+    asignacionStart?: string;
+    asignacionEnd?: string;
     diasAsignaColor?: "red" | "green";
     diasAprobacionPostColor?: "red" | "green";
     diasCierreColor?: "red" | "green";
@@ -350,6 +352,8 @@ export async function listLevantamientos(
   const qs = new URLSearchParams();
   if (query.search) qs.set("search", query.search);
   if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
+  if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
+  if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
   if (query.diasAsignaColor) qs.set("diasAsignaColor", query.diasAsignaColor);
   if (query.diasAprobacionPostColor) qs.set("diasAprobacionPostColor", query.diasAprobacionPostColor);
   if (query.diasCierreColor) qs.set("diasCierreColor", query.diasCierreColor);
