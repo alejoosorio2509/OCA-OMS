@@ -11,4 +11,17 @@ const envSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().min(1).default("soportes")
 });
 
-export const env = envSchema.parse(process.env);
+function normalizeSupabaseUrl(input: string | undefined) {
+  const raw = (input ?? "").trim();
+  if (!raw) return undefined;
+  let v = raw.replace(/\/+$/, "");
+  v = v.replace(/\/rest\/v1$/i, "");
+  v = v.replace(/\/+$/, "");
+  return v || undefined;
+}
+
+const parsed = envSchema.parse(process.env);
+export const env = {
+  ...parsed,
+  SUPABASE_URL: normalizeSupabaseUrl(parsed.SUPABASE_URL)
+};
