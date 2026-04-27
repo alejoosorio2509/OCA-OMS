@@ -86,6 +86,16 @@ function fmtDate(value: string | null) {
   return d.toLocaleString();
 }
 
+const BOGOTA_TZ = "America/Bogota";
+const bogotaDateOnlyFmt = new Intl.DateTimeFormat("es-CO", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+
+function fmtDateOnlyBogota(value: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return bogotaDateOnlyFmt.format(d);
+}
+
 function toKebab(value: string) {
   return value.toLowerCase().replaceAll("_", "-");
 }
@@ -285,12 +295,12 @@ export function OrderDetailsPage() {
             <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Aprobación Valorización ST</div><div>{fmtDate(order.levantamiento.fechaAprobacionValorizacionSt)}</div></div>
 
             <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Prevalidación</div><div>{fmtDate(order.levantamiento.fechaPrevalidacion)}</div></div>
-            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Asignación</div><div>{fmtDate(order.levantamiento.fechaAsignacion)}</div></div>
-            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Primer Elemento</div><div>{fmtDate(order.levantamiento.fechaPrimerElemento)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Asignación</div><div>{fmtDateOnlyBogota(order.levantamiento.fechaAsignacion)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Primer Elemento</div><div>{fmtDateOnlyBogota(order.levantamiento.fechaPrimerElemento)}</div></div>
 
-            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Entrega Postproceso</div><div>{fmtDate(order.levantamiento.fechaEntregaPostproceso)}</div></div>
-            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Aprobación Postproceso</div><div>{fmtDate(order.levantamiento.fechaAprobacionPostproceso)}</div></div>
-            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Gestión</div><div>{fmtDate(order.levantamiento.fechaGestion)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Entrega Postproceso</div><div>{fmtDateOnlyBogota(order.levantamiento.fechaEntregaPostproceso)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Aprobación Postproceso</div><div>{fmtDateOnlyBogota(order.levantamiento.fechaAprobacionPostproceso)}</div></div>
+            <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Gestión</div><div>{fmtDateOnlyBogota(order.levantamiento.fechaGestion)}</div></div>
 
             <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Fecha Devolución</div><div>{fmtDate(order.levantamiento.fechaDevolucion)}</div></div>
             <div><div style={{ color: "var(--muted)", fontSize: 12 }}>Usuario Solicitante</div><div>{order.levantamiento.usuarioSolicitante || "—"}</div></div>
