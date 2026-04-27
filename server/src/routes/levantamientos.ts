@@ -176,6 +176,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const THRESHOLD_DIAS_CIERRE = 8;
   const THRESHOLD_DIAS_GESTION_TOTAL = 8;
 
+  const now = new Date();
+
   const computeRow = (row: {
     orderCode: string;
     nivelTension: string | null;
@@ -187,23 +189,21 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     fechaAprobacionPostproceso: Date | null;
   }, extra: { cierreSaitAt: Date | null; diasNovedades: number }) => {
     const assignedNum = row.fechaAsignacion ? inicioMap.get(normalizeDay(row.fechaAsignacion)) : undefined;
+    const diasNovedades = extra.diasNovedades;
+    const vencimientoNum = assignedNum !== undefined ? assignedNum + 8 + diasNovedades : undefined;
     const fechaGestionCalculada =
-      !row.fechaGestion && row.fechaAsignacion
+      !row.fechaGestion && vencimientoNum !== undefined
         ? (() => {
-            if (assignedNum === undefined) return null;
-            const targetKey = finNumberToDate.get(assignedNum + 8) ?? null;
+            const targetKey = finNumberToDate.get(vencimientoNum) ?? null;
             return targetKey ? parseBogotaDateOnly(targetKey) : null;
           })()
         : null;
     const fechaGestionEfectiva = row.fechaGestion ?? fechaGestionCalculada;
 
     const diasAsigna = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento);
-    const diasNovedades = extra.diasNovedades;
-    const gestionNum = fechaGestionEfectiva ? finMap.get(normalizeDay(fechaGestionEfectiva)) : undefined;
-    const diasGestionTotal =
-      assignedNum !== undefined && gestionNum !== undefined
-        ? (assignedNum + 8 + diasNovedades) - gestionNum
-        : null;
+    const refDate = row.fechaGestion ?? now;
+    const refNum = finMap.get(normalizeDay(refDate));
+    const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
     const diasAprobacionPost = diffByCalendar(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso);
     const diasCierre = diffByCalendar(inicioMap, finMap, row.fechaAprobacionPostproceso, fechaGestionEfectiva);
 
