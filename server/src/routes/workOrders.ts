@@ -51,11 +51,16 @@ const supabase =
 
 const requirePersistentSoportes = Boolean(process.env.RENDER_SERVICE_ID || process.env.RENDER_SERVICE_NAME);
 
-async function uploadSoporteToSupabase(input: { localPath: string; storageKey: string; contentType?: string | undefined }) {
+async function uploadSoporteToSupabase(input: {
+  bucket: string;
+  localPath: string;
+  storageKey: string;
+  contentType?: string | undefined;
+}) {
   if (!supabase) return { ok: false as const, error: "SUPABASE_NOT_CONFIGURED" };
   try {
     const body = await fs.promises.readFile(input.localPath);
-    const { error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).upload(input.storageKey, body, {
+    const { error } = await supabase.storage.from(input.bucket).upload(input.storageKey, body, {
       contentType: input.contentType,
       upsert: false
     });
@@ -1125,6 +1130,7 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
     const soportePath = `/uploads/novedades/${req.file.filename}`;
     if (supabase) {
       const r = await uploadSoporteToSupabase({
+        bucket: env.SUPABASE_STORAGE_BUCKET_NOVEDADES,
         localPath: req.file.path,
         storageKey: `novedades/${req.file.filename}`,
         contentType: req.file.mimetype
@@ -1221,6 +1227,7 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
     const soportePath = `/uploads/postproceso/${req.file.filename}`;
     if (supabase) {
       const r = await uploadSoporteToSupabase({
+        bucket: env.SUPABASE_STORAGE_BUCKET_POSTPROCESO,
         localPath: req.file.path,
         storageKey: `postproceso/${req.file.filename}`,
         contentType: req.file.mimetype

@@ -8,7 +8,9 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().min(1).default("http://localhost:5173"),
   SUPABASE_URL: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
-  SUPABASE_STORAGE_BUCKET: z.string().min(1).default("soportes")
+  SUPABASE_STORAGE_BUCKET: z.string().min(1).default("soportes"),
+  SUPABASE_STORAGE_BUCKET_NOVEDADES: z.string().min(1).optional(),
+  SUPABASE_STORAGE_BUCKET_POSTPROCESO: z.string().min(1).optional()
 });
 
 function normalizeSupabaseUrl(input: string | undefined) {
@@ -23,5 +25,7 @@ function normalizeSupabaseUrl(input: string | undefined) {
 const parsed = envSchema.parse(process.env);
 export const env = {
   ...parsed,
-  SUPABASE_URL: normalizeSupabaseUrl(parsed.SUPABASE_URL)
+  SUPABASE_URL: normalizeSupabaseUrl(parsed.SUPABASE_URL),
+  SUPABASE_STORAGE_BUCKET_NOVEDADES: parsed.SUPABASE_STORAGE_BUCKET_NOVEDADES ?? parsed.SUPABASE_STORAGE_BUCKET,
+  SUPABASE_STORAGE_BUCKET_POSTPROCESO: parsed.SUPABASE_STORAGE_BUCKET_POSTPROCESO ?? parsed.SUPABASE_STORAGE_BUCKET
 };

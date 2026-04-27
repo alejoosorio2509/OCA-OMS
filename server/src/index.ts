@@ -78,7 +78,13 @@ app.get("/uploads/*path", async (req, res) => {
       return;
     }
 
-    const { data, error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).download(key);
+    const bucket =
+      key.startsWith("novedades/")
+        ? env.SUPABASE_STORAGE_BUCKET_NOVEDADES
+        : key.startsWith("postproceso/")
+          ? env.SUPABASE_STORAGE_BUCKET_POSTPROCESO
+          : env.SUPABASE_STORAGE_BUCKET;
+    const { data, error } = await supabase.storage.from(bucket).download(key);
     if (error || !data) {
       res.status(404).end();
       return;
