@@ -28,7 +28,6 @@ const CUADRILLA_LABELS: Record<string, string> = {
   CUA_2: "OSCAR CASTELBLANCO",
   CUA_3: "DANNY BRICEÑO",
   CUA_4: "JIMMY CRUZ",
-  CUA_10: "JIMMY CRUZ",
   SUP: "WILMER MARTINEZ"
 };
 

@@ -66,6 +66,17 @@ function diffByCalendar(
   return Math.max(0, endNum - startNum);
 }
 
+function diffByCalendarEndNow(
+  inicioMap: Map<string, number>,
+  finMap: Map<string, number>,
+  start: Date | null,
+  end: Date | null,
+  now: Date
+) {
+  if (!start) return null;
+  return diffByCalendar(inicioMap, finMap, start, end ?? now);
+}
+
 function colorByThreshold(value: number | null, threshold: number): "green" | "red" | null {
   if (value === null) return null;
   return value <= threshold ? "green" : "red";
@@ -176,6 +187,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (!Number.isNaN(d.getTime())) entregaByCode.set(code, d);
   }
 
+  const now = new Date();
+
   let asignacion = 0;
   let primerElemento = 0;
   let entregaPostproceso = 0;
@@ -205,8 +218,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (etapa === "APROBACION") aprobacionPostproceso++;
     if (etapa === "GESTION") gestion++;
 
-    if (r.fechaAprobacionPostproceso && entrega) {
-      const dias = diffByCalendar(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso);
+    if (entrega) {
+      const dias = diffByCalendarEndNow(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso, now);
       if (dias !== null) {
         if (dias <= 3) aprobacionCumple++;
         else aprobacionNoCumple++;
@@ -354,12 +367,12 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         : null;
     const fechaGestionEfectiva = row.fechaGestion ?? fechaGestionCalculada;
 
-    const diasAsigna = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento);
+    const diasAsigna = diffByCalendarEndNow(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento, now);
     const refDate = row.fechaGestion ?? now;
     const refNum = finMap.get(normalizeDay(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
-    const diasAprobacionPost = diffByCalendar(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso);
-    const diasCierre = diffByCalendar(inicioMap, finMap, row.fechaAprobacionPostproceso, fechaGestionEfectiva);
+    const diasAprobacionPost = diffByCalendarEndNow(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso, now);
+    const diasCierre = diffByCalendarEndNow(inicioMap, finMap, row.fechaAprobacionPostproceso, row.fechaGestion, now);
 
     const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
     const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
