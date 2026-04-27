@@ -49,6 +49,8 @@ const supabase =
       })
     : null;
 
+const requirePersistentSoportes = Boolean(process.env.RENDER_SERVICE_ID || process.env.RENDER_SERVICE_NAME);
+
 async function uploadSoporteToSupabase(input: { localPath: string; storageKey: string; contentType?: string | undefined }) {
   if (!supabase) return false;
   const body = await fs.promises.readFile(input.localPath);
@@ -59,6 +61,11 @@ async function uploadSoporteToSupabase(input: { localPath: string; storageKey: s
   if (error) return false;
   await fs.promises.unlink(input.localPath).catch(() => null);
   return true;
+}
+
+async function cleanupLocalUpload(filePath: string | undefined) {
+  if (!filePath) return;
+  await fs.promises.unlink(filePath).catch(() => null);
 }
 
 const statusSchema = z.enum([
@@ -1086,6 +1093,11 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
       res.status(400).json({ error: "SOPORTE_REQUIRED" });
       return;
     }
+    if (requirePersistentSoportes && !supabase) {
+      await cleanupLocalUpload(req.file.path);
+      res.status(503).json({ error: "STORAGE_NOT_CONFIGURED" });
+      return;
+    }
 
     const dInicio = parseBogotaDateOnly(String(fechaInicio ?? ""));
     const dFin = fechaFin ? parseBogotaDateOnly(String(fechaFin)) : null;
@@ -1113,6 +1125,7 @@ workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS")
         contentType: req.file.mimetype
       });
       if (!ok) {
+        await cleanupLocalUpload(req.file.path);
         res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED" });
         return;
       }
@@ -1187,6 +1200,11 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
       res.status(400).json({ error: "SOPORTE_REQUIRED" });
       return;
     }
+    if (requirePersistentSoportes && !supabase) {
+      await cleanupLocalUpload(req.file.path);
+      res.status(503).json({ error: "STORAGE_NOT_CONFIGURED" });
+      return;
+    }
 
     const dFecha = parseBogotaDateOnly(String(fecha ?? ""));
     if (Number.isNaN(dFecha.getTime())) {
@@ -1203,6 +1221,7 @@ workOrdersRouter.post("/:id/postproceso", requireAuth, requirePermission("ORDERS
         contentType: req.file.mimetype
       });
       if (!ok) {
+        await cleanupLocalUpload(req.file.path);
         res.status(500).json({ error: "SOPORTE_UPLOAD_FAILED" });
         return;
       }
