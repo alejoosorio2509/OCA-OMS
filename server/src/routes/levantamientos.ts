@@ -186,10 +186,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
   }, extra: { cierreSaitAt: Date | null; diasNovedades: number }) => {
+    const assignedNum = row.fechaAsignacion ? inicioMap.get(normalizeDay(row.fechaAsignacion)) : undefined;
     const fechaGestionCalculada =
       !row.fechaGestion && row.fechaAsignacion
         ? (() => {
-            const assignedNum = inicioMap.get(normalizeDay(row.fechaAsignacion));
             if (assignedNum === undefined) return null;
             const targetKey = finNumberToDate.get(assignedNum + 8) ?? null;
             return targetKey ? parseBogotaDateOnly(targetKey) : null;
@@ -198,9 +198,12 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const fechaGestionEfectiva = row.fechaGestion ?? fechaGestionCalculada;
 
     const diasAsigna = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento);
-    const diasGestionBase = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, fechaGestionEfectiva);
     const diasNovedades = extra.diasNovedades;
-    const diasGestionTotal = diasGestionBase === null ? null : diasGestionBase + diasNovedades;
+    const gestionNum = fechaGestionEfectiva ? finMap.get(normalizeDay(fechaGestionEfectiva)) : undefined;
+    const diasGestionTotal =
+      assignedNum !== undefined && gestionNum !== undefined
+        ? (assignedNum + 8 + diasNovedades) - gestionNum
+        : null;
     const diasAprobacionPost = diffByCalendar(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso);
     const diasCierre = diffByCalendar(inicioMap, finMap, row.fechaAprobacionPostproceso, fechaGestionEfectiva);
 
