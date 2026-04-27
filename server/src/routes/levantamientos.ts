@@ -185,7 +185,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     fechaGestion: Date | null;
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
-  }, extra: { cierreSaitAt: Date | null }) => {
+  }, extra: { cierreSaitAt: Date | null; diasNovedades: number }) => {
     const fechaGestionCalculada =
       !row.fechaGestion && row.fechaAsignacion
         ? (() => {
@@ -198,7 +198,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const fechaGestionEfectiva = row.fechaGestion ?? fechaGestionCalculada;
 
     const diasAsigna = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento);
-    const diasGestionTotal = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, fechaGestionEfectiva);
+    const diasGestionBase = diffByCalendar(inicioMap, finMap, row.fechaAsignacion, fechaGestionEfectiva);
+    const diasNovedades = extra.diasNovedades;
+    const diasGestionTotal = diasGestionBase === null ? null : diasGestionBase + diasNovedades;
     const diasAprobacionPost = diffByCalendar(inicioMap, finMap, extra.cierreSaitAt, row.fechaAprobacionPostproceso);
     const diasCierre = diffByCalendar(inicioMap, finMap, row.fechaAprobacionPostproceso, fechaGestionEfectiva);
 
@@ -218,6 +220,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       diasAsigna,
       diasAprobacionPost,
       diasCierre,
+      diasNovedades,
       diasGestionTotal,
       diasAsignaColor: diasAsignaColorCalc,
       diasAprobacionPostColor: diasAprobacionPostColorCalc,
@@ -296,8 +299,27 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
     }
 
+    const novedades = codes.length
+      ? await prisma.novedad.findMany({
+          where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
+          select: { workOrder: { select: { code: true } }, fechaInicio: true, fechaFin: true }
+        })
+      : [];
+    const novedadSumByCode = new Map<string, number>();
+    for (const n of novedades) {
+      const iniNum = inicioMap.get(normalizeDay(n.fechaInicio));
+      const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+      if (iniNum !== undefined && finNum !== undefined) {
+        const diff = finNum - iniNum;
+        if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+      }
+    }
+
     const items = pageItems.map((r) => {
-      const computed = computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null });
+      const computed = computeRow(r, {
+        cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null,
+        diasNovedades: novedadSumByCode.get(r.orderCode) ?? 0
+      });
       const w = woByCode.get(r.orderCode) ?? null;
       return {
         ...computed,
@@ -349,8 +371,27 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     if (!Number.isNaN(d.getTime())) cierreSaitByCode.set(code, d);
   }
 
+  const novedades = codes.length
+    ? await prisma.novedad.findMany({
+        where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
+        select: { workOrder: { select: { code: true } }, fechaInicio: true, fechaFin: true }
+      })
+    : [];
+  const novedadSumByCode = new Map<string, number>();
+  for (const n of novedades) {
+    const iniNum = inicioMap.get(normalizeDay(n.fechaInicio));
+    const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+    if (iniNum !== undefined && finNum !== undefined) {
+      const diff = finNum - iniNum;
+      if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+    }
+  }
+
   let computed = base.map((r) => {
-    const row = computeRow(r, { cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null });
+    const row = computeRow(r, {
+      cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null,
+      diasNovedades: novedadSumByCode.get(r.orderCode) ?? 0
+    });
     const w = woByCode.get(r.orderCode) ?? null;
     return {
       ...row,

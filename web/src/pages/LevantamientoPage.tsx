@@ -21,39 +21,20 @@ function colorOf(v: number | null) {
 }
 
 const NOVEDAD_OPCIONES = [
-  "Aplicación diagrama unifilar",
-  "Aplicación retardada",
-  "Asociación de incrementos por BDE",
-  "Cambio de propiedad",
-  "Creación de componentes",
-  "Desalineación STM y QGIS",
-  "Desviación Topológica",
-  "Error cargue de documentos QGIS",
-  "Error elementos borrados",
-  "Error SE - Levantamiento de restricciones",
-  "Incremento en ticket",
-  "Incremento Energy Consumer",
-  "Incremento ERROR -20400",
-  "Incremento FKC, UNIC",
-  "Incremento LOCKED",
-  "Incremento OWMC",
-  "Incrementos",
-  "Indisponibilidad sistema",
-  "OT Cancelada por el cliente",
-  "Otro",
-  "PDL Anulado",
-  "PDL con traslado de carga",
-  "Pendiente ejecución de otra OT",
-  "Pendiente ejecución de otro incremento",
-  "Proyectos especiales",
-  "Rechazo automático - No reporte STAMS",
-  "Rechazo manual inconsistente",
-  "Refresh",
-  "Retido de CD",
-  "Rótulo duplicado",
-  "Sincronización AGUI STM AT",
-  "Sincronización estado incremento SAIT",
-  "Sobre dimensión"
+  "STOP WORK POR LLUVIAS EN EL SECTOR",
+  "STOP WORK POR DERRUMBES EN LA VIA",
+  "CLIENTE NO PERMITE ACCESO",
+  "STOP WORK POR INCIDENTES DE ORDEN PUBLICO",
+  "RUTA ALTERNA POR BLOQUEOS",
+  "DESEMBARCO",
+  "INCIDENTES MECANICOS",
+  "TANQUEO GASOLINA",
+  "INSPECCIÓN ENEL",
+  "AUTORIZACIÓN INGRESO",
+  "DIFICULTAD ACCESO",
+  "STOP WORK POR RIESGO ELÉCTRICO",
+  "STOP WORK POR RIESGO BIOLOGICO",
+  "STOP WORK ENEL"
 ];
 
 export function LevantamientoPage() {
@@ -397,15 +378,16 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días Asigna</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAprobacionPost")}>Días aprobación Post</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasCierre")}>Días cierre</button></th>
+                <th>Días novedades</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasGestionTotal")}>Días gestión total</button></th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -431,6 +413,9 @@ export function LevantamientoPage() {
                     </td>
                     <td style={{ fontWeight: 800, color: it.diasCierreColor === "red" ? "red" : it.diasCierreColor === "green" ? "green" : colorOf(it.diasCierre) }}>
                       {it.diasCierre ?? "—"}
+                    </td>
+                    <td style={{ fontWeight: 800, color: colorOf(it.diasNovedades) }}>
+                      {it.diasNovedades}
                     </td>
                     <td style={{ fontWeight: 800, color: it.diasGestionTotalColor === "red" ? "red" : it.diasGestionTotalColor === "green" ? "green" : colorOf(it.diasGestionTotal) }}>
                       {it.diasGestionTotal ?? "—"}
@@ -461,7 +446,7 @@ export function LevantamientoPage() {
                             setShowPostprocesoModal(true);
                           }}
                         >
-                          Cierre SAIT
+                          Entrega postproceso
                         </button>
                       </div>
                     </td>
