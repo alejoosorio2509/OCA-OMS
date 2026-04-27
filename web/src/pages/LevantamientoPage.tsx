@@ -332,9 +332,36 @@ export function LevantamientoPage() {
       {metrics ? (
         <div className="card">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <div style={{ padding: 12, border: `1px solid ${DASH_BLUE}`, borderRadius: 8, background: "white" }}>
-              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Total</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.total}</div>
+            <div
+              style={{
+                padding: 12,
+                border: `1px solid ${DASH_BLUE}`,
+                borderRadius: 8,
+                background: "white",
+                display: "flex",
+                alignItems: "center",
+                gap: 10
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto"
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-6v-6H10v6H4a1 1 0 0 1-1-1V10.5z" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Total</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.total}</div>
+              </div>
             </div>
             <button
               type="button"
@@ -345,11 +372,31 @@ export function LevantamientoPage() {
                 border: `1px solid ${applied.etapa === "ASIGNACION" ? DASH_RED : DASH_BLUE}`,
                 borderRadius: 8,
                 textAlign: "left",
-                background: applied.etapa === "ASIGNACION" ? `${DASH_RED}10` : "white"
+                background: applied.etapa === "ASIGNACION" ? `${DASH_RED}10` : "white",
+                display: "flex",
+                alignItems: "center",
+                gap: 10
               }}
             >
-              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Asignación</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.asignacion}</div>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: applied.etapa === "ASIGNACION" ? DASH_RED : DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto"
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M12 2a7 7 0 0 0-7 7c0 2.8 1.6 5.2 4 6.3V20a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-4.7c2.4-1.1 4-3.5 4-6.3a7 7 0 0 0-7-7zm2.5 12.1-1.5.7V19h-2v-4.2l-1.5-.7A5 5 0 1 1 14.5 14.1z" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Asignación</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.asignacion}</div>
+              </div>
             </button>
             <button
               type="button"
@@ -360,11 +407,31 @@ export function LevantamientoPage() {
                 border: `1px solid ${applied.etapa === "PRIMER_ELEMENTO" ? DASH_RED : DASH_BLUE}`,
                 borderRadius: 8,
                 textAlign: "left",
-                background: applied.etapa === "PRIMER_ELEMENTO" ? `${DASH_RED}10` : "white"
+                background: applied.etapa === "PRIMER_ELEMENTO" ? `${DASH_RED}10` : "white",
+                display: "flex",
+                alignItems: "center",
+                gap: 10
               }}
             >
-              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Primer elemento</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.primerElemento}</div>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: applied.etapa === "PRIMER_ELEMENTO" ? DASH_RED : DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto"
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm1 5h-2v6l5 3 .9-1.5-3.9-2.3V7z" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Primer elemento</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.primerElemento}</div>
+              </div>
             </button>
             <button
               type="button"
@@ -375,11 +442,31 @@ export function LevantamientoPage() {
                 border: `1px solid ${applied.etapa === "ENTREGA_POSTPROCESO" ? DASH_RED : DASH_BLUE}`,
                 borderRadius: 8,
                 textAlign: "left",
-                background: applied.etapa === "ENTREGA_POSTPROCESO" ? `${DASH_RED}10` : "white"
+                background: applied.etapa === "ENTREGA_POSTPROCESO" ? `${DASH_RED}10` : "white",
+                display: "flex",
+                alignItems: "center",
+                gap: 10
               }}
             >
-              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Entrega postproceso</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.entregaPostproceso}</div>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: applied.etapa === "ENTREGA_POSTPROCESO" ? DASH_RED : DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto"
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M7 18c-1.7 0-3-1.3-3-3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v9c0 1.7-1.3 3-3 3H7zm10-2c.6 0 1-.4 1-1V6c0-.6-.4-1-1-1H7c-.6 0-1 .4-1 1v9c0 .6.4 1 1 1h10zm-6 6H9v-2h2v2zm4 0h-2v-2h2v2z" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Entrega postproceso</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.entregaPostproceso}</div>
+              </div>
             </button>
             <button
               type="button"
@@ -390,17 +477,38 @@ export function LevantamientoPage() {
                 border: `1px solid ${applied.etapa === "APROBACION_POSTPROCESO" ? DASH_RED : DASH_BLUE}`,
                 borderRadius: 8,
                 textAlign: "left",
-                background: applied.etapa === "APROBACION_POSTPROCESO" ? `${DASH_RED}10` : "white"
+                background: applied.etapa === "APROBACION_POSTPROCESO" ? `${DASH_RED}10` : "white",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10
               }}
             >
-              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Aprobación postproceso</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.aprobacionPostproceso}</div>
-              <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>3 días máx</div>
-              <div style={{ height: 8, background: `${DASH_BLUE}22`, borderRadius: 10, overflow: "hidden", marginTop: 6 }}>
-                <div style={{ height: "100%", width: `${metrics.aprobacionPct}%`, background: DASH_RED }} />
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: applied.etapa === "APROBACION_POSTPROCESO" ? DASH_RED : DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto",
+                  marginTop: 2
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+                </svg>
               </div>
-              <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>
-                Cumplen: {metrics.aprobacionCumple} · No cumplen: {metrics.aprobacionNoCumple} · {metrics.aprobacionPct}%
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Aprobación postproceso</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.aprobacionPostproceso}</div>
+                <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>3 días máx</div>
+                <div style={{ height: 8, background: `${DASH_BLUE}22`, borderRadius: 10, overflow: "hidden", marginTop: 6 }}>
+                  <div style={{ height: "100%", width: `${metrics.aprobacionPct}%`, background: DASH_RED }} />
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>
+                  Cumplen: {metrics.aprobacionCumple} · No cumplen: {metrics.aprobacionNoCumple} · {metrics.aprobacionPct}%
+                </div>
               </div>
             </button>
             <button
@@ -412,11 +520,31 @@ export function LevantamientoPage() {
                 border: `1px solid ${applied.etapa === "GESTION" ? DASH_RED : DASH_BLUE}`,
                 borderRadius: 8,
                 textAlign: "left",
-                background: applied.etapa === "GESTION" ? `${DASH_RED}10` : "white"
+                background: applied.etapa === "GESTION" ? `${DASH_RED}10` : "white",
+                display: "flex",
+                alignItems: "center",
+                gap: 10
               }}
             >
-              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Gestión</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.gestion}</div>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: applied.etapa === "GESTION" ? DASH_RED : DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto"
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M9 21H7v-8h2v8zm4 0h-2V3h2v18zm4 0h-2v-12h2v12z" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Gestión</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.gestion}</div>
+              </div>
             </button>
           </div>
         </div>
