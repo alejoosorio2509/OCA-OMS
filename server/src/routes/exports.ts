@@ -640,7 +640,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     const finNum = n.fechaFin ? finMap.get(normalizeDateStr(n.fechaFin)) : undefined;
     if (iniNum !== undefined && finNum !== undefined) {
       const diff = finNum - iniNum;
-      if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+      if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
     }
   }
 

@@ -179,7 +179,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
     if (iniNum !== undefined && finNum !== undefined) {
       const diff = finNum - iniNum;
-      if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+      if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
     }
   }
 
@@ -527,7 +527,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
       if (iniNum !== undefined && finNum !== undefined) {
         const diff = finNum - iniNum;
-        if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+        if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
       }
     }
 
@@ -619,7 +619,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
     if (iniNum !== undefined && finNum !== undefined) {
       const diff = finNum - iniNum;
-      if (diff > 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + diff);
+      if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
     }
   }
 
