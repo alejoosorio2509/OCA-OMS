@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LevantamientoListItem } from "../api";
-import { listLevantamientoNivelesTension, listLevantamientos } from "../api";
+import { getLevantamientoMetrics, listLevantamientoNivelesTension, listLevantamientos } from "../api";
 import { useAuth } from "../auth";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { API_URL } from "../apiUrl";
@@ -25,6 +25,7 @@ const CUADRILLA_LABELS: Record<string, string> = {
   CUA_2: "OSCAR CASTELBLANCO",
   CUA_3: "DANNY BRICEÑO",
   CUA_4: "JIMMY CRUZ",
+  CUA_10: "JIMMY CRUZ",
   SUP: "WILMER MARTINEZ"
 };
 
@@ -73,6 +74,17 @@ export function LevantamientoPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<null | {
+    total: number;
+    asignacion: number;
+    primerElemento: number;
+    entregaPostproceso: number;
+    aprobacionPostproceso: number;
+    gestion: number;
+    aprobacionCumple: number;
+    aprobacionNoCumple: number;
+    aprobacionPct: number;
+  }>(null);
 
   const [hasSearched, setHasSearched] = useState(() => initialParams.toString().length > 0);
   const [selectedOrder, setSelectedOrder] = useState<{ id: string; code: string } | null>(null);
@@ -242,12 +254,26 @@ export function LevantamientoPage() {
     if (!token || !hasSearched) {
       setLoading(false);
       setError(null);
+      setMetrics(null);
       return () => {
         cancelled = true;
       };
     }
     setLoading(true);
     setError(null);
+    getLevantamientoMetrics(token, {
+      search: query.search,
+      nivelTension: query.nivelTension,
+      cuadrilla: query.cuadrilla,
+      asignacionStart: query.asignacionStart,
+      asignacionEnd: query.asignacionEnd
+    })
+      .then((m) => {
+        if (!cancelled) setMetrics(m);
+      })
+      .catch(() => {
+        if (!cancelled) setMetrics(null);
+      });
     listLevantamientos(token, query)
       .then((data) => {
         if (cancelled) return;
@@ -284,6 +310,43 @@ export function LevantamientoPage() {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
+      {metrics ? (
+        <div className="card">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Total</div>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.total}</div>
+            </div>
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Asignación</div>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.asignacion}</div>
+            </div>
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Primer elemento</div>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.primerElemento}</div>
+            </div>
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Entrega postproceso</div>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.entregaPostproceso}</div>
+            </div>
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Aprobación postproceso</div>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.aprobacionPostproceso}</div>
+              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>3 días máx</div>
+              <div style={{ height: 8, background: "#eee", borderRadius: 10, overflow: "hidden", marginTop: 6 }}>
+                <div style={{ height: "100%", width: `${metrics.aprobacionPct}%`, background: "var(--accent)" }} />
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+                Cumplen: {metrics.aprobacionCumple} · No cumplen: {metrics.aprobacionNoCumple} · {metrics.aprobacionPct}%
+              </div>
+            </div>
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Gestión</div>
+              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.gestion}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="card">
         <div className="row" style={{ alignItems: "end", gap: 10, flexWrap: "wrap" }}>
           <div className="field" style={{ flex: 1, minWidth: 220 }}>

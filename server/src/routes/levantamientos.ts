@@ -83,6 +83,153 @@ levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("ORDER
   res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
 });
 
+levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+  const querySchema = z.object({
+    search: z.string().min(1).optional(),
+    nivelTension: z.string().min(1).optional(),
+    cuadrilla: z.string().min(1).optional(),
+    asignacionStart: z.string().min(1).optional(),
+    asignacionEnd: z.string().min(1).optional()
+  });
+
+  const parsed = querySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "INVALID_QUERY" });
+    return;
+  }
+
+  const { search, nivelTension, cuadrilla, asignacionStart, asignacionEnd } = parsed.data;
+
+  const parseDay = (value: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!m) return null;
+    const d = parseBogotaDateOnly(value.trim());
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const startDate = asignacionStart ? parseDay(asignacionStart) : null;
+  const endDate = asignacionEnd ? parseDay(asignacionEnd) : null;
+  if ((asignacionStart && !startDate) || (asignacionEnd && !endDate)) {
+    res.status(400).json({ error: "INVALID_DATE_FILTER" });
+    return;
+  }
+  const endExclusive = endDate ? new Date(endDate.getTime() + 24 * 60 * 60 * 1000) : null;
+
+  const where: Prisma.LevantamientoWhereInput = {
+    ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
+    ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
+    ...(search ? { orderCode: { contains: search } } : {}),
+    ...(startDate || endExclusive
+      ? {
+          fechaAsignacion: {
+            ...(startDate ? { gte: startDate } : {}),
+            ...(endExclusive ? { lt: endExclusive } : {})
+          }
+        }
+      : {})
+  };
+
+  const [rows, calendar] = await Promise.all([
+    prisma.levantamiento.findMany({
+      where,
+      select: {
+        orderCode: true,
+        fechaAsignacion: true,
+        fechaPrimerElemento: true,
+        fechaEntregaPostproceso: true,
+        fechaAprobacionPostproceso: true,
+        fechaGestion: true
+      }
+    }),
+    prisma.calendar.findMany({ select: { date: true, dayNumber: true, dayNumberFin: true } })
+  ]);
+
+  const { inicioMap, finMap } = (() => {
+    const inicioMap = new Map<string, number>();
+    const finMap = new Map<string, number>();
+    for (const c of calendar) {
+      const key = normalizeDay(c.date);
+      inicioMap.set(key, c.dayNumber);
+      finMap.set(key, c.dayNumberFin ?? c.dayNumber);
+    }
+    return { inicioMap, finMap };
+  })();
+
+  const codes = rows.map((r) => r.orderCode);
+  const wo = codes.length
+    ? await prisma.workOrder.findMany({ where: { code: { in: codes } }, select: { id: true, code: true } })
+    : [];
+  const idToCode = new Map(wo.map((o) => [o.id, o.code]));
+  const histories = wo.length
+    ? await prisma.workOrderHistory.findMany({
+        where: { workOrderId: { in: wo.map((o) => o.id) }, note: "Cierre SAIT", fechaInicio: { not: null } },
+        select: { workOrderId: true, fechaInicio: true, changedAt: true },
+        orderBy: { changedAt: "desc" }
+      })
+    : [];
+  const entregaByCode = new Map<string, Date>();
+  for (const h of histories) {
+    const code = idToCode.get(h.workOrderId);
+    if (!code) continue;
+    if (entregaByCode.has(code)) continue;
+    const d = parseBogotaDateOnly(String(h.fechaInicio ?? ""));
+    if (!Number.isNaN(d.getTime())) entregaByCode.set(code, d);
+  }
+
+  let asignacion = 0;
+  let primerElemento = 0;
+  let entregaPostproceso = 0;
+  let aprobacionPostproceso = 0;
+  let gestion = 0;
+  let aprobacionCumple = 0;
+  let aprobacionNoCumple = 0;
+
+  for (const r of rows) {
+    const entrega = entregaByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+    const etapa =
+      r.fechaGestion
+        ? "GESTION"
+        : r.fechaAprobacionPostproceso
+          ? "APROBACION"
+          : entrega
+            ? "ENTREGA"
+            : r.fechaPrimerElemento
+              ? "PRIMER_ELEMENTO"
+              : r.fechaAsignacion
+                ? "ASIGNACION"
+                : "SIN";
+
+    if (etapa === "ASIGNACION") asignacion++;
+    if (etapa === "PRIMER_ELEMENTO") primerElemento++;
+    if (etapa === "ENTREGA") entregaPostproceso++;
+    if (etapa === "APROBACION") aprobacionPostproceso++;
+    if (etapa === "GESTION") gestion++;
+
+    if (r.fechaAprobacionPostproceso && entrega) {
+      const dias = diffByCalendar(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso);
+      if (dias !== null) {
+        if (dias <= 3) aprobacionCumple++;
+        else aprobacionNoCumple++;
+      }
+    }
+  }
+
+  const total = rows.length;
+  const denomAprob = aprobacionCumple + aprobacionNoCumple;
+  const aprobacionPct = denomAprob ? Math.round((aprobacionCumple / denomAprob) * 100) : 0;
+  res.json({
+    total,
+    asignacion,
+    primerElemento,
+    entregaPostproceso,
+    aprobacionPostproceso,
+    gestion,
+    aprobacionCumple,
+    aprobacionNoCumple,
+    aprobacionPct
+  });
+});
+
 levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const querySchema = z.object({
     search: z.string().min(1).optional(),
