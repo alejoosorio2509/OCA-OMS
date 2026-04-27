@@ -20,6 +20,9 @@ function colorOf(v: number | null) {
   return "var(--text)";
 }
 
+const DASH_BLUE = "#0B3356";
+const DASH_RED = "#DE473C";
+
 const CUADRILLA_LABELS: Record<string, string> = {
   CUA_1: "RAFAEL DURAN",
   CUA_2: "OSCAR CASTELBLANCO",
@@ -329,50 +332,74 @@ export function LevantamientoPage() {
       {metrics ? (
         <div className="card">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 8 }}>
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Total</div>
-              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.total}</div>
+            <div style={{ padding: 12, border: `1px solid ${DASH_BLUE}`, borderRadius: 8, background: "white" }}>
+              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Total</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.total}</div>
             </div>
             <button
               type="button"
               className="btn-link"
               onClick={() => toggleEtapa("ASIGNACION")}
-              style={{ padding: 12, border: `1px solid ${applied.etapa === "ASIGNACION" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+              style={{
+                padding: 12,
+                border: `1px solid ${applied.etapa === "ASIGNACION" ? DASH_RED : DASH_BLUE}`,
+                borderRadius: 8,
+                textAlign: "left",
+                background: applied.etapa === "ASIGNACION" ? `${DASH_RED}10` : "white"
+              }}
             >
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Asignación</div>
-              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.asignacion}</div>
+              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Asignación</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.asignacion}</div>
             </button>
             <button
               type="button"
               className="btn-link"
               onClick={() => toggleEtapa("PRIMER_ELEMENTO")}
-              style={{ padding: 12, border: `1px solid ${applied.etapa === "PRIMER_ELEMENTO" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+              style={{
+                padding: 12,
+                border: `1px solid ${applied.etapa === "PRIMER_ELEMENTO" ? DASH_RED : DASH_BLUE}`,
+                borderRadius: 8,
+                textAlign: "left",
+                background: applied.etapa === "PRIMER_ELEMENTO" ? `${DASH_RED}10` : "white"
+              }}
             >
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Primer elemento</div>
-              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.primerElemento}</div>
+              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Primer elemento</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.primerElemento}</div>
             </button>
             <button
               type="button"
               className="btn-link"
               onClick={() => toggleEtapa("ENTREGA_POSTPROCESO")}
-              style={{ padding: 12, border: `1px solid ${applied.etapa === "ENTREGA_POSTPROCESO" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+              style={{
+                padding: 12,
+                border: `1px solid ${applied.etapa === "ENTREGA_POSTPROCESO" ? DASH_RED : DASH_BLUE}`,
+                borderRadius: 8,
+                textAlign: "left",
+                background: applied.etapa === "ENTREGA_POSTPROCESO" ? `${DASH_RED}10` : "white"
+              }}
             >
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Entrega postproceso</div>
-              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.entregaPostproceso}</div>
+              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Entrega postproceso</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.entregaPostproceso}</div>
             </button>
             <button
               type="button"
               className="btn-link"
               onClick={() => toggleEtapa("APROBACION_POSTPROCESO")}
-              style={{ padding: 12, border: `1px solid ${applied.etapa === "APROBACION_POSTPROCESO" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+              style={{
+                padding: 12,
+                border: `1px solid ${applied.etapa === "APROBACION_POSTPROCESO" ? DASH_RED : DASH_BLUE}`,
+                borderRadius: 8,
+                textAlign: "left",
+                background: applied.etapa === "APROBACION_POSTPROCESO" ? `${DASH_RED}10` : "white"
+              }}
             >
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Aprobación postproceso</div>
-              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.aprobacionPostproceso}</div>
-              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>3 días máx</div>
-              <div style={{ height: 8, background: "#eee", borderRadius: 10, overflow: "hidden", marginTop: 6 }}>
-                <div style={{ height: "100%", width: `${metrics.aprobacionPct}%`, background: "var(--accent)" }} />
+              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Aprobación postproceso</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.aprobacionPostproceso}</div>
+              <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>3 días máx</div>
+              <div style={{ height: 8, background: `${DASH_BLUE}22`, borderRadius: 10, overflow: "hidden", marginTop: 6 }}>
+                <div style={{ height: "100%", width: `${metrics.aprobacionPct}%`, background: DASH_RED }} />
               </div>
-              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+              <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>
                 Cumplen: {metrics.aprobacionCumple} · No cumplen: {metrics.aprobacionNoCumple} · {metrics.aprobacionPct}%
               </div>
             </button>
@@ -380,10 +407,16 @@ export function LevantamientoPage() {
               type="button"
               className="btn-link"
               onClick={() => toggleEtapa("GESTION")}
-              style={{ padding: 12, border: `1px solid ${applied.etapa === "GESTION" ? "var(--accent)" : "#eee"}`, borderRadius: 8, textAlign: "left" }}
+              style={{
+                padding: 12,
+                border: `1px solid ${applied.etapa === "GESTION" ? DASH_RED : DASH_BLUE}`,
+                borderRadius: 8,
+                textAlign: "left",
+                background: applied.etapa === "GESTION" ? `${DASH_RED}10` : "white"
+              }}
             >
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Gestión</div>
-              <div style={{ fontWeight: 800, fontSize: 22 }}>{metrics.gestion}</div>
+              <div style={{ color: DASH_BLUE, fontSize: 12 }}>Gestión</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.gestion}</div>
             </button>
           </div>
         </div>
