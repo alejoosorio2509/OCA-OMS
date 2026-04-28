@@ -55,11 +55,8 @@ function toCsv(headers: string[], rows: unknown[][]) {
   return `\ufeff${lines.join("\n")}\n`;
 }
 
-const BOGOTA_TZ = "America/Bogota";
-const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
-
 function normalizeDateStr(date: Date) {
-  return bogotaDateFmt.format(date);
+  return date.toISOString().slice(0, 10);
 }
 
 function calendarKey(date: Date) {
@@ -697,13 +694,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
       const diasAsigna = applyNovedades(diasAsignaRaw);
 
       const entregaPost = r.fechaEntregaPostproceso ?? cierreSaitByCode.get(r.orderCode) ?? null;
-      const aprobEndNum = finMap.get(normalizeDateStr(r.fechaAprobacionPostproceso ?? now));
-      const diasAprobacionPostRaw =
-        entregaPost
-          ? diffByCalendarEndNow(inicioMap, finMap, entregaPost, r.fechaAprobacionPostproceso, now)
-          : baseNum !== undefined && aprobEndNum !== undefined
-            ? Math.max(0, aprobEndNum - (baseNum + 3))
-            : null;
+      const diasAprobacionPostRaw = diffByCalendarEndNow(inicioMap, finMap, r.fechaPrimerElemento, entregaPost, now);
       const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
 
       const cierreStartNum = r.fechaAprobacionPostproceso ? inicioMap.get(normalizeDateStr(r.fechaAprobacionPostproceso)) : undefined;

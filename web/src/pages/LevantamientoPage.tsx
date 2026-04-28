@@ -61,11 +61,6 @@ const CUADRILLA_LABELS: Record<string, string> = {
   SUP: "WILMER MARTINEZ"
 };
 
-function cuadrillaLabel(code: string | null) {
-  if (!code) return "—";
-  return CUADRILLA_LABELS[code] ?? code;
-}
-
 const NOVEDAD_OPCIONES = [
   "STOP WORK POR LLUVIAS EN EL SECTOR",
   "STOP WORK POR DERRUMBES EN LA VIA",
@@ -80,8 +75,7 @@ const NOVEDAD_OPCIONES = [
   "DIFICULTAD ACCESO",
   "STOP WORK POR RIESGO ELÉCTRICO",
   "STOP WORK POR RIESGO BIOLOGICO",
-  "STOP WORK ENEL",
-  "OTRO (SOPORTAR ANTE LA PERSONA QUE APRUEBA EL POST)"
+  "STOP WORK ENEL"
 ];
 
 export function LevantamientoPage() {
@@ -343,6 +337,24 @@ export function LevantamientoPage() {
       cancelled = true;
     };
   }, [token, query, hasSearched, refreshTick]);
+
+  const exportCsv = async () => {
+    if (!token) return;
+    const p = new URLSearchParams();
+    if (applied.search.trim()) p.set("search", applied.search.trim());
+    if (applied.nivelTension.trim()) p.set("nivelTension", applied.nivelTension.trim());
+    if (applied.cuadrilla.trim()) p.set("cuadrilla", applied.cuadrilla.trim());
+    if (applied.etapa) p.set("etapa", applied.etapa);
+    if (applied.asignacionStart) p.set("asignacionStart", applied.asignacionStart);
+    if (applied.asignacionEnd) p.set("asignacionEnd", applied.asignacionEnd);
+    if (applied.diasAsignaColor) p.set("diasAsignaColor", applied.diasAsignaColor);
+    if (applied.diasAprobacionPostColor) p.set("diasAprobacionPostColor", applied.diasAprobacionPostColor);
+    if (applied.diasCierreColor) p.set("diasCierreColor", applied.diasCierreColor);
+    if (applied.diasGestionTotalColor) p.set("diasGestionTotalColor", applied.diasGestionTotalColor);
+    const qs = p.toString();
+    const filename = `levantamientos_${new Date().toISOString().slice(0, 10)}.csv`;
+    await downloadCsv(token, `/exports/levantamientos.csv${qs ? `?${qs}` : ""}`, filename);
+  };
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -620,11 +632,8 @@ export function LevantamientoPage() {
           </div>
 
           <div className="field" style={{ width: 200 }}>
-            <label>Días asignación</label>
-            <select
-              value={draftDiasAsignaColor}
-              onChange={(e) => setDraftDiasAsignaColor(e.target.value as "" | "red" | "yellow" | "green")}
-            >
+            <label>Días Asigna</label>
+            <select value={draftDiasAsignaColor} onChange={(e) => setDraftDiasAsignaColor(e.target.value as "" | "red" | "green")}>
               <option value="">Todos</option>
               <option value="green">Cumple</option>
               <option value="yellow">Por vencer</option>
@@ -635,7 +644,7 @@ export function LevantamientoPage() {
             <label>Días aprobación Post</label>
             <select
               value={draftDiasAprobacionPostColor}
-              onChange={(e) => setDraftDiasAprobacionPostColor(e.target.value as "" | "red" | "yellow" | "green")}
+              onChange={(e) => setDraftDiasAprobacionPostColor(e.target.value as "" | "red" | "green")}
             >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
@@ -645,10 +654,7 @@ export function LevantamientoPage() {
           </div>
           <div className="field" style={{ width: 200 }}>
             <label>Días cierre</label>
-            <select
-              value={draftDiasCierreColor}
-              onChange={(e) => setDraftDiasCierreColor(e.target.value as "" | "red" | "yellow" | "green")}
-            >
+            <select value={draftDiasCierreColor} onChange={(e) => setDraftDiasCierreColor(e.target.value as "" | "red" | "green")}>
               <option value="">Todos</option>
               <option value="green">Cumple</option>
               <option value="yellow">Por vencer</option>
@@ -659,7 +665,7 @@ export function LevantamientoPage() {
             <label>Días gestión total</label>
             <select
               value={draftDiasGestionTotalColor}
-              onChange={(e) => setDraftDiasGestionTotalColor(e.target.value as "" | "red" | "yellow" | "green")}
+              onChange={(e) => setDraftDiasGestionTotalColor(e.target.value as "" | "red" | "green")}
             >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
@@ -689,38 +695,9 @@ export function LevantamientoPage() {
 
         <div className="row" style={{ marginBottom: 10, justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 800 }}>Total: {totalCount}</div>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button
-              className="btn btn-sm"
-              type="button"
-              disabled={!token || !hasSearched || loading}
-              onClick={async () => {
-                if (!token) return;
-                try {
-                  const qs = new URLSearchParams();
-                  if (applied.search.trim()) qs.set("search", applied.search.trim());
-                  if (applied.nivelTension.trim()) qs.set("nivelTension", applied.nivelTension.trim());
-                  if (applied.cuadrilla.trim()) qs.set("cuadrilla", applied.cuadrilla.trim());
-                  if (applied.etapa) qs.set("etapa", applied.etapa);
-                  if (applied.asignacionStart) qs.set("asignacionStart", applied.asignacionStart);
-                  if (applied.asignacionEnd) qs.set("asignacionEnd", applied.asignacionEnd);
-                  if (applied.diasAsignaColor) qs.set("diasAsignaColor", applied.diasAsignaColor);
-                  if (applied.diasAprobacionPostColor) qs.set("diasAprobacionPostColor", applied.diasAprobacionPostColor);
-                  if (applied.diasCierreColor) qs.set("diasCierreColor", applied.diasCierreColor);
-                  if (applied.diasGestionTotalColor) qs.set("diasGestionTotalColor", applied.diasGestionTotalColor);
-                  const queryStr = qs.toString() ? `?${qs.toString()}` : "";
-                  const range =
-                    applied.asignacionStart || applied.asignacionEnd
-                      ? `${applied.asignacionStart || "inicio"}-${applied.asignacionEnd || "fin"}`
-                      : "todas";
-                  await downloadCsv(token, `/exports/levantamientos.csv${queryStr}`, `levantamiento_${range}.csv`);
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : "No se pudo descargar el reporte.";
-                  alert(msg);
-                }
-              }}
-            >
-              Exportar
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn-sm" type="button" disabled={!token || !hasSearched} onClick={exportCsv}>
+              Exportar CSV
             </button>
             <button className="btn btn-sm" type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
               Anterior
@@ -744,22 +721,20 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
-                <th>Cuadrilla</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaPrimerElemento")}>Fecha Primer Elemento</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaGestion")}>Fecha Gestión</button></th>
-                <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días asignación</button></th>
+                <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días Asigna</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAprobacionPost")}>Días aprobación Post</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasCierre")}>Días cierre</button></th>
-                <th>Días novedades</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasGestionTotal")}>Días gestión total</button></th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -775,70 +750,18 @@ export function LevantamientoPage() {
                     <td>{fmtVal(it.nivelTension)}</td>
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>
-                    <td>{cuadrillaLabel(it.cuadrilla)}</td>
                     <td>{fmtDate(it.fechaPrimerElemento ?? null)}</td>
-                    <td title={it.fechaGestionCalculada ? "Calculado con +8 días calendario" : ""}>{fmtDate(it.fechaGestion)}</td>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color:
-                          it.diasAsignaColor === "red"
-                            ? "red"
-                            : it.diasAsignaColor === "yellow"
-                              ? "#d1a000"
-                              : it.diasAsignaColor === "green"
-                                ? "green"
-                                : colorOf(it.diasAsigna)
-                      }}
-                    >
+                    <td title={it.fechaGestionCalculada ? "Calculado con +8 días calendario" : ""}>{fmtDate(it.fechaGestion ?? null)}</td>
+                    <td style={{ fontWeight: 800, color: it.diasAsignaColor === "red" ? "red" : it.diasAsignaColor === "yellow" ? "#d39e00" : it.diasAsignaColor === "green" ? "green" : colorOf(it.diasAsigna) }}>
                       {it.diasAsigna ?? "—"}
                     </td>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color:
-                          it.diasAprobacionPostColor === "red"
-                            ? "red"
-                            : it.diasAprobacionPostColor === "yellow"
-                              ? "#d1a000"
-                              : it.diasAprobacionPostColor === "green"
-                                ? "green"
-                                : colorOf(it.diasAprobacionPost)
-                      }}
-                    >
+                    <td style={{ fontWeight: 800, color: it.diasAprobacionPostColor === "red" ? "red" : it.diasAprobacionPostColor === "yellow" ? "#d39e00" : it.diasAprobacionPostColor === "green" ? "green" : colorOf(it.diasAprobacionPost) }}>
                       {it.diasAprobacionPost ?? "—"}
                     </td>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color:
-                          it.diasCierreColor === "red"
-                            ? "red"
-                            : it.diasCierreColor === "yellow"
-                              ? "#d1a000"
-                              : it.diasCierreColor === "green"
-                                ? "green"
-                                : colorOf(it.diasCierre)
-                      }}
-                    >
+                    <td style={{ fontWeight: 800, color: it.diasCierreColor === "red" ? "red" : it.diasCierreColor === "yellow" ? "#d39e00" : it.diasCierreColor === "green" ? "green" : colorOf(it.diasCierre) }}>
                       {it.diasCierre ?? "—"}
                     </td>
-                    <td style={{ fontWeight: 800, color: colorOf(it.diasNovedades) }}>
-                      {it.diasNovedades}
-                    </td>
-                    <td
-                      style={{
-                        fontWeight: 800,
-                        color:
-                          it.diasGestionTotalColor === "red"
-                            ? "red"
-                            : it.diasGestionTotalColor === "yellow"
-                              ? "#d1a000"
-                              : it.diasGestionTotalColor === "green"
-                                ? "green"
-                                : colorOf(it.diasGestionTotal)
-                      }}
-                    >
+                    <td style={{ fontWeight: 800, color: it.diasGestionTotalColor === "red" ? "red" : it.diasGestionTotalColor === "yellow" ? "#d39e00" : it.diasGestionTotalColor === "green" ? "green" : colorOf(it.diasGestionTotal) }}>
                       {it.diasGestionTotal ?? "—"}
                     </td>
                     <td style={{ minWidth: 220 }}>
@@ -867,7 +790,7 @@ export function LevantamientoPage() {
                             setShowPostprocesoModal(true);
                           }}
                         >
-                          Entrega postproceso
+                          Cierre SAIT
                         </button>
                       </div>
                     </td>
@@ -940,7 +863,7 @@ function NovedadModal({ order, onSaved, onClose }: { order: { id: string; code: 
         },
         body
       });
-      if (!res.ok) throw new Error(await readApiError(res));
+      if (!res.ok) throw new Error("Error al guardar novedad");
       onSaved();
       onClose();
     } catch (err) {
@@ -984,8 +907,8 @@ function NovedadModal({ order, onSaved, onClose }: { order: { id: string; code: 
             <textarea value={formData.detalle} onChange={(e) => setFormData((p) => ({ ...p, detalle: e.target.value }))} required />
           </div>
           <div className="field">
-            <label>Soporte de novedad (Imagen/PDF) *</label>
-            <input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+            <label>Soporte de novedad (Imagen) *</label>
+            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
           </div>
           <div className="actions" style={{ marginTop: "1rem" }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
@@ -1029,7 +952,7 @@ function PostprocesoModal({ order, onSaved, onClose }: { order: { id: string; co
         },
         body
       });
-      if (!res.ok) throw new Error(await readApiError(res));
+      if (!res.ok) throw new Error("Error al registrar cierre SAIT");
       onSaved();
       onClose();
     } catch (err) {

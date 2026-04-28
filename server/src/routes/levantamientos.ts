@@ -6,11 +6,8 @@ import { requireAuth, requirePermission } from "../auth.js";
 
 export const levantamientosRouter = Router();
 
-const BOGOTA_TZ = "America/Bogota";
-const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
-
-function normalizeDay(date: Date) {
-  return bogotaDateFmt.format(date);
+function calendarKey(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function parseBogotaDateOnly(value: string) {
@@ -42,7 +39,7 @@ async function loadCalendarMaps(): Promise<CalendarMaps> {
   let maxFinNumber: number | undefined;
 
   for (const c of calendar) {
-    const key = normalizeDay(c.date);
+    const key = calendarKey(c.date);
     inicioMap.set(key, c.dayNumber);
     const finNum = c.dayNumberFin ?? c.dayNumber;
     finMap.set(key, finNum);
@@ -60,8 +57,8 @@ function diffByCalendar(
   end: Date | null
 ) {
   if (!start || !end) return null;
-  const startNum = inicioMap.get(normalizeDay(start));
-  const endNum = finMap.get(normalizeDay(end));
+  const startNum = inicioMap.get(calendarKey(start));
+  const endNum = finMap.get(calendarKey(end));
   if (startNum === undefined || endNum === undefined) return null;
   return Math.max(0, endNum - startNum);
 }
@@ -161,7 +158,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     const inicioMap = new Map<string, number>();
     const finMap = new Map<string, number>();
     for (const c of calendar) {
-      const key = normalizeDay(c.date);
+      const key = calendarKey(c.date);
       inicioMap.set(key, c.dayNumber);
       finMap.set(key, c.dayNumberFin ?? c.dayNumber);
     }
@@ -177,8 +174,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     : [];
   const novedadSumByCode = new Map<string, number>();
   for (const n of novedades) {
-    const iniNum = inicioMap.get(normalizeDay(n.fechaInicio));
-    const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+    const iniNum = inicioMap.get(calendarKey(n.fechaInicio));
+    const finNum = n.fechaFin ? finMap.get(calendarKey(n.fechaFin)) : undefined;
     if (iniNum !== undefined && finNum !== undefined) {
       const diff = finNum - iniNum;
       if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
@@ -237,13 +234,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (etapa === "APROBACION") aprobacionPostproceso++;
     if (etapa === "GESTION") gestion++;
 
-    const aprobEndNum = finMap.get(normalizeDay(r.fechaAprobacionPostproceso ?? now));
-    const baseNum = r.fechaPrimerElemento ? inicioMap.get(normalizeDay(r.fechaPrimerElemento)) : undefined;
-    const diasRaw = entrega
-      ? diffByCalendarEndNow(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso, now)
-      : baseNum !== undefined && aprobEndNum !== undefined
-        ? Math.max(0, aprobEndNum - (baseNum + 3))
-        : null;
+    const diasRaw = diffByCalendarEndNow(inicioMap, finMap, r.fechaPrimerElemento, entrega, now);
     const dias = diasRaw === null ? null : Math.max(0, diasRaw - diasNovedades);
     if (dias !== null) {
       if (dias <= 3) aprobacionCumple++;
@@ -382,7 +373,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
   }, extra: { cierreSaitAt: Date | null; diasNovedades: number }) => {
-    const baseNum = row.fechaPrimerElemento ? inicioMap.get(normalizeDay(row.fechaPrimerElemento)) : undefined;
+    const baseNum = row.fechaPrimerElemento ? inicioMap.get(calendarKey(row.fechaPrimerElemento)) : undefined;
     const diasNovedades = extra.diasNovedades;
     const vencimientoNum = baseNum !== undefined ? baseNum + 8 + diasNovedades : undefined;
     const fechaGestionCalculada =
@@ -405,19 +396,13 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     );
     const diasAsigna = applyNovedades(diasAsignaRaw);
     const refDate = row.fechaGestion ?? now;
-    const refNum = finMap.get(normalizeDay(refDate));
+    const refNum = finMap.get(calendarKey(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
     const entregaPost = row.fechaEntregaPostproceso ?? extra.cierreSaitAt ?? null;
-    const aprobEndNum = finMap.get(normalizeDay(row.fechaAprobacionPostproceso ?? now));
-    const diasAprobacionPostRaw =
-      entregaPost
-        ? diffByCalendarEndNow(inicioMap, finMap, entregaPost, row.fechaAprobacionPostproceso, now)
-        : baseNum !== undefined && aprobEndNum !== undefined
-          ? Math.max(0, aprobEndNum - (baseNum + 3))
-          : null;
+    const diasAprobacionPostRaw = diffByCalendarEndNow(inicioMap, finMap, row.fechaPrimerElemento, entregaPost, now);
     const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
-    const cierreStartNum = row.fechaAprobacionPostproceso ? inicioMap.get(normalizeDay(row.fechaAprobacionPostproceso)) : undefined;
-    const cierreEndNum = row.fechaGestion ? finMap.get(normalizeDay(row.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
+    const cierreStartNum = row.fechaAprobacionPostproceso ? inicioMap.get(calendarKey(row.fechaAprobacionPostproceso)) : undefined;
+    const cierreEndNum = row.fechaGestion ? finMap.get(calendarKey(row.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
     const diasCierreRaw =
       cierreStartNum !== undefined && cierreEndNum !== undefined ? Math.max(0, cierreEndNum - cierreStartNum) : null;
     const diasCierre = applyNovedades(diasCierreRaw);
@@ -533,8 +518,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       : [];
     const novedadSumByCode = new Map<string, number>();
     for (const n of novedades) {
-      const iniNum = inicioMap.get(normalizeDay(n.fechaInicio));
-      const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+      const iniNum = inicioMap.get(calendarKey(n.fechaInicio));
+      const finNum = n.fechaFin ? finMap.get(calendarKey(n.fechaFin)) : undefined;
       if (iniNum !== undefined && finNum !== undefined) {
         const diff = finNum - iniNum;
         if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
@@ -626,8 +611,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     : [];
   const novedadSumByCode = new Map<string, number>();
   for (const n of novedades) {
-    const iniNum = inicioMap.get(normalizeDay(n.fechaInicio));
-    const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+    const iniNum = inicioMap.get(calendarKey(n.fechaInicio));
+    const finNum = n.fechaFin ? finMap.get(calendarKey(n.fechaFin)) : undefined;
     if (iniNum !== undefined && finNum !== undefined) {
       const diff = finNum - iniNum;
       if (diff >= 0) novedadSumByCode.set(n.workOrder.code, (novedadSumByCode.get(n.workOrder.code) ?? 0) + (diff + 1));
