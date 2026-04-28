@@ -771,7 +771,7 @@ export function LevantamientoPage() {
             <thead>
               <tr>
                 <th><button className="table-sort" type="button" onClick={() => onSort("orderCode")}>Orden Trabajo</button></th>
-                <th>Tipo4_Entrega</th>
+                <th>Tipo Entrega</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
