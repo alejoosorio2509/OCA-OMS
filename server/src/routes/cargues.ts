@@ -2783,11 +2783,17 @@ async function processLevantamientoJob(input: {
         cuadrilla: parseText(getVal(row, "Cuadrilla"))
       };
 
+      const { fechaEntregaPostproceso, ...payloadBase } = payload;
+      const updatePayload = {
+        ...payloadBase,
+        ...(fechaEntregaPostproceso ? { fechaEntregaPostproceso } : {})
+      };
+
       const existed = existing.has(orderCode);
       await prisma.levantamiento.upsert({
         where: { orderCode },
         create: { orderCode, ...payload },
-        update: payload
+        update: updatePayload
       });
 
       successCount++;
