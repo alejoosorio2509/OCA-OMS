@@ -127,8 +127,8 @@ export function OrdersPage() {
   );
   const [draftDateStart, setDraftDateStart] = useState(() => initialParams.get("dateStart") || "");
   const [draftDateEnd, setDraftDateEnd] = useState(() => initialParams.get("dateEnd") || "");
-  const [draftColorFilter, setDraftColorFilter] = useState<"red" | "green" | "">(
-    () => (initialParams.get("color") as "" | "red" | "green" | null) || ""
+  const [draftColorFilter, setDraftColorFilter] = useState<"red" | "yellow" | "green" | "">(
+    () => (initialParams.get("color") as "" | "red" | "yellow" | "green" | null) || ""
   );
 
   type OrdersFilters = {
@@ -139,7 +139,7 @@ export function OrdersPage() {
     dateField: "assignedAt" | "gestionAt";
     dateStart: string;
     dateEnd: string;
-    color: "" | "red" | "green";
+    color: "" | "red" | "yellow" | "green";
   };
 
   const [appliedFilters, setAppliedFilters] = useState<OrdersFilters>(() => ({
@@ -150,7 +150,7 @@ export function OrdersPage() {
     dateField: (initialParams.get("dateField") as "assignedAt" | "gestionAt" | null) || "assignedAt",
     dateStart: initialParams.get("dateStart") || "",
     dateEnd: initialParams.get("dateEnd") || "",
-    color: (initialParams.get("color") as "" | "red" | "green" | null) || ""
+    color: (initialParams.get("color") as "" | "red" | "yellow" | "green" | null) || ""
   }));
   const [page, setPage] = useState<number>(initialPage);
   const pageSize = 50;
@@ -486,9 +486,10 @@ export function OrdersPage() {
           </div>
           <div className="field" style={{ width: 140 }}>
             <label>ANS</label>
-            <select value={draftColorFilter} onChange={(e) => setDraftColorFilter(e.target.value as "" | "red" | "green")}>
+            <select value={draftColorFilter} onChange={(e) => setDraftColorFilter(e.target.value as "" | "red" | "yellow" | "green")}>
               <option value="">Todos</option>
               <option value="green">Cumple</option>
+              <option value="yellow">Por vencer</option>
               <option value="red">No cumple</option>
             </select>
           </div>
@@ -727,11 +728,34 @@ export function OrdersPage() {
                   <td>{it.diasCumplimiento ?? 0}</td>
                   <td>{it.diasDevoluciones ?? 0}</td>
                   <td>{it.totalDiasDescuento || 0}</td>
-                  <td style={{ 
-                    color: it.cumplimiento === "No cumple" ? "red" : it.cumplimiento === "Cumple" ? "green" : "var(--muted)",
-                    fontWeight: "bold"
-                  }}>{it.diasPasados ?? "—"}</td>
-                  <td style={{ fontWeight: "bold", color: it.cumplimiento === "No cumple" ? "red" : it.cumplimiento === "Cumple" ? "green" : "var(--muted)" }}>
+                  <td
+                    style={{
+                      color:
+                        it.cumplimiento === "No cumple"
+                          ? "red"
+                          : it.cumplimiento === "Cumple"
+                            ? it.diasPasados != null && it.diasPasados <= 2
+                              ? "#d1a000"
+                              : "green"
+                            : "var(--muted)",
+                      fontWeight: "bold"
+                    }}
+                  >
+                    {it.diasPasados ?? "—"}
+                  </td>
+                  <td
+                    style={{
+                      fontWeight: "bold",
+                      color:
+                        it.cumplimiento === "No cumple"
+                          ? "red"
+                          : it.cumplimiento === "Cumple"
+                            ? it.diasPasados != null && it.diasPasados <= 2
+                              ? "#d1a000"
+                              : "green"
+                            : "var(--muted)"
+                    }}
+                  >
                     {it.cumplimiento ?? "—"}
                   </td>
                   <td>

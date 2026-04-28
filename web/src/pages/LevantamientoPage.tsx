@@ -57,7 +57,7 @@ const CUADRILLA_LABELS: Record<string, string> = {
   CUA_2: "OSCAR CASTELBLANCO",
   CUA_3: "DANNY BRICEÑO",
   CUA_4: "JIMMY CRUZ",
-  CUA_10: "ANT JIMMY CRUZ",
+  CUA_10: "CUA_10",
   SUP: "WILMER MARTINEZ"
 };
 
@@ -133,17 +133,17 @@ export function LevantamientoPage() {
   const [draftAsignacionEnd, setDraftAsignacionEnd] = useState(() => initialParams.get("asignacionEnd") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
 
-  const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "green">(
-    () => (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || ""
+  const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "yellow" | "green">(
+    () => (initialParams.get("diasAsignaColor") as "" | "red" | "yellow" | "green" | null) || ""
   );
-  const [draftDiasAprobacionPostColor, setDraftDiasAprobacionPostColor] = useState<"" | "red" | "green">(
-    () => (initialParams.get("diasAprobacionPostColor") as "" | "red" | "green" | null) || ""
+  const [draftDiasAprobacionPostColor, setDraftDiasAprobacionPostColor] = useState<"" | "red" | "yellow" | "green">(
+    () => (initialParams.get("diasAprobacionPostColor") as "" | "red" | "yellow" | "green" | null) || ""
   );
-  const [draftDiasCierreColor, setDraftDiasCierreColor] = useState<"" | "red" | "green">(
-    () => (initialParams.get("diasCierreColor") as "" | "red" | "green" | null) || ""
+  const [draftDiasCierreColor, setDraftDiasCierreColor] = useState<"" | "red" | "yellow" | "green">(
+    () => (initialParams.get("diasCierreColor") as "" | "red" | "yellow" | "green" | null) || ""
   );
-  const [draftDiasGestionTotalColor, setDraftDiasGestionTotalColor] = useState<"" | "red" | "green">(
-    () => (initialParams.get("diasGestionTotalColor") as "" | "red" | "green" | null) || ""
+  const [draftDiasGestionTotalColor, setDraftDiasGestionTotalColor] = useState<"" | "red" | "yellow" | "green">(
+    () => (initialParams.get("diasGestionTotalColor") as "" | "red" | "yellow" | "green" | null) || ""
   );
 
   type Filters = {
@@ -153,10 +153,10 @@ export function LevantamientoPage() {
     etapa: "" | "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     asignacionStart: string;
     asignacionEnd: string;
-    diasAsignaColor: "" | "red" | "green";
-    diasAprobacionPostColor: "" | "red" | "green";
-    diasCierreColor: "" | "red" | "green";
-    diasGestionTotalColor: "" | "red" | "green";
+    diasAsignaColor: "" | "red" | "yellow" | "green";
+    diasAprobacionPostColor: "" | "red" | "yellow" | "green";
+    diasCierreColor: "" | "red" | "yellow" | "green";
+    diasGestionTotalColor: "" | "red" | "yellow" | "green";
   };
 
   const [applied, setApplied] = useState<Filters>(() => ({
@@ -166,10 +166,10 @@ export function LevantamientoPage() {
     etapa: (initialParams.get("etapa") as Filters["etapa"] | null) || "",
     asignacionStart: initialParams.get("asignacionStart") || "",
     asignacionEnd: initialParams.get("asignacionEnd") || "",
-    diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "green" | null) || "",
-    diasAprobacionPostColor: (initialParams.get("diasAprobacionPostColor") as "" | "red" | "green" | null) || "",
-    diasCierreColor: (initialParams.get("diasCierreColor") as "" | "red" | "green" | null) || "",
-    diasGestionTotalColor: (initialParams.get("diasGestionTotalColor") as "" | "red" | "green" | null) || ""
+    diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "yellow" | "green" | null) || "",
+    diasAprobacionPostColor: (initialParams.get("diasAprobacionPostColor") as "" | "red" | "yellow" | "green" | null) || "",
+    diasCierreColor: (initialParams.get("diasCierreColor") as "" | "red" | "yellow" | "green" | null) || "",
+    diasGestionTotalColor: (initialParams.get("diasGestionTotalColor") as "" | "red" | "yellow" | "green" | null) || ""
   }));
 
   const [page, setPage] = useState(initialPage);
@@ -177,6 +177,7 @@ export function LevantamientoPage() {
 
   type SortKey =
     | "fechaAsignacion"
+    | "fechaPrimerElemento"
     | "fechaGestion"
     | "orderCode"
     | "nivelTension"
@@ -187,7 +188,7 @@ export function LevantamientoPage() {
     | "diasCierre"
     | "diasGestionTotal";
 
-  const [sortKey, setSortKey] = useState<SortKey>(() => (initialParams.get("sortKey") as SortKey | null) || "fechaAsignacion");
+  const [sortKey, setSortKey] = useState<SortKey>(() => (initialParams.get("sortKey") as SortKey | null) || "fechaPrimerElemento");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() => (initialParams.get("sortDir") as "asc" | "desc" | null) || "desc");
 
   const applyFilters = () => {
@@ -610,19 +611,23 @@ export function LevantamientoPage() {
           </div>
 
           <div className="field" style={{ width: 180 }}>
-            <label>Asignación desde</label>
+            <label>Primer elemento desde</label>
             <input type="date" value={draftAsignacionStart} onChange={(e) => setDraftAsignacionStart(e.target.value)} />
           </div>
           <div className="field" style={{ width: 180 }}>
-            <label>Asignación hasta</label>
+            <label>Primer elemento hasta</label>
             <input type="date" value={draftAsignacionEnd} onChange={(e) => setDraftAsignacionEnd(e.target.value)} />
           </div>
 
           <div className="field" style={{ width: 200 }}>
-            <label>Días Asigna</label>
-            <select value={draftDiasAsignaColor} onChange={(e) => setDraftDiasAsignaColor(e.target.value as "" | "red" | "green")}>
+            <label>Días asignación</label>
+            <select
+              value={draftDiasAsignaColor}
+              onChange={(e) => setDraftDiasAsignaColor(e.target.value as "" | "red" | "yellow" | "green")}
+            >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
+              <option value="yellow">Por vencer</option>
               <option value="red">No cumple</option>
             </select>
           </div>
@@ -630,18 +635,23 @@ export function LevantamientoPage() {
             <label>Días aprobación Post</label>
             <select
               value={draftDiasAprobacionPostColor}
-              onChange={(e) => setDraftDiasAprobacionPostColor(e.target.value as "" | "red" | "green")}
+              onChange={(e) => setDraftDiasAprobacionPostColor(e.target.value as "" | "red" | "yellow" | "green")}
             >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
+              <option value="yellow">Por vencer</option>
               <option value="red">No cumple</option>
             </select>
           </div>
           <div className="field" style={{ width: 200 }}>
             <label>Días cierre</label>
-            <select value={draftDiasCierreColor} onChange={(e) => setDraftDiasCierreColor(e.target.value as "" | "red" | "green")}>
+            <select
+              value={draftDiasCierreColor}
+              onChange={(e) => setDraftDiasCierreColor(e.target.value as "" | "red" | "yellow" | "green")}
+            >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
+              <option value="yellow">Por vencer</option>
               <option value="red">No cumple</option>
             </select>
           </div>
@@ -649,10 +659,11 @@ export function LevantamientoPage() {
             <label>Días gestión total</label>
             <select
               value={draftDiasGestionTotalColor}
-              onChange={(e) => setDraftDiasGestionTotalColor(e.target.value as "" | "red" | "green")}
+              onChange={(e) => setDraftDiasGestionTotalColor(e.target.value as "" | "red" | "yellow" | "green")}
             >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
+              <option value="yellow">Por vencer</option>
               <option value="red">No cumple</option>
             </select>
           </div>
@@ -734,9 +745,9 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
                 <th>Cuadrilla</th>
-                <th><button className="table-sort" type="button" onClick={() => onSort("fechaAsignacion")}>Fecha Asignación</button></th>
+                <th><button className="table-sort" type="button" onClick={() => onSort("fechaPrimerElemento")}>Fecha Primer Elemento</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaGestion")}>Fecha Gestión</button></th>
-                <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días Asigna</button></th>
+                <th><button className="table-sort" type="button" onClick={() => onSort("diasAsigna")}>Días asignación</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAprobacionPost")}>Días aprobación Post</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasCierre")}>Días cierre</button></th>
                 <th>Días novedades</th>
@@ -765,21 +776,69 @@ export function LevantamientoPage() {
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>
                     <td>{cuadrillaLabel(it.cuadrilla)}</td>
-                    <td>{fmtDate(it.fechaAsignacion)}</td>
+                    <td>{fmtDate(it.fechaPrimerElemento ?? null)}</td>
                     <td title={it.fechaGestionCalculada ? "Calculado con +8 días calendario" : ""}>{fmtDate(it.fechaGestion)}</td>
-                    <td style={{ fontWeight: 800, color: it.diasAsignaColor === "red" ? "red" : it.diasAsignaColor === "green" ? "green" : colorOf(it.diasAsigna) }}>
+                    <td
+                      style={{
+                        fontWeight: 800,
+                        color:
+                          it.diasAsignaColor === "red"
+                            ? "red"
+                            : it.diasAsignaColor === "yellow"
+                              ? "#d1a000"
+                              : it.diasAsignaColor === "green"
+                                ? "green"
+                                : colorOf(it.diasAsigna)
+                      }}
+                    >
                       {it.diasAsigna ?? "—"}
                     </td>
-                    <td style={{ fontWeight: 800, color: it.diasAprobacionPostColor === "red" ? "red" : it.diasAprobacionPostColor === "green" ? "green" : colorOf(it.diasAprobacionPost) }}>
+                    <td
+                      style={{
+                        fontWeight: 800,
+                        color:
+                          it.diasAprobacionPostColor === "red"
+                            ? "red"
+                            : it.diasAprobacionPostColor === "yellow"
+                              ? "#d1a000"
+                              : it.diasAprobacionPostColor === "green"
+                                ? "green"
+                                : colorOf(it.diasAprobacionPost)
+                      }}
+                    >
                       {it.diasAprobacionPost ?? "—"}
                     </td>
-                    <td style={{ fontWeight: 800, color: it.diasCierreColor === "red" ? "red" : it.diasCierreColor === "green" ? "green" : colorOf(it.diasCierre) }}>
+                    <td
+                      style={{
+                        fontWeight: 800,
+                        color:
+                          it.diasCierreColor === "red"
+                            ? "red"
+                            : it.diasCierreColor === "yellow"
+                              ? "#d1a000"
+                              : it.diasCierreColor === "green"
+                                ? "green"
+                                : colorOf(it.diasCierre)
+                      }}
+                    >
                       {it.diasCierre ?? "—"}
                     </td>
                     <td style={{ fontWeight: 800, color: colorOf(it.diasNovedades) }}>
                       {it.diasNovedades}
                     </td>
-                    <td style={{ fontWeight: 800, color: it.diasGestionTotalColor === "red" ? "red" : it.diasGestionTotalColor === "green" ? "green" : colorOf(it.diasGestionTotal) }}>
+                    <td
+                      style={{
+                        fontWeight: 800,
+                        color:
+                          it.diasGestionTotalColor === "red"
+                            ? "red"
+                            : it.diasGestionTotalColor === "yellow"
+                              ? "#d1a000"
+                              : it.diasGestionTotalColor === "green"
+                                ? "green"
+                                : colorOf(it.diasGestionTotal)
+                      }}
+                    >
                       {it.diasGestionTotal ?? "—"}
                     </td>
                     <td style={{ minWidth: 220 }}>

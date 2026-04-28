@@ -77,9 +77,11 @@ function diffByCalendarEndNow(
   return diffByCalendar(inicioMap, finMap, start, end ?? now);
 }
 
-function colorByThreshold(value: number | null, threshold: number): "green" | "red" | null {
+function colorByThreshold(value: number | null, threshold: number): "green" | "yellow" | "red" | null {
   if (value === null) return null;
-  return value <= threshold ? "green" : "red";
+  if (value > threshold) return "red";
+  const warnWindow = 2;
+  return value > threshold - warnWindow ? "yellow" : "green";
 }
 
 levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
@@ -132,7 +134,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
-          fechaAsignacion: {
+          fechaPrimerElemento: {
             ...(startDate ? { gte: startDate } : {}),
             ...(endExclusive ? { lt: endExclusive } : {})
           }
@@ -214,7 +216,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   let aprobacionNoCumple = 0;
 
   for (const r of rows) {
-    const entrega = entregaByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+    const entrega = r.fechaEntregaPostproceso ?? entregaByCode.get(r.orderCode) ?? null;
     const diasNovedades = novedadSumByCode.get(r.orderCode) ?? 0;
     const etapa =
       r.fechaGestion
@@ -236,11 +238,11 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (etapa === "GESTION") gestion++;
 
     const aprobEndNum = finMap.get(normalizeDay(r.fechaAprobacionPostproceso ?? now));
-    const assignedNum = r.fechaAsignacion ? inicioMap.get(normalizeDay(r.fechaAsignacion)) : undefined;
+    const baseNum = r.fechaPrimerElemento ? inicioMap.get(normalizeDay(r.fechaPrimerElemento)) : undefined;
     const diasRaw = entrega
       ? diffByCalendarEndNow(inicioMap, finMap, entrega, r.fechaAprobacionPostproceso, now)
-      : assignedNum !== undefined && aprobEndNum !== undefined
-        ? Math.max(0, aprobEndNum - (assignedNum + 3))
+      : baseNum !== undefined && aprobEndNum !== undefined
+        ? Math.max(0, aprobEndNum - (baseNum + 3))
         : null;
     const dias = diasRaw === null ? null : Math.max(0, diasRaw - diasNovedades);
     if (dias !== null) {
@@ -273,10 +275,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
-    diasAsignaColor: z.enum(["red", "green"]).optional(),
-    diasAprobacionPostColor: z.enum(["red", "green"]).optional(),
-    diasCierreColor: z.enum(["red", "green"]).optional(),
-    diasGestionTotalColor: z.enum(["red", "green"]).optional(),
+    diasAsignaColor: z.enum(["red", "yellow", "green"]).optional(),
+    diasAprobacionPostColor: z.enum(["red", "yellow", "green"]).optional(),
+    diasCierreColor: z.enum(["red", "yellow", "green"]).optional(),
+    diasGestionTotalColor: z.enum(["red", "yellow", "green"]).optional(),
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(500).optional(),
     sortKey: z
@@ -286,6 +288,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         "estado",
         "subestado",
         "fechaAsignacion",
+        "fechaPrimerElemento",
         "fechaGestion",
         "diasAsigna",
         "diasAprobacionPost",
@@ -316,7 +319,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   } = parsed.data;
   const page = parsed.data.page ?? 1;
   const pageSize = parsed.data.pageSize ?? 50;
-  const sortKey = parsed.data.sortKey ?? "fechaAsignacion";
+  const sortKey = parsed.data.sortKey ?? "fechaPrimerElemento";
   const sortDir = parsed.data.sortDir ?? "desc";
 
   const parseDay = (value: string) => {
@@ -340,7 +343,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
-          fechaAsignacion: {
+          fechaPrimerElemento: {
             ...(startDate ? { gte: startDate } : {}),
             ...(endExclusive ? { lt: endExclusive } : {})
           }
@@ -359,7 +362,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const { inicioMap, finMap, finNumberToDate } = await loadCalendarMaps();
 
-  const THRESHOLD_DIAS_ASIGNA = 8;
+  const THRESHOLD_DIAS_ASIGNA = 4;
   const THRESHOLD_DIAS_APROBACION_POST = 3;
   const THRESHOLD_DIAS_CIERRE = 8;
   const THRESHOLD_DIAS_GESTION_TOTAL = 8;
@@ -372,15 +375,16 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     estado: string | null;
     subestado: string | null;
     cuadrilla: string | null;
+    fechaAprobacionValorizacionSt: Date | null;
     fechaAsignacion: Date | null;
     fechaEntregaPostproceso: Date | null;
     fechaGestion: Date | null;
     fechaPrimerElemento: Date | null;
     fechaAprobacionPostproceso: Date | null;
   }, extra: { cierreSaitAt: Date | null; diasNovedades: number }) => {
-    const assignedNum = row.fechaAsignacion ? inicioMap.get(normalizeDay(row.fechaAsignacion)) : undefined;
+    const baseNum = row.fechaPrimerElemento ? inicioMap.get(normalizeDay(row.fechaPrimerElemento)) : undefined;
     const diasNovedades = extra.diasNovedades;
-    const vencimientoNum = assignedNum !== undefined ? assignedNum + 8 + diasNovedades : undefined;
+    const vencimientoNum = baseNum !== undefined ? baseNum + 8 + diasNovedades : undefined;
     const fechaGestionCalculada =
       !row.fechaGestion && vencimientoNum !== undefined
         ? (() => {
@@ -392,26 +396,28 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
     const applyNovedades = (v: number | null) => (v === null ? null : Math.max(0, v - diasNovedades));
 
-    const diasAsignaRaw = row.fechaAsignacion
-      ? row.fechaPrimerElemento
-        ? diffByCalendar(inicioMap, finMap, row.fechaAsignacion, row.fechaPrimerElemento)
-        : 1
-      : null;
+    const diasAsignaRaw = diffByCalendarEndNow(
+      inicioMap,
+      finMap,
+      row.fechaAprobacionValorizacionSt ?? null,
+      row.fechaAsignacion,
+      now
+    );
     const diasAsigna = applyNovedades(diasAsignaRaw);
     const refDate = row.fechaGestion ?? now;
     const refNum = finMap.get(normalizeDay(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
-    const entregaPost = extra.cierreSaitAt ?? row.fechaEntregaPostproceso;
+    const entregaPost = row.fechaEntregaPostproceso ?? extra.cierreSaitAt ?? null;
     const aprobEndNum = finMap.get(normalizeDay(row.fechaAprobacionPostproceso ?? now));
     const diasAprobacionPostRaw =
       entregaPost
         ? diffByCalendarEndNow(inicioMap, finMap, entregaPost, row.fechaAprobacionPostproceso, now)
-        : assignedNum !== undefined && aprobEndNum !== undefined
-          ? Math.max(0, aprobEndNum - (assignedNum + 3))
+        : baseNum !== undefined && aprobEndNum !== undefined
+          ? Math.max(0, aprobEndNum - (baseNum + 3))
           : null;
     const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
     const cierreStartNum = row.fechaAprobacionPostproceso ? inicioMap.get(normalizeDay(row.fechaAprobacionPostproceso)) : undefined;
-    const cierreEndNum = row.fechaGestion ? finMap.get(normalizeDay(row.fechaGestion)) : assignedNum !== undefined ? assignedNum + 8 : undefined;
+    const cierreEndNum = row.fechaGestion ? finMap.get(normalizeDay(row.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
     const diasCierreRaw =
       cierreStartNum !== undefined && cierreEndNum !== undefined ? Math.max(0, cierreEndNum - cierreStartNum) : null;
     const diasCierre = applyNovedades(diasCierreRaw);
@@ -420,7 +426,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
     const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
     const diasGestionTotalColorCalc =
-      diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : "green";
+      diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : diasGestionTotal <= 2 ? "yellow" : "green";
 
     return {
       orderCode: row.orderCode,
@@ -429,6 +435,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       subestado: row.subestado,
       cuadrilla: row.cuadrilla,
       fechaAsignacion: row.fechaAsignacion,
+      fechaPrimerElemento: row.fechaPrimerElemento,
       fechaGestion: fechaGestionEfectiva,
       fechaGestionCalculada: row.fechaGestion ? null : fechaGestionCalculada,
       diasAsigna,
@@ -453,7 +460,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
             ? { estado: sortDir }
             : sortKey === "subestado"
               ? { subestado: sortDir }
-          : { fechaAsignacion: sortDir };
+              : sortKey === "fechaPrimerElemento"
+                ? { fechaPrimerElemento: sortDir }
+                : { fechaAsignacion: sortDir };
 
     const [total, pageItems] = await Promise.all([
       prisma.levantamiento.count({ where }),
@@ -468,6 +477,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
           estado: true,
           subestado: true,
           cuadrilla: true,
+          fechaAprobacionValorizacionSt: true,
           fechaAsignacion: true,
           fechaEntregaPostproceso: true,
           fechaGestion: true,
@@ -556,6 +566,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       estado: true,
       subestado: true,
       cuadrilla: true,
+      fechaAprobacionValorizacionSt: true,
       fechaAsignacion: true,
       fechaEntregaPostproceso: true,
       fechaGestion: true,
@@ -591,7 +602,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const etapaByCode = new Map<string, "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION" | "SIN">();
   for (const r of base) {
-    const entrega = cierreSaitByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+    const entrega = r.fechaEntregaPostproceso ?? cierreSaitByCode.get(r.orderCode) ?? null;
     const e =
       r.fechaGestion
         ? "GESTION"
@@ -641,7 +652,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     computed = computed.filter((r) => etapaByCode.get(r.orderCode) === etapa);
   }
 
-  const applyColorFilter = (key: "diasAsignaColor" | "diasAprobacionPostColor" | "diasCierreColor" | "diasGestionTotalColor", val?: "red" | "green") => {
+  const applyColorFilter = (
+    key: "diasAsignaColor" | "diasAprobacionPostColor" | "diasCierreColor" | "diasGestionTotalColor",
+    val?: "red" | "yellow" | "green"
+  ) => {
     if (!val) return;
     computed = computed.filter((r) => r[key] === val);
   };
@@ -664,17 +678,19 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
             ? (a.estado ?? "")
             : sortKey === "subestado"
               ? (a.subestado ?? "")
-          : sortKey === "fechaAsignacion"
+              : sortKey === "fechaAsignacion"
                 ? (parseDateMs(a.fechaAsignacion) ?? 0)
-                : sortKey === "fechaGestion"
-                  ? (parseDateMs(a.fechaGestion) ?? 0)
-                  : sortKey === "diasAsigna"
-                    ? (a.diasAsigna ?? -1)
-                    : sortKey === "diasAprobacionPost"
-                      ? (a.diasAprobacionPost ?? -1)
-                      : sortKey === "diasCierre"
-                        ? (a.diasCierre ?? -1)
-                        : (a.diasGestionTotal ?? -1);
+                : sortKey === "fechaPrimerElemento"
+                  ? (parseDateMs(a.fechaPrimerElemento ?? null) ?? 0)
+                  : sortKey === "fechaGestion"
+                    ? (parseDateMs(a.fechaGestion) ?? 0)
+                    : sortKey === "diasAsigna"
+                      ? (a.diasAsigna ?? -1)
+                      : sortKey === "diasAprobacionPost"
+                        ? (a.diasAprobacionPost ?? -1)
+                        : sortKey === "diasCierre"
+                          ? (a.diasCierre ?? -1)
+                          : (a.diasGestionTotal ?? -1);
     const vb =
       sortKey === "orderCode"
         ? b.orderCode
@@ -684,17 +700,19 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
             ? (b.estado ?? "")
             : sortKey === "subestado"
               ? (b.subestado ?? "")
-          : sortKey === "fechaAsignacion"
+              : sortKey === "fechaAsignacion"
                 ? (parseDateMs(b.fechaAsignacion) ?? 0)
-                : sortKey === "fechaGestion"
-                  ? (parseDateMs(b.fechaGestion) ?? 0)
-                  : sortKey === "diasAsigna"
-                    ? (b.diasAsigna ?? -1)
-                    : sortKey === "diasAprobacionPost"
-                      ? (b.diasAprobacionPost ?? -1)
-                      : sortKey === "diasCierre"
-                        ? (b.diasCierre ?? -1)
-                        : (b.diasGestionTotal ?? -1);
+                : sortKey === "fechaPrimerElemento"
+                  ? (parseDateMs(b.fechaPrimerElemento ?? null) ?? 0)
+                  : sortKey === "fechaGestion"
+                    ? (parseDateMs(b.fechaGestion) ?? 0)
+                    : sortKey === "diasAsigna"
+                      ? (b.diasAsigna ?? -1)
+                      : sortKey === "diasAprobacionPost"
+                        ? (b.diasAprobacionPost ?? -1)
+                        : sortKey === "diasCierre"
+                          ? (b.diasCierre ?? -1)
+                          : (b.diasGestionTotal ?? -1);
     if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
     return String(va).localeCompare(String(vb)) * dir;
   });

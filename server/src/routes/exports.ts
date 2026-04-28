@@ -169,9 +169,11 @@ function diffByCalendarEndNow(inicioMap: Map<string, number>, finMap: Map<string
   return diffByCalendar(inicioMap, finMap, start, end ?? now);
 }
 
-function colorByThreshold(value: number | null, threshold: number): "green" | "red" | null {
+function colorByThreshold(value: number | null, threshold: number): "green" | "yellow" | "red" | null {
   if (value === null) return null;
-  return value <= threshold ? "green" : "red";
+  if (value > threshold) return "red";
+  const warnWindow = 2;
+  return value > threshold - warnWindow ? "yellow" : "green";
 }
 
 exportsRouter.get("/general.csv", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
@@ -517,10 +519,10 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     asignacionEnd: z.string().min(1).optional(),
     dateStart: z.string().optional(),
     dateEnd: z.string().optional(),
-    diasAsignaColor: z.enum(["red", "green"]).optional(),
-    diasAprobacionPostColor: z.enum(["red", "green"]).optional(),
-    diasCierreColor: z.enum(["red", "green"]).optional(),
-    diasGestionTotalColor: z.enum(["red", "green"]).optional()
+    diasAsignaColor: z.enum(["red", "yellow", "green"]).optional(),
+    diasAprobacionPostColor: z.enum(["red", "yellow", "green"]).optional(),
+    diasCierreColor: z.enum(["red", "yellow", "green"]).optional(),
+    diasGestionTotalColor: z.enum(["red", "yellow", "green"]).optional()
   });
 
   const parsed = querySchema.safeParse(req.query);
@@ -567,7 +569,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
-          fechaAsignacion: {
+          fechaPrimerElemento: {
             ...(startDate ? { gte: startDate } : {}),
             ...(endExclusive ? { lt: endExclusive } : {})
           }
@@ -578,13 +580,14 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
   const [rows, calendar] = await Promise.all([
     prisma.levantamiento.findMany({
       where,
-      orderBy: { fechaAsignacion: "desc" },
+      orderBy: { fechaPrimerElemento: "desc" },
       select: {
         orderCode: true,
         nivelTension: true,
         estado: true,
         subestado: true,
         cuadrilla: true,
+        fechaAprobacionValorizacionSt: true,
         fechaAsignacion: true,
         fechaPrimerElemento: true,
         fechaEntregaPostproceso: true,
@@ -644,7 +647,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     }
   }
 
-  const THRESHOLD_DIAS_ASIGNA = 8;
+  const THRESHOLD_DIAS_ASIGNA = 4;
   const THRESHOLD_DIAS_APROBACION_POST = 3;
   const THRESHOLD_DIAS_CIERRE = 8;
   const now = new Date();
@@ -655,7 +658,6 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     "Estado",
     "Subestado",
     "Cuadrilla",
-    "Fecha Asignación",
     "Fecha Primer Elemento",
     "Fecha Entrega Postproceso",
     "Fecha Aprobación Postproceso",
@@ -671,9 +673,9 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
 
   const items = rows
     .map((r) => {
-      const assignedNum = r.fechaAsignacion ? inicioMap.get(normalizeDateStr(r.fechaAsignacion)) : undefined;
+      const baseNum = r.fechaPrimerElemento ? inicioMap.get(normalizeDateStr(r.fechaPrimerElemento)) : undefined;
       const diasNovedades = novedadSumByCode.get(r.orderCode) ?? 0;
-      const vencimientoNum = assignedNum !== undefined ? assignedNum + 8 + diasNovedades : undefined;
+      const vencimientoNum = baseNum !== undefined ? baseNum + 8 + diasNovedades : undefined;
       const fechaGestionCalculada =
         !r.fechaGestion && vencimientoNum !== undefined
           ? (() => {
@@ -685,25 +687,27 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
 
       const applyNovedades = (v: number | null) => (v === null ? null : Math.max(0, v - diasNovedades));
 
-      const diasAsignaRaw = r.fechaAsignacion
-        ? r.fechaPrimerElemento
-          ? diffByCalendar(inicioMap, finMap, r.fechaAsignacion, r.fechaPrimerElemento)
-          : 1
-        : null;
+      const diasAsignaRaw = diffByCalendarEndNow(
+        inicioMap,
+        finMap,
+        r.fechaAprobacionValorizacionSt ?? null,
+        r.fechaAsignacion,
+        now
+      );
       const diasAsigna = applyNovedades(diasAsignaRaw);
 
-      const entregaPost = cierreSaitByCode.get(r.orderCode) ?? r.fechaEntregaPostproceso ?? null;
+      const entregaPost = r.fechaEntregaPostproceso ?? cierreSaitByCode.get(r.orderCode) ?? null;
       const aprobEndNum = finMap.get(normalizeDateStr(r.fechaAprobacionPostproceso ?? now));
       const diasAprobacionPostRaw =
         entregaPost
           ? diffByCalendarEndNow(inicioMap, finMap, entregaPost, r.fechaAprobacionPostproceso, now)
-          : assignedNum !== undefined && aprobEndNum !== undefined
-            ? Math.max(0, aprobEndNum - (assignedNum + 3))
+          : baseNum !== undefined && aprobEndNum !== undefined
+            ? Math.max(0, aprobEndNum - (baseNum + 3))
             : null;
       const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
 
       const cierreStartNum = r.fechaAprobacionPostproceso ? inicioMap.get(normalizeDateStr(r.fechaAprobacionPostproceso)) : undefined;
-      const cierreEndNum = r.fechaGestion ? finMap.get(normalizeDateStr(r.fechaGestion)) : assignedNum !== undefined ? assignedNum + 8 : undefined;
+      const cierreEndNum = r.fechaGestion ? finMap.get(normalizeDateStr(r.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
       const diasCierreRaw = cierreStartNum !== undefined && cierreEndNum !== undefined ? Math.max(0, cierreEndNum - cierreStartNum) : null;
       const diasCierre = applyNovedades(diasCierreRaw);
 
@@ -714,7 +718,8 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
       const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
       const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
       const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
-      const diasGestionTotalColorCalc = diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : "green";
+      const diasGestionTotalColorCalc =
+        diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : diasGestionTotal <= 2 ? "yellow" : "green";
 
       const etapaCalc =
         r.fechaGestion
@@ -741,7 +746,6 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
         r.estado ?? "",
         r.subestado ?? "",
         r.cuadrilla ?? "",
-        r.fechaAsignacion?.toISOString() ?? "",
         r.fechaPrimerElemento?.toISOString() ?? "",
         entregaPost?.toISOString() ?? "",
         r.fechaAprobacionPostproceso?.toISOString() ?? "",

@@ -141,6 +141,7 @@ export type LevantamientoListItem = {
   workOrderStatus: WorkOrderStatus | null;
   estadoSecundario: string | null;
   fechaAsignacion: string | null;
+  fechaPrimerElemento?: string | null;
   fechaGestion: string | null;
   fechaGestionCalculada: string | null;
   diasAsigna: number | null;
@@ -148,10 +149,10 @@ export type LevantamientoListItem = {
   diasCierre: number | null;
   diasNovedades: number;
   diasGestionTotal: number | null;
-  diasAsignaColor: "red" | "green" | null;
-  diasAprobacionPostColor: "red" | "green" | null;
-  diasCierreColor: "red" | "green" | null;
-  diasGestionTotalColor: "red" | "green" | null;
+  diasAsignaColor: "red" | "yellow" | "green" | null;
+  diasAprobacionPostColor: "red" | "yellow" | "green" | null;
+  diasCierreColor: "red" | "yellow" | "green" | null;
+  diasGestionTotalColor: "red" | "yellow" | "green" | null;
 };
 
 async function apiFetch<T>(
@@ -239,7 +240,7 @@ export async function listWorkOrders(
     dateField?: "assignedAt" | "gestionAt";
     dateStart?: string;
     dateEnd?: string;
-    colorFilter?: "red" | "green";
+    colorFilter?: "red" | "yellow" | "green";
     page?: number;
     pageSize?: number;
     sortKey?: string;
@@ -292,7 +293,7 @@ export async function getWorkOrderMetrics(
     dateField?: "assignedAt" | "gestionAt";
     dateStart?: string;
     dateEnd?: string;
-    colorFilter?: "red" | "green";
+    colorFilter?: "red" | "yellow" | "green";
   } = {}
 ) {
   const qs = new URLSearchParams();
@@ -363,10 +364,10 @@ export async function listLevantamientos(
     etapa?: "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     asignacionStart?: string;
     asignacionEnd?: string;
-    diasAsignaColor?: "red" | "green";
-    diasAprobacionPostColor?: "red" | "green";
-    diasCierreColor?: "red" | "green";
-    diasGestionTotalColor?: "red" | "green";
+    diasAsignaColor?: "red" | "yellow" | "green";
+    diasAprobacionPostColor?: "red" | "yellow" | "green";
+    diasCierreColor?: "red" | "yellow" | "green";
+    diasGestionTotalColor?: "red" | "yellow" | "green";
     page?: number;
     pageSize?: number;
     sortKey?:
@@ -375,6 +376,7 @@ export async function listLevantamientos(
       | "estado"
       | "subestado"
       | "fechaAsignacion"
+      | "fechaPrimerElemento"
       | "fechaGestion"
       | "diasAsigna"
       | "diasAprobacionPost"

@@ -355,6 +355,39 @@ function computeCumplimientoAdjusted(
   return diasPasados >= 0 ? ("Cumple" as const) : ("No cumple" as const);
 }
 
+function computeDiasPasadosAdjusted(
+  input: {
+    status: WorkOrderStatus;
+    assignedAt: Date | null;
+    gestionAt: Date | null;
+    ansOportunidad: number | null;
+    diasDescuento: number;
+  },
+  inicioMap: Map<string, number>,
+  finMap: Map<string, number>,
+  maxFinNumber: number | undefined,
+  extraDescuento: number
+) {
+  if (input.status === "EXCLUDED") return null;
+  if (!input.assignedAt || input.ansOportunidad == null) return null;
+  const assignedNum = inicioMap.get(normalizeDay(input.assignedAt));
+  if (assignedNum === undefined) return null;
+  const nowFinNum = finMap.get(normalizeDay(new Date())) ?? maxFinNumber;
+  const refNum = input.gestionAt ? finMap.get(normalizeDay(input.gestionAt)) : nowFinNum;
+  if (refNum === undefined) return null;
+  const totalDiasDescuento = input.diasDescuento + extraDescuento;
+  const vencimientoNum = assignedNum + input.ansOportunidad + totalDiasDescuento;
+  return vencimientoNum - refNum;
+}
+
+function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | null): "red" | "yellow" | "green" | null {
+  if (status === "EXCLUDED") return "green";
+  if (diasPasados === null) return null;
+  if (diasPasados < 0) return "red";
+  if (diasPasados <= 2) return "yellow";
+  return "green";
+}
+
 workOrdersRouter.get("/gestores", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const rows = await prisma.workOrder.findMany({
     where: { gestorNombre: { not: null } },
@@ -385,7 +418,7 @@ workOrdersRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async
     dateField: z.enum(["assignedAt", "gestionAt"]).optional(),
     dateStart: z.string().optional(),
     dateEnd: z.string().optional(),
-    colorFilter: z.enum(["red", "green"]).optional()
+    colorFilter: z.enum(["red", "yellow", "green"]).optional()
   });
 
   const parsed = querySchema.safeParse(req.query);
@@ -497,10 +530,22 @@ workOrdersRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async
     );
 
     if (colorFilter) {
-      if (cumplimiento === null) continue;
-      const isRed = cumplimiento === "No cumple";
-      if (colorFilter === "red" && !isRed) continue;
-      if (colorFilter === "green" && isRed) continue;
+      const diasPasados = computeDiasPasadosAdjusted(
+        {
+          status: o.status,
+          assignedAt: o.assignedAt,
+          gestionAt: o.gestionAt,
+          ansOportunidad: o.ansOportunidad,
+          diasDescuento: o.diasDescuento
+        },
+        inicioMap,
+        finMap,
+        maxFinNumber,
+        extraDescuento
+      );
+      const color = colorFromDiasPasados(o.status, diasPasados);
+      if (color === null) continue;
+      if (color !== colorFilter) continue;
     }
 
     total++;
@@ -728,7 +773,7 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
     dateField: z.enum(["assignedAt", "gestionAt"]).optional(),
     dateStart: z.string().optional(),
     dateEnd: z.string().optional(),
-    colorFilter: z.enum(["red", "green"]).optional(),
+    colorFilter: z.enum(["red", "yellow", "green"]).optional(),
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(500).optional(),
     sortKey: sortKeySchema.optional(),
@@ -1026,9 +1071,8 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
 
     if (colorFilter) {
       mapped = mapped.filter((it) => {
-        if (it.cumplimiento === null) return false;
-        const isRed = it.cumplimiento === "No cumple";
-        return colorFilter === "red" ? isRed : !isRed;
+        const color = colorFromDiasPasados(it.status, it.diasPasados ?? null);
+        return color !== null && color === colorFilter;
       });
     }
 
