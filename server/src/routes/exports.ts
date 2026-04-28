@@ -348,16 +348,14 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
   const { inicioMap, finMap, finNumberToDate, maxFinNumber } = buildCalendarMaps(calendar);
 
   const codes = orders.map((o) => o.code);
-  const [baremos, enelGroups, novedades, devoluciones] = await Promise.all([
+  const [baremos, enelRows, novedades, devoluciones] = await Promise.all([
     prisma.actividadBaremo.findMany({
       where: { codigo: { in: codes } },
       select: { codigo: true, totalBarSum: true, ansRef: true, ansCalc: true }
     }),
-    prisma.recorridoIncremento.groupBy({
-      by: ["orderCode", "nombreIncremento"],
+    prisma.recorridoIncremento.findMany({
       where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
-      _max: { diasEnel: true },
-      _count: { diasEnel: true }
+      select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
     }),
     prisma.novedad.findMany({
       where: { workOrder: { code: { in: codes } }, fechaFin: { not: null } },
@@ -375,12 +373,42 @@ exportsRouter.get("/orders.csv", requireAuth, requirePermission("EXPORTES"), asy
   ]);
 
   const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
+  const byOrderAndInc = new Map<string, Array<[number, number]>>();
+  for (const r of enelRows) {
+    const startNum = inicioMap.get(normalizeDateStr(r.fechaInicio));
+    if (startNum === undefined) continue;
+    const endNum = startNum + (r.diasEnel ?? 0);
+    const key = `${r.orderCode}||${r.nombreIncremento}`;
+    const arr = byOrderAndInc.get(key) ?? [];
+    arr.push([startNum, endNum]);
+    byOrderAndInc.set(key, arr);
+  }
+  const unionLen = (intervals: Array<[number, number]>) => {
+    const sorted = intervals
+      .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s)
+      .sort((a, b) => a[0] - b[0]);
+    if (sorted.length === 0) return 0;
+    let total = 0;
+    let [cs, ce] = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      const [s, e] = sorted[i];
+      if (s <= ce) ce = Math.max(ce, e);
+      else {
+        total += ce - cs;
+        cs = s;
+        ce = e;
+      }
+    }
+    total += ce - cs;
+    return total;
+  };
   const enelSumMap = new Map<string, number>();
-  for (const g of enelGroups) {
-    const max = g._max.diasEnel ?? 0;
-    const count = g._count.diasEnel ?? 0;
-    const finalSum = max === 0 && count > 0 ? 1 : max;
-    enelSumMap.set(g.orderCode, (enelSumMap.get(g.orderCode) ?? 0) + finalSum);
+  for (const [key, intervals] of byOrderAndInc.entries()) {
+    const orderCode = key.split("||")[0] ?? "";
+    if (!orderCode) continue;
+    const raw = unionLen(intervals);
+    const val = raw === 0 && intervals.length > 0 ? 1 : raw;
+    enelSumMap.set(orderCode, (enelSumMap.get(orderCode) ?? 0) + val);
   }
 
   const novedadSumMap = new Map<string, number>();

@@ -291,6 +291,53 @@ function calendarKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function buildEnelUnionSumMap(
+  rows: Array<{ orderCode: string; nombreIncremento: string; fechaInicio: Date; diasEnel: number | null }>,
+  inicioMap: Map<string, number>
+) {
+  const byOrderAndInc = new Map<string, Array<[number, number]>>();
+  for (const r of rows) {
+    if (r.diasEnel == null) continue;
+    const startNum = inicioMap.get(normalizeDay(r.fechaInicio));
+    if (startNum === undefined) continue;
+    const endNum = startNum + r.diasEnel;
+    const key = `${r.orderCode}||${r.nombreIncremento}`;
+    const arr = byOrderAndInc.get(key) ?? [];
+    arr.push([startNum, endNum]);
+    byOrderAndInc.set(key, arr);
+  }
+
+  const unionLen = (intervals: Array<[number, number]>) => {
+    const sorted = intervals
+      .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s)
+      .sort((a, b) => a[0] - b[0]);
+    if (sorted.length === 0) return 0;
+    let total = 0;
+    let [cs, ce] = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      const [s, e] = sorted[i];
+      if (s <= ce) ce = Math.max(ce, e);
+      else {
+        total += ce - cs;
+        cs = s;
+        ce = e;
+      }
+    }
+    total += ce - cs;
+    return total;
+  };
+
+  const sumByOrder = new Map<string, number>();
+  for (const [key, intervals] of byOrderAndInc.entries()) {
+    const orderCode = key.split("||")[0] ?? "";
+    if (!orderCode) continue;
+    const raw = unionLen(intervals);
+    const val = raw === 0 && intervals.length > 0 ? 1 : raw;
+    sumByOrder.set(orderCode, (sumByOrder.get(orderCode) ?? 0) + val);
+  }
+  return sumByOrder;
+}
+
 type CalendarMaps = {
   inicioMap: Map<string, number>;
   finMap: Map<string, number>;
@@ -483,26 +530,18 @@ workOrdersRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async
   });
 
   const codes = base.map((b) => b.code);
-  const [baremos, enelGroups] = await Promise.all([
+  const [baremos, enelRows] = await Promise.all([
     prisma.actividadBaremo.findMany({
       where: { codigo: { in: codes } },
       select: { codigo: true, ansCalc: true }
     }),
-    prisma.recorridoIncremento.groupBy({
-      by: ["orderCode", "nombreIncremento"],
+    prisma.recorridoIncremento.findMany({
       where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
-      _max: { diasEnel: true },
-      _count: { diasEnel: true }
+      select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
     })
   ]);
   const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
-  const enelSumMap = new Map<string, number>();
-  for (const g of enelGroups) {
-    const max = g._max.diasEnel ?? 0;
-    const count = g._count.diasEnel ?? 0;
-    const finalSum = max === 0 && count > 0 ? 1 : max;
-    enelSumMap.set(g.orderCode, (enelSumMap.get(g.orderCode) ?? 0) + finalSum);
-  }
+  const enelSumMap = buildEnelUnionSumMap(enelRows, inicioMap);
 
   const byStatus: Record<string, number> = {};
   let total = 0;
@@ -940,19 +979,15 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
           where: { codigo: { in: group } },
           select: { codigo: true, totalBarSum: true, ansRef: true, ansCalc: true }
         }),
-        prisma.recorridoIncremento.groupBy({
-          by: ["orderCode", "nombreIncremento"],
+        prisma.recorridoIncremento.findMany({
           where: { orderCode: { in: group }, responsable: "ENEL", diasEnel: { not: null } },
-          _max: { diasEnel: true },
-          _count: { diasEnel: true }
+          select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
         })
       ]);
       baremos.push(...b);
-      for (const row of g) {
-        const max = row._max.diasEnel ?? 0;
-        const count = row._count.diasEnel ?? 0;
-        const finalSum = max === 0 && count > 0 ? 1 : max;
-        enelSumMap.set(row.orderCode, (enelSumMap.get(row.orderCode) ?? 0) + finalSum);
+      const groupMap = buildEnelUnionSumMap(g, inicioMap);
+      for (const [code, sum] of groupMap.entries()) {
+        enelSumMap.set(code, (enelSumMap.get(code) ?? 0) + sum);
       }
     }
 
@@ -1560,18 +1595,11 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
   });
 
   const baremoInt = typeof baremo?.ansCalc === "number" ? Math.round(baremo.ansCalc) : 0;
-  const enelGroup = await prisma.recorridoIncremento.groupBy({
-    by: ["orderCode", "nombreIncremento"],
+  const enelRows = await prisma.recorridoIncremento.findMany({
     where: { orderCode: dto.code, responsable: "ENEL", diasEnel: { not: null } },
-    _max: { diasEnel: true },
-    _count: { diasEnel: true }
+    select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
   });
-  let diasEnel = 0;
-  for (const g of enelGroup) {
-    const max = g._max.diasEnel ?? 0;
-    const count = g._count.diasEnel ?? 0;
-    diasEnel += max === 0 && count > 0 ? 1 : max;
-  }
+  const diasEnel = buildEnelUnionSumMap(enelRows, inicioMap).get(dto.code) ?? 0;
   const extraDescuento = baremoInt + diasEnel;
 
   const totalDiasDescuento = (dto.totalDiasDescuento ?? 0) + extraDescuento;
