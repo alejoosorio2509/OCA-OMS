@@ -137,6 +137,9 @@ export type LevantamientoListItem = {
   estado: string | null;
   subestado: string | null;
   cuadrilla: string | null;
+  entregaLevantamiento: string | null;
+  tipoOtLevantamiento: string | null;
+  entregaKeyLevantamiento: string | null;
   workOrderId: string | null;
   workOrderStatus: WorkOrderStatus | null;
   estadoSecundario: string | null;
@@ -331,6 +334,8 @@ export async function getLevantamientoMetrics(
     search?: string;
     nivelTension?: string;
     cuadrilla?: string;
+    tipoOt?: string;
+    entrega?: string;
     asignacionStart?: string;
     asignacionEnd?: string;
   } = {}
@@ -339,6 +344,8 @@ export async function getLevantamientoMetrics(
   if (query.search) qs.set("search", query.search);
   if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
   if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
+  if (query.tipoOt) qs.set("tipoOt", query.tipoOt);
+  if (query.entrega) qs.set("entrega", query.entrega);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
@@ -361,6 +368,8 @@ export async function listLevantamientos(
     search?: string;
     nivelTension?: string;
     cuadrilla?: string;
+    tipoOt?: string;
+    entrega?: string;
     etapa?: "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     asignacionStart?: string;
     asignacionEnd?: string;
@@ -389,6 +398,8 @@ export async function listLevantamientos(
   if (query.search) qs.set("search", query.search);
   if (query.nivelTension) qs.set("nivelTension", query.nivelTension);
   if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
+  if (query.tipoOt) qs.set("tipoOt", query.tipoOt);
+  if (query.entrega) qs.set("entrega", query.entrega);
   if (query.etapa) qs.set("etapa", query.etapa);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
@@ -409,6 +420,14 @@ export async function listLevantamientos(
 
 export async function listLevantamientoNivelesTension(token: string) {
   return apiFetch<string[]>("/levantamientos/nivel-tension", { token });
+}
+
+export async function listLevantamientoTiposOt(token: string) {
+  return apiFetch<string[]>("/levantamientos/tipo-ot", { token });
+}
+
+export async function listLevantamientoEntregas(token: string) {
+  return apiFetch<string[]>("/levantamientos/entregas", { token });
 }
 
 export async function createWorkOrder(

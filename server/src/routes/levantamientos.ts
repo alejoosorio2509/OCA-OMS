@@ -93,11 +93,37 @@ levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("ORDER
   res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
 });
 
+levantamientosRouter.get("/tipo-ot", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+  const rows = await prisma.levantamiento.findMany({
+    select: { tipoOtLevantamiento: true }
+  });
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = (r.tipoOtLevantamiento ?? "").trim();
+    if (v) set.add(v);
+  }
+  res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
+});
+
+levantamientosRouter.get("/entregas", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+  const rows = await prisma.levantamiento.findMany({
+    select: { entregaLevantamiento: true }
+  });
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = (r.entregaLevantamiento ?? "").trim();
+    if (v) set.add(v);
+  }
+  res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
+});
+
 levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const querySchema = z.object({
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
     cuadrilla: z.string().min(1).optional(),
+    tipoOt: z.string().min(1).optional(),
+    entrega: z.string().min(1).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional()
   });
@@ -108,7 +134,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     return;
   }
 
-  const { search, nivelTension, cuadrilla, asignacionStart, asignacionEnd } = parsed.data;
+  const { search, nivelTension, cuadrilla, tipoOt, entrega, asignacionStart, asignacionEnd } = parsed.data;
 
   const parseDay = (value: string) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
@@ -128,6 +154,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
+    ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
+    ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -265,6 +293,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
     cuadrilla: z.string().min(1).optional(),
+    tipoOt: z.string().min(1).optional(),
+    entrega: z.string().min(1).optional(),
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
@@ -302,6 +332,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     search,
     nivelTension,
     cuadrilla,
+    tipoOt,
+    entrega,
     etapa,
     asignacionStart,
     asignacionEnd,
@@ -333,6 +365,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
+    ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
+    ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -368,6 +402,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     estado: string | null;
     subestado: string | null;
     cuadrilla: string | null;
+    entregaLevantamiento: string | null;
+    tipoOtLevantamiento: string | null;
+    entregaKeyLevantamiento: string | null;
     fechaAprobacionValorizacionSt: Date | null;
     fechaAsignacion: Date | null;
     fechaEntregaPostproceso: Date | null;
@@ -417,12 +454,24 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const diasGestionTotalColorCalc =
       diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : diasGestionTotal <= 2 ? "yellow" : "green";
 
+    const entregaKeyCalc =
+      row.entregaKeyLevantamiento ??
+      (() => {
+        const t = (row.tipoOtLevantamiento ?? "").trim();
+        const e = (row.entregaLevantamiento ?? "").trim();
+        if (!t || !e) return null;
+        return `${t.slice(0, 4).toUpperCase()}_${e}`;
+      })();
+
     return {
       orderCode: row.orderCode,
       nivelTension: row.nivelTension,
       estado: row.estado,
       subestado: row.subestado,
       cuadrilla: row.cuadrilla,
+      entregaLevantamiento: row.entregaLevantamiento,
+      tipoOtLevantamiento: row.tipoOtLevantamiento,
+      entregaKeyLevantamiento: entregaKeyCalc,
       fechaAsignacion: row.fechaAsignacion,
       fechaPrimerElemento: row.fechaPrimerElemento,
       fechaGestion: fechaGestionEfectiva,
@@ -466,6 +515,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
           estado: true,
           subestado: true,
           cuadrilla: true,
+          entregaLevantamiento: true,
+          tipoOtLevantamiento: true,
+          entregaKeyLevantamiento: true,
           fechaAprobacionValorizacionSt: true,
           fechaAsignacion: true,
           fechaEntregaPostproceso: true,
@@ -555,6 +607,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       estado: true,
       subestado: true,
       cuadrilla: true,
+      entregaLevantamiento: true,
+      tipoOtLevantamiento: true,
+      entregaKeyLevantamiento: true,
       fechaAprobacionValorizacionSt: true,
       fechaAsignacion: true,
       fechaEntregaPostproceso: true,

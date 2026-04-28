@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LevantamientoListItem } from "../api";
-import { getLevantamientoMetrics, listLevantamientoNivelesTension, listLevantamientos } from "../api";
+import {
+  getLevantamientoMetrics,
+  listLevantamientoEntregas,
+  listLevantamientoNivelesTension,
+  listLevantamientoTiposOt,
+  listLevantamientos
+} from "../api";
 import { useAuth } from "../auth";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { API_URL } from "../apiUrl";
@@ -122,10 +128,14 @@ export function LevantamientoPage() {
   const [draftSearch, setDraftSearch] = useState(() => initialParams.get("search") || "");
   const [draftNivelTension, setDraftNivelTension] = useState(() => initialParams.get("nivelTension") || "");
   const [draftCuadrilla, setDraftCuadrilla] = useState(() => initialParams.get("cuadrilla") || "");
+  const [draftTipoOt, setDraftTipoOt] = useState(() => initialParams.get("tipoOt") || "");
+  const [draftEntrega, setDraftEntrega] = useState(() => initialParams.get("entrega") || "");
   const [draftEtapa, setDraftEtapa] = useState(() => initialParams.get("etapa") || "");
   const [draftAsignacionStart, setDraftAsignacionStart] = useState(() => initialParams.get("asignacionStart") || "");
   const [draftAsignacionEnd, setDraftAsignacionEnd] = useState(() => initialParams.get("asignacionEnd") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
+  const [tiposOt, setTiposOt] = useState<string[]>([]);
+  const [entregas, setEntregas] = useState<string[]>([]);
 
   const [draftDiasAsignaColor, setDraftDiasAsignaColor] = useState<"" | "red" | "yellow" | "green">(
     () => (initialParams.get("diasAsignaColor") as "" | "red" | "yellow" | "green" | null) || ""
@@ -144,6 +154,8 @@ export function LevantamientoPage() {
     search: string;
     nivelTension: string;
     cuadrilla: string;
+    tipoOt: string;
+    entrega: string;
     etapa: "" | "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     asignacionStart: string;
     asignacionEnd: string;
@@ -157,6 +169,8 @@ export function LevantamientoPage() {
     search: initialParams.get("search") || "",
     nivelTension: initialParams.get("nivelTension") || "",
     cuadrilla: initialParams.get("cuadrilla") || "",
+    tipoOt: initialParams.get("tipoOt") || "",
+    entrega: initialParams.get("entrega") || "",
     etapa: (initialParams.get("etapa") as Filters["etapa"] | null) || "",
     asignacionStart: initialParams.get("asignacionStart") || "",
     asignacionEnd: initialParams.get("asignacionEnd") || "",
@@ -190,6 +204,8 @@ export function LevantamientoPage() {
       search: draftSearch,
       nivelTension: draftNivelTension,
       cuadrilla: draftCuadrilla,
+      tipoOt: draftTipoOt,
+      entrega: draftEntrega,
       etapa: (draftEtapa as Filters["etapa"]) || "",
       asignacionStart: draftAsignacionStart,
       asignacionEnd: draftAsignacionEnd,
@@ -214,6 +230,8 @@ export function LevantamientoPage() {
     setDraftSearch("");
     setDraftNivelTension("");
     setDraftCuadrilla("");
+    setDraftTipoOt("");
+    setDraftEntrega("");
     setDraftEtapa("");
     setDraftAsignacionStart("");
     setDraftAsignacionEnd("");
@@ -225,6 +243,8 @@ export function LevantamientoPage() {
       search: "",
       nivelTension: "",
       cuadrilla: "",
+      tipoOt: "",
+      entrega: "",
       etapa: "",
       asignacionStart: "",
       asignacionEnd: "",
@@ -246,6 +266,8 @@ export function LevantamientoPage() {
     if (applied.search.trim()) next.set("search", applied.search.trim());
     if (applied.nivelTension.trim()) next.set("nivelTension", applied.nivelTension.trim());
     if (applied.cuadrilla.trim()) next.set("cuadrilla", applied.cuadrilla.trim());
+    if (applied.tipoOt.trim()) next.set("tipoOt", applied.tipoOt.trim());
+    if (applied.entrega.trim()) next.set("entrega", applied.entrega.trim());
     if (applied.etapa) next.set("etapa", applied.etapa);
     if (applied.asignacionStart) next.set("asignacionStart", applied.asignacionStart);
     if (applied.asignacionEnd) next.set("asignacionEnd", applied.asignacionEnd);
@@ -265,6 +287,8 @@ export function LevantamientoPage() {
       search: applied.search.trim() || undefined,
       nivelTension: applied.nivelTension.trim() || undefined,
       cuadrilla: applied.cuadrilla.trim() || undefined,
+      tipoOt: applied.tipoOt.trim() || undefined,
+      entrega: applied.entrega.trim() || undefined,
       etapa: applied.etapa || undefined,
       asignacionStart: applied.asignacionStart || undefined,
       asignacionEnd: applied.asignacionEnd || undefined,
@@ -282,13 +306,16 @@ export function LevantamientoPage() {
   useEffect(() => {
     let cancelled = false;
     if (!token) return;
-    listLevantamientoNivelesTension(token)
-      .then((data) => {
-        if (!cancelled) setNivelesTension(data);
-      })
-      .catch(() => {
-        if (!cancelled) setNivelesTension([]);
-      });
+    Promise.all([
+      listLevantamientoNivelesTension(token).catch(() => [] as string[]),
+      listLevantamientoTiposOt(token).catch(() => [] as string[]),
+      listLevantamientoEntregas(token).catch(() => [] as string[])
+    ]).then(([niveles, tipos, ents]) => {
+      if (cancelled) return;
+      setNivelesTension(niveles);
+      setTiposOt(tipos);
+      setEntregas(ents);
+    });
     return () => {
       cancelled = true;
     };
@@ -310,6 +337,8 @@ export function LevantamientoPage() {
       search: query.search,
       nivelTension: query.nivelTension,
       cuadrilla: query.cuadrilla,
+      tipoOt: query.tipoOt,
+      entrega: query.entrega,
       asignacionStart: query.asignacionStart,
       asignacionEnd: query.asignacionEnd
     })
@@ -344,6 +373,8 @@ export function LevantamientoPage() {
     if (applied.search.trim()) p.set("search", applied.search.trim());
     if (applied.nivelTension.trim()) p.set("nivelTension", applied.nivelTension.trim());
     if (applied.cuadrilla.trim()) p.set("cuadrilla", applied.cuadrilla.trim());
+    if (applied.tipoOt.trim()) p.set("tipoOt", applied.tipoOt.trim());
+    if (applied.entrega.trim()) p.set("entrega", applied.entrega.trim());
     if (applied.etapa) p.set("etapa", applied.etapa);
     if (applied.asignacionStart) p.set("asignacionStart", applied.asignacionStart);
     if (applied.asignacionEnd) p.set("asignacionEnd", applied.asignacionEnd);
@@ -621,6 +652,28 @@ export function LevantamientoPage() {
               ))}
             </select>
           </div>
+          <div className="field" style={{ flex: 1, minWidth: 220 }}>
+            <label>Tipo OT</label>
+            <select value={draftTipoOt} onChange={(e) => setDraftTipoOt(e.target.value)} style={{ width: "100%" }}>
+              <option value="">Todos</option>
+              {tiposOt.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 220 }}>
+            <label>Entrega</label>
+            <select value={draftEntrega} onChange={(e) => setDraftEntrega(e.target.value)} style={{ width: "100%" }}>
+              <option value="">Todas</option>
+              {entregas.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="field" style={{ width: 180 }}>
             <label>Primer elemento desde</label>
@@ -633,7 +686,7 @@ export function LevantamientoPage() {
 
           <div className="field" style={{ width: 200 }}>
             <label>Días Asigna</label>
-            <select value={draftDiasAsignaColor} onChange={(e) => setDraftDiasAsignaColor(e.target.value as "" | "red" | "green")}>
+            <select value={draftDiasAsignaColor} onChange={(e) => setDraftDiasAsignaColor(e.target.value as "" | "red" | "yellow" | "green")}>
               <option value="">Todos</option>
               <option value="green">Cumple</option>
               <option value="yellow">Por vencer</option>
@@ -644,7 +697,7 @@ export function LevantamientoPage() {
             <label>Días aprobación Post</label>
             <select
               value={draftDiasAprobacionPostColor}
-              onChange={(e) => setDraftDiasAprobacionPostColor(e.target.value as "" | "red" | "green")}
+              onChange={(e) => setDraftDiasAprobacionPostColor(e.target.value as "" | "red" | "yellow" | "green")}
             >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
@@ -654,7 +707,7 @@ export function LevantamientoPage() {
           </div>
           <div className="field" style={{ width: 200 }}>
             <label>Días cierre</label>
-            <select value={draftDiasCierreColor} onChange={(e) => setDraftDiasCierreColor(e.target.value as "" | "red" | "green")}>
+            <select value={draftDiasCierreColor} onChange={(e) => setDraftDiasCierreColor(e.target.value as "" | "red" | "yellow" | "green")}>
               <option value="">Todos</option>
               <option value="green">Cumple</option>
               <option value="yellow">Por vencer</option>
@@ -665,7 +718,7 @@ export function LevantamientoPage() {
             <label>Días gestión total</label>
             <select
               value={draftDiasGestionTotalColor}
-              onChange={(e) => setDraftDiasGestionTotalColor(e.target.value as "" | "red" | "green")}
+              onChange={(e) => setDraftDiasGestionTotalColor(e.target.value as "" | "red" | "yellow" | "green")}
             >
               <option value="">Todos</option>
               <option value="green">Cumple</option>
@@ -718,6 +771,7 @@ export function LevantamientoPage() {
             <thead>
               <tr>
                 <th><button className="table-sort" type="button" onClick={() => onSort("orderCode")}>Orden Trabajo</button></th>
+                <th>Tipo4_Entrega</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
@@ -732,9 +786,9 @@ export function LevantamientoPage() {
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -747,6 +801,7 @@ export function LevantamientoPage() {
                         it.orderCode
                       )}
                     </td>
+                    <td>{fmtVal(it.entregaKeyLevantamiento)}</td>
                     <td>{fmtVal(it.nivelTension)}</td>
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>

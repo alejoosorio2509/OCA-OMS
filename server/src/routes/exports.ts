@@ -511,6 +511,8 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
     cuadrilla: z.string().min(1).optional(),
+    tipoOt: z.string().min(1).optional(),
+    entrega: z.string().min(1).optional(),
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
@@ -532,6 +534,8 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     search,
     nivelTension,
     cuadrilla,
+    tipoOt,
+    entrega,
     etapa,
     asignacionStart,
     asignacionEnd,
@@ -563,6 +567,8 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
+    ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
+    ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -584,6 +590,9 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
         estado: true,
         subestado: true,
         cuadrilla: true,
+        entregaLevantamiento: true,
+        tipoOtLevantamiento: true,
+        entregaKeyLevantamiento: true,
         fechaAprobacionValorizacionSt: true,
         fechaAsignacion: true,
         fechaPrimerElemento: true,
@@ -655,6 +664,9 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     "Estado",
     "Subestado",
     "Cuadrilla",
+    "Entrega",
+    "Tipo OT",
+    "Tipo4_Entrega",
     "Fecha Primer Elemento",
     "Fecha Entrega Postproceso",
     "Fecha Aprobación Postproceso",
@@ -708,6 +720,15 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
       const refNum = finMap.get(normalizeDateStr(refDate));
       const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
 
+      const entregaKey =
+        r.entregaKeyLevantamiento ??
+        (() => {
+          const t = (r.tipoOtLevantamiento ?? "").trim();
+          const e = (r.entregaLevantamiento ?? "").trim();
+          if (!t || !e) return null;
+          return `${t.slice(0, 4).toUpperCase()}_${e}`;
+        })();
+
       const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
       const diasAprobacionPostColorCalc =
         diasAprobacionPost === null ? null : diasAprobacionPost < 0 ? "red" : diasAprobacionPost <= 2 ? "yellow" : "green";
@@ -740,6 +761,9 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
         r.estado ?? "",
         r.subestado ?? "",
         r.cuadrilla ?? "",
+        r.entregaLevantamiento ?? "",
+        r.tipoOtLevantamiento ?? "",
+        entregaKey ?? "",
         r.fechaPrimerElemento?.toISOString() ?? "",
         entregaPost?.toISOString() ?? "",
         r.fechaAprobacionPostproceso?.toISOString() ?? "",

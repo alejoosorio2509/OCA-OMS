@@ -2827,6 +2827,164 @@ async function processLevantamientoJob(input: {
   };
 }
 
+async function processEntregaLevantamientoJob(input: {
+  data: Record<string, unknown>[];
+  userId: string;
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  let createdCount = 0;
+  let updatedCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
+
+  const getVal = (row: Record<string, unknown>, name: string) => {
+    const target = normalizeHeader(name);
+    const key = Object.keys(row).find((k) => normalizeHeader(k) === target);
+    return key ? row[key] : undefined;
+  };
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    for (const n of names) {
+      const v = getVal(row, n);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const buildEntregaKey = (tipoOt: string | null, entrega: string | null) => {
+    const t = (tipoOt ?? "").trim();
+    const e = (entrega ?? "").trim();
+    if (!t || !e) return null;
+    const prefix = t.slice(0, 4).toUpperCase();
+    return `${prefix}_${e}`;
+  };
+
+  const codes = input.data
+    .map((row) => parseText(getValAny(row, ["CLONADA", "Clonada"])))
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  const uniqueCodes = [...new Set(codes)];
+  const existingOrders = new Set<string>();
+  const existingLevantamientos = new Set<string>();
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (const group of chunk(uniqueCodes, 500)) {
+    const rows = await prisma.workOrder.findMany({
+      where: { code: { in: group } },
+      select: { code: true }
+    });
+    for (const r of rows) existingOrders.add(r.code);
+  }
+
+  const missingOrders = uniqueCodes.filter((c) => !existingOrders.has(c));
+  for (const group of chunk(missingOrders, 500)) {
+    if (group.length === 0) continue;
+    await prisma.workOrder.createMany({
+      data: group.map((code) => ({
+        code,
+        title: `OT ${code}`,
+        status: "CREATED",
+        createdById: input.userId
+      })),
+      skipDuplicates: true
+    });
+    for (const c of group) existingOrders.add(c);
+  }
+
+  for (const group of chunk(uniqueCodes, 500)) {
+    const rows = await prisma.levantamiento.findMany({
+      where: { orderCode: { in: group } },
+      select: { orderCode: true }
+    });
+    for (const r of rows) existingLevantamientos.add(r.orderCode);
+  }
+
+  for (let i = 0; i < input.data.length; i++) {
+    const row = input.data[i];
+    try {
+      const orderCode = parseText(getValAny(row, ["CLONADA", "Clonada"]));
+      if (!orderCode) {
+        errorCount++;
+        rowErrors.push(`Fila ${i + 1}: Falta CLONADA`);
+        continue;
+      }
+
+      const entrega = parseText(getValAny(row, ["Entrega", "ENTREGA"]));
+      const tipoOt = parseText(getValAny(row, ["TIPO OT.", "TIPO OT", "Tipo OT.", "Tipo OT"]));
+      const entregaKey = buildEntregaKey(tipoOt, entrega);
+
+      const createData = {
+        orderCode,
+        ...(entrega ? { entregaLevantamiento: entrega } : {}),
+        ...(tipoOt ? { tipoOtLevantamiento: tipoOt } : {}),
+        ...(entregaKey ? { entregaKeyLevantamiento: entregaKey } : {})
+      };
+
+      const updateData = {
+        ...(entrega ? { entregaLevantamiento: entrega } : {}),
+        ...(tipoOt ? { tipoOtLevantamiento: tipoOt } : {}),
+        ...(entregaKey ? { entregaKeyLevantamiento: entregaKey } : {})
+      };
+
+      const existed = existingLevantamientos.has(orderCode);
+      await prisma.levantamiento.upsert({
+        where: { orderCode },
+        create: createData,
+        update: updateData
+      });
+
+      successCount++;
+      if (existed) updatedCount++;
+      else {
+        createdCount++;
+        existingLevantamientos.add(orderCode);
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+
+    if ((i + 1) % 500 === 0 && input.onProgress) {
+      await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+    }
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: input.data.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Entrega Levantamiento: ${createdCount} creadas, ${updatedCount} actualizadas.`,
+    count: successCount,
+    updated: updatedCount,
+    created: createdCount,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
 async function runJob(jobId: string) {
   const claimed = await claimJob(jobId);
   if (!claimed) return;
@@ -2878,6 +3036,12 @@ async function runJob(jobId: string) {
                 })
               : job.type === "LEVANTAMIENTO"
                 ? await processLevantamientoJob({
+                    data,
+                    userId: job.createdById,
+                    onProgress: (p) => updateJobProgress(jobId, p)
+                  })
+              : job.type === "ENTREGA_LEVANTAMIENTO"
+                ? await processEntregaLevantamientoJob({
                     data,
                     userId: job.createdById,
                     onProgress: (p) => updateJobProgress(jobId, p)
@@ -2983,7 +3147,8 @@ carguesRouter.post(
       "CALENDARIO",
       "ACTIVIDADES_BAREMO",
       "RECORRIDO_INCREMENTOS",
-      "LEVANTAMIENTO"
+      "LEVANTAMIENTO",
+      "ENTREGA_LEVANTAMIENTO"
     ]);
     if (asyncTypes.has(type) && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
@@ -3836,6 +4001,9 @@ carguesRouter.post(
       });
     } else if (type === "LEVANTAMIENTO") {
       const payload = await processLevantamientoJob({ data, userId: req.auth!.sub });
+      res.json(payload);
+    } else if (type === "ENTREGA_LEVANTAMIENTO") {
+      const payload = await processEntregaLevantamientoJob({ data, userId: req.auth!.sub });
       res.json(payload);
     } else if (type === "RECORRIDO_INCREMENTOS") {
       let successCount = 0;
