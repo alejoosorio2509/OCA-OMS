@@ -357,7 +357,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const THRESHOLD_DIAS_ASIGNA = 4;
   const SLA_APROBACION_POST_DIAS = 3;
-  const THRESHOLD_DIAS_CIERRE = 8;
+  const THRESHOLD_DIAS_CIERRE = 3;
   const THRESHOLD_DIAS_GESTION_TOTAL = 8;
 
   const now = new Date();
@@ -406,15 +406,14 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const aprobDeadlineNum = baseNum !== undefined ? baseNum + SLA_APROBACION_POST_DIAS + diasNovedades : undefined;
     const diasAprobacionPost = aprobDeadlineNum !== undefined && aprobEndNum !== undefined ? aprobDeadlineNum - aprobEndNum : null;
     const cierreStartNum = row.fechaAprobacionPostproceso ? inicioMap.get(calendarKey(row.fechaAprobacionPostproceso)) : undefined;
-    const cierreEndNum = row.fechaGestion ? finMap.get(calendarKey(row.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
-    const diasCierreRaw =
-      cierreStartNum !== undefined && cierreEndNum !== undefined ? Math.max(0, cierreEndNum - cierreStartNum) : null;
-    const diasCierre = applyNovedades(diasCierreRaw);
+    const cierreDeadlineNum = cierreStartNum !== undefined ? cierreStartNum + THRESHOLD_DIAS_CIERRE + diasNovedades : undefined;
+    const cierreRefNum = finMap.get(calendarKey(row.fechaGestion ?? now));
+    const diasCierre = cierreDeadlineNum !== undefined && cierreRefNum !== undefined ? cierreDeadlineNum - cierreRefNum : null;
 
     const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
     const diasAprobacionPostColorCalc =
       diasAprobacionPost === null ? null : diasAprobacionPost < 0 ? "red" : diasAprobacionPost <= 2 ? "yellow" : "green";
-    const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
+    const diasCierreColorCalc = diasCierre === null ? null : diasCierre < 0 ? "red" : diasCierre <= 2 ? "yellow" : "green";
     const diasGestionTotalColorCalc =
       diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : diasGestionTotal <= 2 ? "yellow" : "green";
 
