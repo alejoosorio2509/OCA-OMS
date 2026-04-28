@@ -114,7 +114,18 @@ levantamientosRouter.get("/entregas", requireAuth, requirePermission("ORDERS"), 
     const v = (r.entregaLevantamiento ?? "").trim();
     if (v) set.add(v);
   }
-  res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
+  const toNum = (value: string) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  res.json(
+    Array.from(set).sort((a, b) => {
+      const na = toNum(a);
+      const nb = toNum(b);
+      if (na !== null && nb !== null) return na - nb;
+      return a.localeCompare(b);
+    })
+  );
 });
 
 levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async (req, res) => {
