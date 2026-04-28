@@ -491,16 +491,16 @@ workOrdersRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async
     prisma.recorridoIncremento.groupBy({
       by: ["orderCode", "nombreIncremento"],
       where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
-      _sum: { diasEnel: true },
+      _max: { diasEnel: true },
       _count: { diasEnel: true }
     })
   ]);
   const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
   const enelSumMap = new Map<string, number>();
   for (const g of enelGroups) {
-    const sum = g._sum.diasEnel ?? 0;
+    const max = g._max.diasEnel ?? 0;
     const count = g._count.diasEnel ?? 0;
-    const finalSum = sum === 0 && count > 0 ? 1 : sum;
+    const finalSum = max === 0 && count > 0 ? 1 : max;
     enelSumMap.set(g.orderCode, (enelSumMap.get(g.orderCode) ?? 0) + finalSum);
   }
 
@@ -943,15 +943,15 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
         prisma.recorridoIncremento.groupBy({
           by: ["orderCode", "nombreIncremento"],
           where: { orderCode: { in: group }, responsable: "ENEL", diasEnel: { not: null } },
-          _sum: { diasEnel: true },
+          _max: { diasEnel: true },
           _count: { diasEnel: true }
         })
       ]);
       baremos.push(...b);
       for (const row of g) {
-        const sum = row._sum.diasEnel ?? 0;
+        const max = row._max.diasEnel ?? 0;
         const count = row._count.diasEnel ?? 0;
-        const finalSum = sum === 0 && count > 0 ? 1 : sum;
+        const finalSum = max === 0 && count > 0 ? 1 : max;
         enelSumMap.set(row.orderCode, (enelSumMap.get(row.orderCode) ?? 0) + finalSum);
       }
     }
@@ -1563,14 +1563,14 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
   const enelGroup = await prisma.recorridoIncremento.groupBy({
     by: ["orderCode", "nombreIncremento"],
     where: { orderCode: dto.code, responsable: "ENEL", diasEnel: { not: null } },
-    _sum: { diasEnel: true },
+    _max: { diasEnel: true },
     _count: { diasEnel: true }
   });
   let diasEnel = 0;
   for (const g of enelGroup) {
-    const sum = g._sum.diasEnel ?? 0;
+    const max = g._max.diasEnel ?? 0;
     const count = g._count.diasEnel ?? 0;
-    diasEnel += sum === 0 && count > 0 ? 1 : sum;
+    diasEnel += max === 0 && count > 0 ? 1 : max;
   }
   const extraDescuento = baremoInt + diasEnel;
 

@@ -2422,19 +2422,19 @@ async function processRecorridoIncrementosJob(input: {
   }
 
   const existingEnelSumByOrder = new Map<string, number>();
-  const existingEnelByOrderAndInc = new Map<string, Map<string, { sum: number; count: number }>>();
+  const existingEnelByOrderAndInc = new Map<string, Map<string, { max: number; count: number }>>();
   for (const r of existingRows) {
     if (r.responsable !== "ENEL") continue;
     if (r.diasEnel == null) continue;
-    const incMap = existingEnelByOrderAndInc.get(r.orderCode) ?? new Map<string, { sum: number; count: number }>();
-    const curr = incMap.get(r.nombreIncremento) ?? { sum: 0, count: 0 };
-    incMap.set(r.nombreIncremento, { sum: curr.sum + r.diasEnel, count: curr.count + 1 });
+    const incMap = existingEnelByOrderAndInc.get(r.orderCode) ?? new Map<string, { max: number; count: number }>();
+    const curr = incMap.get(r.nombreIncremento) ?? { max: 0, count: 0 };
+    incMap.set(r.nombreIncremento, { max: Math.max(curr.max, r.diasEnel), count: curr.count + 1 });
     existingEnelByOrderAndInc.set(r.orderCode, incMap);
   }
   for (const [code, incMap] of existingEnelByOrderAndInc.entries()) {
     let total = 0;
     for (const val of incMap.values()) {
-      total += val.sum === 0 && val.count > 0 ? 1 : val.sum;
+      total += val.max === 0 && val.count > 0 ? 1 : val.max;
     }
     existingEnelSumByOrder.set(code, total);
   }
@@ -2545,19 +2545,18 @@ async function processRecorridoIncrementosJob(input: {
     ? await prisma.recorridoIncremento.groupBy({
         by: ["orderCode", "nombreIncremento"],
         where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
-        _sum: { diasEnel: true },
+        _max: { diasEnel: true, fechaFin: true },
         _count: { diasEnel: true },
-        _min: { fechaInicio: true },
-        _max: { fechaFin: true }
+        _min: { fechaInicio: true }
       })
     : [];
 
   const newEnelSumByOrder = new Map<string, number>();
   const enelWindowByOrder = new Map<string, { fechaInicio: string | null; fechaFin: string | null }>();
   for (const g of newGroups) {
-    const sum = g._sum.diasEnel ?? 0;
+    const max = g._max.diasEnel ?? 0;
     const count = g._count.diasEnel ?? 0;
-    const finalSum = sum === 0 && count > 0 ? 1 : sum;
+    const finalSum = max === 0 && count > 0 ? 1 : max;
     newEnelSumByOrder.set(g.orderCode, (newEnelSumByOrder.get(g.orderCode) ?? 0) + finalSum);
 
     const inicio = g._min.fechaInicio ? new Date(g._min.fechaInicio).toISOString() : null;
@@ -4457,19 +4456,18 @@ carguesRouter.post(
         ? await prisma.recorridoIncremento.groupBy({
             by: ["orderCode", "nombreIncremento"],
             where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
-            _sum: { diasEnel: true },
+            _max: { diasEnel: true, fechaFin: true },
             _count: { diasEnel: true },
-            _min: { fechaInicio: true },
-            _max: { fechaFin: true }
+            _min: { fechaInicio: true }
           })
         : [];
 
       const newEnelSumByOrder = new Map<string, number>();
       const enelWindowByOrder = new Map<string, { fechaInicio: string | null; fechaFin: string | null }>();
       for (const g of newGroups) {
-        const sum = g._sum.diasEnel ?? 0;
+        const max = g._max.diasEnel ?? 0;
         const count = g._count.diasEnel ?? 0;
-        const finalSum = sum === 0 && count > 0 ? 1 : sum;
+        const finalSum = max === 0 && count > 0 ? 1 : max;
         newEnelSumByOrder.set(g.orderCode, (newEnelSumByOrder.get(g.orderCode) ?? 0) + finalSum);
         const inicio = g._min.fechaInicio ? new Date(g._min.fechaInicio).toISOString() : null;
         const fin = g._max.fechaFin ? new Date(g._max.fechaFin).toISOString() : null;
