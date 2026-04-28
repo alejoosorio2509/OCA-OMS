@@ -234,10 +234,12 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (etapa === "APROBACION") aprobacionPostproceso++;
     if (etapa === "GESTION") gestion++;
 
-    const diasRaw = diffByCalendarEndNow(inicioMap, finMap, r.fechaPrimerElemento, entrega, now);
-    const dias = diasRaw === null ? null : Math.max(0, diasRaw - diasNovedades);
-    if (dias !== null) {
-      if (dias <= 3) aprobacionCumple++;
+    const baseNum = r.fechaPrimerElemento ? inicioMap.get(calendarKey(r.fechaPrimerElemento)) : undefined;
+    const endNum = finMap.get(calendarKey(entrega ?? now));
+    const deadlineNum = baseNum !== undefined ? baseNum + 3 + diasNovedades : undefined;
+    const remaining = deadlineNum !== undefined && endNum !== undefined ? deadlineNum - endNum : null;
+    if (remaining !== null) {
+      if (remaining >= 0) aprobacionCumple++;
       else aprobacionNoCumple++;
     }
   }
@@ -354,7 +356,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const { inicioMap, finMap, finNumberToDate } = await loadCalendarMaps();
 
   const THRESHOLD_DIAS_ASIGNA = 4;
-  const THRESHOLD_DIAS_APROBACION_POST = 3;
+  const SLA_APROBACION_POST_DIAS = 3;
   const THRESHOLD_DIAS_CIERRE = 8;
   const THRESHOLD_DIAS_GESTION_TOTAL = 8;
 
@@ -399,8 +401,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const refNum = finMap.get(calendarKey(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
     const entregaPost = row.fechaEntregaPostproceso ?? extra.cierreSaitAt ?? null;
-    const diasAprobacionPostRaw = diffByCalendarEndNow(inicioMap, finMap, row.fechaPrimerElemento, entregaPost, now);
-    const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
+    const aprobRef = entregaPost ?? now;
+    const aprobEndNum = finMap.get(calendarKey(aprobRef));
+    const aprobDeadlineNum = baseNum !== undefined ? baseNum + SLA_APROBACION_POST_DIAS + diasNovedades : undefined;
+    const diasAprobacionPost = aprobDeadlineNum !== undefined && aprobEndNum !== undefined ? aprobDeadlineNum - aprobEndNum : null;
     const cierreStartNum = row.fechaAprobacionPostproceso ? inicioMap.get(calendarKey(row.fechaAprobacionPostproceso)) : undefined;
     const cierreEndNum = row.fechaGestion ? finMap.get(calendarKey(row.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
     const diasCierreRaw =
@@ -408,7 +412,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const diasCierre = applyNovedades(diasCierreRaw);
 
     const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
-    const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
+    const diasAprobacionPostColorCalc =
+      diasAprobacionPost === null ? null : diasAprobacionPost < 0 ? "red" : diasAprobacionPost <= 2 ? "yellow" : "green";
     const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
     const diasGestionTotalColorCalc =
       diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : diasGestionTotal <= 2 ? "yellow" : "green";

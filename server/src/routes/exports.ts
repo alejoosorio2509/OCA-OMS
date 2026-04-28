@@ -645,7 +645,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
   }
 
   const THRESHOLD_DIAS_ASIGNA = 4;
-  const THRESHOLD_DIAS_APROBACION_POST = 3;
+  const SLA_APROBACION_POST_DIAS = 3;
   const THRESHOLD_DIAS_CIERRE = 8;
   const now = new Date();
 
@@ -694,8 +694,10 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
       const diasAsigna = applyNovedades(diasAsignaRaw);
 
       const entregaPost = r.fechaEntregaPostproceso ?? cierreSaitByCode.get(r.orderCode) ?? null;
-      const diasAprobacionPostRaw = diffByCalendarEndNow(inicioMap, finMap, r.fechaPrimerElemento, entregaPost, now);
-      const diasAprobacionPost = applyNovedades(diasAprobacionPostRaw);
+      const aprobRef = entregaPost ?? now;
+      const aprobEndNum = finMap.get(normalizeDateStr(aprobRef));
+      const aprobDeadlineNum = baseNum !== undefined ? baseNum + SLA_APROBACION_POST_DIAS + diasNovedades : undefined;
+      const diasAprobacionPost = aprobDeadlineNum !== undefined && aprobEndNum !== undefined ? aprobDeadlineNum - aprobEndNum : null;
 
       const cierreStartNum = r.fechaAprobacionPostproceso ? inicioMap.get(normalizeDateStr(r.fechaAprobacionPostproceso)) : undefined;
       const cierreEndNum = r.fechaGestion ? finMap.get(normalizeDateStr(r.fechaGestion)) : baseNum !== undefined ? baseNum + 8 : undefined;
@@ -707,7 +709,8 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
       const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
 
       const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
-      const diasAprobacionPostColorCalc = colorByThreshold(diasAprobacionPost, THRESHOLD_DIAS_APROBACION_POST);
+      const diasAprobacionPostColorCalc =
+        diasAprobacionPost === null ? null : diasAprobacionPost < 0 ? "red" : diasAprobacionPost <= 2 ? "yellow" : "green";
       const diasCierreColorCalc = colorByThreshold(diasCierre, THRESHOLD_DIAS_CIERRE);
       const diasGestionTotalColorCalc =
         diasGestionTotal === null ? null : diasGestionTotal < 0 ? "red" : diasGestionTotal <= 2 ? "yellow" : "green";
