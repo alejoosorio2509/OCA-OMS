@@ -237,6 +237,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   let entregaPostproceso = 0;
   let aprobacionPostproceso = 0;
   let gestion = 0;
+  let gestionCerradas = 0;
+  let gestionAbiertas = 0;
   let aprobacionCumple = 0;
   let aprobacionNoCumple = 0;
 
@@ -262,6 +264,9 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     if (etapa === "APROBACION") aprobacionPostproceso++;
     if (etapa === "GESTION") gestion++;
 
+    if (r.fechaGestion) gestionCerradas++;
+    else gestionAbiertas++;
+
     const baseNum = r.fechaPrimerElemento ? inicioMap.get(calendarKey(r.fechaPrimerElemento)) : undefined;
     const endNum = finMap.get(calendarKey(entrega ?? now));
     const deadlineNum = baseNum !== undefined ? baseNum + 3 + diasNovedades : undefined;
@@ -282,6 +287,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     entregaPostproceso,
     aprobacionPostproceso,
     gestion,
+    gestionCerradas,
+    gestionAbiertas,
     aprobacionCumple,
     aprobacionNoCumple,
     aprobacionPct

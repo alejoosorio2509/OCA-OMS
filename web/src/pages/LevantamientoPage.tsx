@@ -114,6 +114,8 @@ export function LevantamientoPage() {
     entregaPostproceso: number;
     aprobacionPostproceso: number;
     gestion: number;
+    gestionCerradas: number;
+    gestionAbiertas: number;
     aprobacionCumple: number;
     aprobacionNoCumple: number;
     aprobacionPct: number;
@@ -621,6 +623,43 @@ export function LevantamientoPage() {
                 <div style={{ fontWeight: 900, fontSize: 22, color: DASH_BLUE }}>{metrics.gestion}</div>
               </div>
             </button>
+            <div
+              style={{
+                padding: 12,
+                border: `1px solid ${DASH_BLUE}`,
+                borderRadius: 8,
+                background: "white",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: DASH_BLUE,
+                  display: "grid",
+                  placeItems: "center",
+                  flex: "0 0 auto",
+                  marginTop: 2
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 20, height: 20, fill: "white" }}>
+                  <path d="M4 4h16v2H4V4zm0 7h16v2H4v-2zm0 7h16v2H4v-2z" />
+                </svg>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: DASH_BLUE, fontSize: 12 }}>Gestión por entrega</div>
+                <div style={{ marginTop: 6, fontSize: 12, color: DASH_BLUE }}>
+                  Cerradas: <span style={{ fontWeight: 900 }}>{metrics.gestionCerradas}</span>
+                </div>
+                <div style={{ marginTop: 4, fontSize: 12, color: DASH_BLUE }}>
+                  Abiertas: <span style={{ fontWeight: 900 }}>{metrics.gestionAbiertas}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

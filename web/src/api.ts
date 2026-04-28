@@ -356,6 +356,8 @@ export async function getLevantamientoMetrics(
     entregaPostproceso: number;
     aprobacionPostproceso: number;
     gestion: number;
+    gestionCerradas: number;
+    gestionAbiertas: number;
     aprobacionCumple: number;
     aprobacionNoCumple: number;
     aprobacionPct: number;
