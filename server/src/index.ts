@@ -9,8 +9,20 @@ import { exportsRouter } from "./routes/exports.js";
 import { levantamientosRouter } from "./routes/levantamientos.js";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
+import { prisma } from "./prisma.js";
 
 const app = express();
+
+async function ensureLevantamientoEntregaColumns() {
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "Levantamiento" ADD COLUMN IF NOT EXISTS "entregaLevantamiento" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "Levantamiento" ADD COLUMN IF NOT EXISTS "tipoOtLevantamiento" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "Levantamiento" ADD COLUMN IF NOT EXISTS "entregaKeyLevantamiento" TEXT');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`WARN: No se pudo asegurar columnas de entrega levantamiento: ${msg}`);
+  }
+}
 
 function getBuildInfo() {
   const commit =
@@ -113,6 +125,8 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "INTERNAL_ERROR" });
 });
 
-app.listen(env.PORT, "0.0.0.0", () => {
-  console.log(`API listening on port ${env.PORT} (0.0.0.0)`);
+ensureLevantamientoEntregaColumns().finally(() => {
+  app.listen(env.PORT, "0.0.0.0", () => {
+    console.log(`API listening on port ${env.PORT} (0.0.0.0)`);
+  });
 });

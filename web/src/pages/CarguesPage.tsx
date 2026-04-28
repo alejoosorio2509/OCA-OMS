@@ -163,7 +163,7 @@ export function CarguesPage() {
             <option value="ACTIVIDADES_BAREMO">Actividades Baremo</option>
             <option value="RECORRIDO_INCREMENTOS">Recorrido Incrementos</option>
             <option value="LEVANTAMIENTO">Levantamiento</option>
-            <option value="ENTREGA_LEVANTAMIENTO">Entrega Levantamiento (CLONADA/Entrega/Tipo OT)</option>
+            <option value="ENTREGA_LEVANTAMIENTO">Entrega Levantamiento</option>
           </select>
         </div>
 
