@@ -414,7 +414,8 @@ export function LevantamientoPage() {
     setPage(1);
   };
 
-  if (!canOrders) return <div className="card">No autorizado.</div>;
+  const canLevantamiento = user?.role === "ADMIN" || !!user?.canLevantamiento;
+  if (!canLevantamiento) return <div className="card">No autorizado.</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -888,7 +889,7 @@ export function LevantamientoPage() {
                         <button
                           className="btn btn-sm"
                           type="button"
-                          disabled={!it.workOrderId}
+                          disabled={!it.workOrderId || !canOrders}
                           onClick={() => {
                             if (!it.workOrderId) return;
                             setSelectedOrder({ id: it.workOrderId, code: it.orderCode });
@@ -901,7 +902,7 @@ export function LevantamientoPage() {
                         <button
                           className="btn btn-sm"
                           type="button"
-                          disabled={!it.workOrderId}
+                          disabled={!it.workOrderId || !canOrders}
                           onClick={() => {
                             if (!it.workOrderId) return;
                             setSelectedOrder({ id: it.workOrderId, code: it.orderCode });

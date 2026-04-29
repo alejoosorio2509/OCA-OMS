@@ -1830,6 +1830,10 @@ workOrdersRouter.post("/:id/transition", requireAuth, requirePermission("ORDERS"
 
   const toStatus = parsedBody.data.toStatus;
   const fromStatus = existing.status;
+  if (toStatus === "EXCLUDED" && req.auth?.role !== "ADMIN") {
+    res.status(403).json({ error: "FORBIDDEN" });
+    return;
+  }
   if (!canTransition(fromStatus, toStatus)) {
     res.status(409).json({ error: "INVALID_TRANSITION", fromStatus, toStatus });
     return;

@@ -102,7 +102,7 @@ function toKebab(value: string) {
 
 export function OrderDetailsPage() {
   const { id } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -211,6 +211,7 @@ export function OrderDetailsPage() {
   if (loading) return <div className="card">Cargando...</div>;
   if (error) return <div className="card error">{error}</div>;
   if (!order) return <div className="card">No se encontró la orden.</div>;
+  const canExclude = user?.role === "ADMIN";
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -316,26 +317,24 @@ export function OrderDetailsPage() {
         </div>
       ) : null}
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Exclusión</h3>
-        <div className="field">
-          <label>Observación de la exclusión</label>
-          <input 
-            value={note} 
-            onChange={(e) => setNote(e.target.value)} 
-            placeholder="Breve motivo de la exclusión..."
-          />
+      {canExclude ? (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Exclusión</h3>
+          <div className="field">
+            <label>Observación de la exclusión</label>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Breve motivo de la exclusión..."
+            />
+          </div>
+          <div className="actions" style={{ marginTop: 10 }}>
+            <button className="btn btn-danger" disabled={saving || !note.trim()} onClick={() => doTransition("EXCLUDED")}>
+              Cambiar estado a Excluido
+            </button>
+          </div>
         </div>
-        <div className="actions" style={{ marginTop: 10 }}>
-          <button 
-            className="btn btn-danger" 
-            disabled={saving || !note.trim()} 
-            onClick={() => doTransition("EXCLUDED")}
-          >
-            Cambiar estado a Excluido
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       {order.novedades.length > 0 && (
         <div className="card">

@@ -145,7 +145,7 @@ function colorByThreshold(value: number | null, threshold: number): "green" | "y
   return value > threshold - warnWindow ? "yellow" : "green";
 }
 
-levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("LEVANTAMIENTO"), async (_req, res) => {
   const rows = await prisma.levantamiento.findMany({
     select: { nivelTension: true }
   });
@@ -157,7 +157,7 @@ levantamientosRouter.get("/nivel-tension", requireAuth, requirePermission("ORDER
   res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
 });
 
-levantamientosRouter.get("/tipo-ot", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+levantamientosRouter.get("/tipo-ot", requireAuth, requirePermission("LEVANTAMIENTO"), async (_req, res) => {
   const rows = await prisma.levantamiento.findMany({
     select: { tipoOtLevantamiento: true }
   });
@@ -169,7 +169,7 @@ levantamientosRouter.get("/tipo-ot", requireAuth, requirePermission("ORDERS"), a
   res.json(Array.from(set).sort((a, b) => a.localeCompare(b)));
 });
 
-levantamientosRouter.get("/entregas", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+levantamientosRouter.get("/entregas", requireAuth, requirePermission("LEVANTAMIENTO"), async (_req, res) => {
   const rows = await prisma.levantamiento.findMany({
     select: { entregaLevantamiento: true }
   });
@@ -192,7 +192,7 @@ levantamientosRouter.get("/entregas", requireAuth, requirePermission("ORDERS"), 
   );
 });
 
-levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+levantamientosRouter.get("/metrics", requireAuth, requirePermission("LEVANTAMIENTO"), async (req, res) => {
   const querySchema = z.object({
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
@@ -386,7 +386,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   });
 });
 
-levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), async (req, res) => {
   const querySchema = z.object({
     search: z.string().min(1).optional(),
     nivelTension: z.string().min(1).optional(),
@@ -660,7 +660,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const idToCode = new Map(wo.map((o) => [o.id, o.code]));
     const histories = wo.length
       ? await prisma.workOrderHistory.findMany({
-          where: { workOrderId: { in: wo.map((o) => o.id) }, note: "Cierre SAIT", fechaInicio: { not: null } },
+          where: { workOrderId: { in: wo.map((o) => o.id) }, note: "Entrega Post", fechaInicio: { not: null } },
           select: { workOrderId: true, fechaInicio: true, changedAt: true },
           orderBy: { changedAt: "desc" }
         })

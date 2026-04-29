@@ -5,6 +5,7 @@ import "./layout.css";
 export function Layout() {
   const { user, logout } = useAuth();
   const canOrders = user?.role === "ADMIN" || !!user?.canOrders;
+  const canLevantamiento = user?.role === "ADMIN" || !!user?.canLevantamiento;
   const canCargues = user?.role === "ADMIN" || !!user?.canCargues;
   const canExportes = user?.role === "ADMIN" || !!user?.canExportes;
   const canUsers = user?.role === "ADMIN" || !!user?.canUsers;
@@ -28,7 +29,7 @@ export function Layout() {
         </div>
         <nav className="nav">
           {canOrders ? <NavLink to="/orders" end>Actualización</NavLink> : null}
-          {canOrders ? <NavLink to="/levantamiento">Levantamiento</NavLink> : null}
+          {canLevantamiento ? <NavLink to="/levantamiento">Levantamiento</NavLink> : null}
           {canCargues ? <NavLink to="/cargues">Cargues</NavLink> : null}
           {canExportes ? <NavLink to="/exportes">Exportes</NavLink> : null}
           {canUsers ? <NavLink to="/users">Usuarios</NavLink> : null}

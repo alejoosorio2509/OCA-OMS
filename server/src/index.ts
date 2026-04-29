@@ -24,6 +24,15 @@ async function ensureLevantamientoEntregaColumns() {
   }
 }
 
+async function ensureUserPermissionColumns() {
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canLevantamiento" BOOLEAN NOT NULL DEFAULT true');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`WARN: No se pudo asegurar columnas de permisos de usuario: ${msg}`);
+  }
+}
+
 function getBuildInfo() {
   const commit =
     process.env.RENDER_GIT_COMMIT ??
@@ -125,7 +134,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "INTERNAL_ERROR" });
 });
 
-ensureLevantamientoEntregaColumns().finally(() => {
+Promise.all([ensureLevantamientoEntregaColumns(), ensureUserPermissionColumns()]).finally(() => {
   app.listen(env.PORT, "0.0.0.0", () => {
     console.log(`API listening on port ${env.PORT} (0.0.0.0)`);
   });

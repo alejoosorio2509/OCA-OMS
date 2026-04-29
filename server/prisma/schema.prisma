@@ -50,6 +50,7 @@ model User {
   passwordHash String
   role         UserRole    @default(USER)
   canOrders    Boolean     @default(true)
+  canLevantamiento Boolean @default(true)
   canCargues   Boolean     @default(true)
   canExportes  Boolean     @default(true)
   canUsers     Boolean     @default(false)

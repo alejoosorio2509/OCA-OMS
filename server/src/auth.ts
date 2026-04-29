@@ -23,6 +23,7 @@ declare module "express-serve-static-core" {
     access?: {
       role: "ADMIN" | "USER";
       canOrders: boolean;
+      canLevantamiento: boolean;
       canCargues: boolean;
       canExportes: boolean;
       canUsers: boolean;
@@ -54,14 +55,14 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-export type PermissionKey = "ORDERS" | "CARGUES" | "EXPORTES" | "USERS";
+export type PermissionKey = "ORDERS" | "LEVANTAMIENTO" | "CARGUES" | "EXPORTES" | "USERS";
 
 async function loadAccess(req: Request) {
   if (req.access) return req.access;
   if (!req.auth) return undefined;
   const user = await prisma.user.findUnique({
     where: { id: req.auth.sub },
-    select: { role: true, canOrders: true, canCargues: true, canExportes: true, canUsers: true }
+    select: { role: true, canOrders: true, canLevantamiento: true, canCargues: true, canExportes: true, canUsers: true }
   });
   if (!user) return undefined;
   req.access = user;
@@ -86,6 +87,7 @@ export function requirePermission(permission: PermissionKey) {
 
     const ok =
       (permission === "ORDERS" && access.canOrders) ||
+      (permission === "LEVANTAMIENTO" && access.canLevantamiento) ||
       (permission === "CARGUES" && access.canCargues) ||
       (permission === "EXPORTES" && access.canExportes) ||
       (permission === "USERS" && access.canUsers);

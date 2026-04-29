@@ -16,6 +16,7 @@ usersRouter.get("/", requireAuth, requirePermission("USERS"), async (_req, res) 
       name: true,
       role: true,
       canOrders: true,
+      canLevantamiento: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
@@ -32,6 +33,7 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
     password: z.string().min(6),
     role: z.enum(["ADMIN", "USER"]).optional(),
     canOrders: z.boolean().optional(),
+    canLevantamiento: z.boolean().optional(),
     canCargues: z.boolean().optional(),
     canExportes: z.boolean().optional(),
     canUsers: z.boolean().optional()
@@ -43,7 +45,7 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
     return;
   }
 
-  const { email, name, password, role, canOrders, canCargues, canExportes, canUsers } = parsed.data;
+  const { email, name, password, role, canOrders, canLevantamiento, canCargues, canExportes, canUsers } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -59,6 +61,7 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
       passwordHash,
       role: role ?? "USER",
       ...(canOrders !== undefined ? { canOrders } : {}),
+      ...(canLevantamiento !== undefined ? { canLevantamiento } : {}),
       ...(canCargues !== undefined ? { canCargues } : {}),
       ...(canExportes !== undefined ? { canExportes } : {}),
       ...(canUsers !== undefined ? { canUsers } : {})
@@ -69,6 +72,7 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
       name: true,
       role: true,
       canOrders: true,
+      canLevantamiento: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
@@ -91,6 +95,7 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
     name: z.string().min(1).optional(),
     role: z.enum(["ADMIN", "USER"]).optional(),
     canOrders: z.boolean().optional(),
+    canLevantamiento: z.boolean().optional(),
     canCargues: z.boolean().optional(),
     canExportes: z.boolean().optional(),
     canUsers: z.boolean().optional()
@@ -125,6 +130,7 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
       name: true,
       role: true,
       canOrders: true,
+      canLevantamiento: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,

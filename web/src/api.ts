@@ -8,6 +8,7 @@ export type User = {
   name: string;
   role: UserRole;
   canOrders?: boolean;
+  canLevantamiento?: boolean;
   canCargues?: boolean;
   canExportes?: boolean;
   canUsers?: boolean;
@@ -209,6 +210,7 @@ export async function createUser(
     password: string;
     role?: UserRole;
     canOrders?: boolean;
+    canLevantamiento?: boolean;
     canCargues?: boolean;
     canExportes?: boolean;
     canUsers?: boolean;
@@ -225,6 +227,7 @@ export async function updateUser(
     name: string;
     role: UserRole;
     canOrders: boolean;
+    canLevantamiento: boolean;
     canCargues: boolean;
     canExportes: boolean;
     canUsers: boolean;
