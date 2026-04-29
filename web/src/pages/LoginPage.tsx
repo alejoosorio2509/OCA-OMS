@@ -62,6 +62,11 @@ export function LoginPage() {
               {loading ? "Ingresando..." : "Ingresar"}
             </button>
           </div>
+          <div style={{ marginTop: 10, fontSize: 13 }}>
+            <button className="btn btn-secondary" type="button" onClick={() => navigate("/reset-password")}>
+              Olvidé mi contraseña
+            </button>
+          </div>
           <div style={{ marginTop: 12, color: "#bdbdbd", fontSize: 13 }}>
             Contacto:Jose.Osorio@ocaglobal.com 
             Tel:3204543280

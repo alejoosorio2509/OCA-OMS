@@ -185,6 +185,14 @@ export async function login(email: string, password: string) {
   });
 }
 
+export async function changePassword(token: string, input: { currentPassword: string; newPassword: string }) {
+  return apiFetch<{ ok: true }>("/auth/change-password", { token, method: "POST", body: JSON.stringify(input) });
+}
+
+export async function resetPassword(input: { email: string; tempPassword: string; newPassword: string }) {
+  return apiFetch<{ ok: true }>("/auth/reset-password", { method: "POST", body: JSON.stringify(input) });
+}
+
 export async function me(token: string) {
   return apiFetch<User>("/auth/me", { token });
 }

@@ -58,6 +58,16 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [resetPw, setResetPw] = useState<Record<string, string>>({});
 
+  const modulesLabel = (u: { role: UserRole; canOrders?: boolean; canCargues?: boolean; canExportes?: boolean; canUsers?: boolean }) => {
+    if (u.role === "ADMIN") return "Admin (todos)";
+    const parts: string[] = [];
+    if (u.canOrders) parts.push("Actualización/Levantamiento");
+    if (u.canCargues) parts.push("Cargues");
+    if (u.canExportes) parts.push("Exportes");
+    if (u.canUsers) parts.push("Usuarios");
+    return parts.length ? parts.join(" · ") : "Sin módulos";
+  };
+
   function patchItem(id: string, patch: Partial<{ email: string; name: string; role: UserRole; canOrders: boolean; canCargues: boolean; canExportes: boolean; canUsers: boolean }>) {
     setItems((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   }
@@ -128,6 +138,9 @@ export function UsersPage() {
     <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Crear usuario</h2>
+        <div style={{ color: "var(--muted)", marginTop: -8, marginBottom: 12, fontSize: 13 }}>
+          Levantamiento usa el mismo permiso que Actualización (Actualización/Levantamiento).
+        </div>
         <form onSubmit={onCreate}>
           <div className="row">
             <div className="field">
@@ -162,7 +175,7 @@ export function UsersPage() {
               <div style={{ display: "grid", gap: 6 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={canOrders} onChange={(e) => setCanOrders(e.target.checked)} />
-                  Órdenes
+                  Actualización/Levantamiento
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={canCargues} onChange={(e) => setCanCargues(e.target.checked)} />
@@ -199,10 +212,11 @@ export function UsersPage() {
                 <th>Nombre</th>
                 <th>Email</th>
                 <th>Rol</th>
-                <th>Órdenes</th>
+                <th>Actualización/Levant.</th>
                 <th>Cargues</th>
                 <th>Exportes</th>
                 <th>Usuarios</th>
+                <th>Módulos</th>
                 <th>Creado</th>
                 <th>Acciones</th>
               </tr>
@@ -363,6 +377,7 @@ export function UsersPage() {
                       }}
                     />
                   </td>
+                  <td style={{ color: "var(--muted)", fontSize: 13 }}>{modulesLabel(u)}</td>
                   <td>{new Date(u.createdAt).toLocaleString()}</td>
                   <td>
                     <button
@@ -375,7 +390,27 @@ export function UsersPage() {
                       Reset password
                     </button>
                     {resetPw[u.id] ? (
-                      <div style={{ marginTop: 6, fontFamily: "monospace" }}>{resetPw[u.id]}</div>
+                      <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+                        <div style={{ fontFamily: "monospace" }}>{resetPw[u.id]}</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(resetPw[u.id]);
+                              } catch {
+                                return;
+                              }
+                            }}
+                          >
+                            Copiar
+                          </button>
+                          <a className="btn btn-sm btn-secondary" href={`/reset-password?email=${encodeURIComponent(u.email)}`} target="_blank" rel="noreferrer">
+                            Abrir restablecer
+                          </a>
+                        </div>
+                      </div>
                     ) : null}
                   </td>
                 </tr>

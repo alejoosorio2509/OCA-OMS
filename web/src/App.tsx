@@ -3,6 +3,7 @@ import "./App.css";
 import { RequireAuth } from "./RequireAuth";
 import { Layout } from "./Layout";
 import { LoginPage } from "./pages/LoginPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { OrderDetailsPage } from "./pages/OrderDetailsPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -15,6 +16,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Navigate to="/orders" replace />} />
