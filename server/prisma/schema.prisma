@@ -273,3 +273,30 @@ model Levantamiento {
 
   @@index([orderCode])
 }
+
+model ModeloCategoriaMb {
+  id                    String   @id @default(cuid())
+  categoria              String?
+  descripcionCategoria   String?
+  sigla                  String?
+  denominacionFabricante String?
+  tipoComp               String?
+  descripcionTipo        String?
+  tabUnif                String?
+  tipoUnifCodMaterial    String?
+  codMod                 String?
+  modelo                 String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([codMod])
+  @@index([tipoUnifCodMaterial])
+}
+
+model CircuitoSubestacion {
+  codCircuito    String   @id
+  nomCircuito    String?
+  nomSubestacion String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

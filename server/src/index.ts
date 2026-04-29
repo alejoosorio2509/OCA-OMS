@@ -33,6 +33,45 @@ async function ensureUserPermissionColumns() {
   }
 }
 
+async function ensureCarguesCatalogTables() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ModeloCategoriaMb" (
+        "id" TEXT PRIMARY KEY,
+        "categoria" TEXT,
+        "descripcionCategoria" TEXT,
+        "sigla" TEXT,
+        "denominacionFabricante" TEXT,
+        "tipoComp" TEXT,
+        "descripcionTipo" TEXT,
+        "tabUnif" TEXT,
+        "tipoUnifCodMaterial" TEXT,
+        "codMod" TEXT,
+        "modelo" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ModeloCategoriaMb_codMod_idx" ON "ModeloCategoriaMb"("codMod")`);
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "ModeloCategoriaMb_tipoUnifCodMaterial_idx" ON "ModeloCategoriaMb"("tipoUnifCodMaterial")`
+    );
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "CircuitoSubestacion" (
+        "codCircuito" TEXT PRIMARY KEY,
+        "nomCircuito" TEXT,
+        "nomSubestacion" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`WARN: No se pudo asegurar tablas de catálogos de cargues: ${msg}`);
+  }
+}
+
 function getBuildInfo() {
   const commit =
     process.env.RENDER_GIT_COMMIT ??
@@ -143,7 +182,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "INTERNAL_ERROR" });
 });
 
-Promise.all([ensureLevantamientoEntregaColumns(), ensureUserPermissionColumns()]).finally(() => {
+Promise.all([ensureLevantamientoEntregaColumns(), ensureUserPermissionColumns(), ensureCarguesCatalogTables()]).finally(() => {
   app.listen(env.PORT, "0.0.0.0", () => {
     console.log(`API listening on port ${env.PORT} (0.0.0.0)`);
   });

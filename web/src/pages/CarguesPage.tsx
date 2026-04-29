@@ -14,7 +14,9 @@ type UploadType =
   | "ACTIVIDADES_BAREMO"
   | "RECORRIDO_INCREMENTOS"
   | "LEVANTAMIENTO"
-  | "ENTREGA_LEVANTAMIENTO";
+  | "ENTREGA_LEVANTAMIENTO"
+  | "MODELO_CATEGORIA_MB"
+  | "CIRCUITOS_SUBESTACIONES";
 
 export function CarguesPage() {
   const { token, user } = useAuth();
@@ -164,6 +166,8 @@ export function CarguesPage() {
             <option value="RECORRIDO_INCREMENTOS">Recorrido Incrementos</option>
             <option value="LEVANTAMIENTO">Levantamiento</option>
             <option value="ENTREGA_LEVANTAMIENTO">Entrega Levantamiento</option>
+            <option value="MODELO_CATEGORIA_MB">Modelo Categoría MB</option>
+            <option value="CIRCUITOS_SUBESTACIONES">Circuitos/Subestaciones</option>
           </select>
         </div>
 
@@ -211,6 +215,16 @@ export function CarguesPage() {
           <li>Actualización/Devoluciones/Calendario/Recorrido Incrementos: máximo 50MB.</li>
           <li>Actividades Baremo: máximo 100MB.</li>
         </ul>
+        {uploadType === "CIRCUITOS_SUBESTACIONES" ? (
+          <>
+            <h4 style={{ marginTop: 12 }}>Columnas requeridas (Circuitos/Subestaciones)</h4>
+            <ul>
+              <li>COD_CIRCUITO</li>
+              <li>NOM_CIRCUITO</li>
+              <li>NOM_SUBESTACION</li>
+            </ul>
+          </>
+        ) : null}
       </div>
     </div>
   );

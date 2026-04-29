@@ -553,7 +553,9 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       input.type === "ACTUALIZACION" ||
       input.type === "ACTIVIDADES_BAREMO" ||
       input.type === "RECORRIDO_INCREMENTOS" ||
-      input.type === "LEVANTAMIENTO"
+      input.type === "LEVANTAMIENTO" ||
+      input.type === "MODELO_CATEGORIA_MB" ||
+      input.type === "CIRCUITOS_SUBESTACIONES"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
@@ -3017,6 +3019,199 @@ async function processEntregaLevantamientoJob(input: {
   };
 }
 
+async function processModeloCategoriaMbJob(input: {
+  data: Record<string, unknown>[];
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const target = normalizeHeader(name);
+      const key = keys.find((k) => normalizeHeader(k) === target);
+      if (key) return row[key];
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const rows = input.data
+    .map((r) => ({
+      categoria: parseText(getValAny(r, ["Categoria"])),
+      descripcionCategoria: parseText(getValAny(r, ["Descripcion Categoria", "Descripción Categoria"])),
+      sigla: parseText(getValAny(r, ["Sigla"])),
+      denominacionFabricante: parseText(getValAny(r, ["Denominacion Fabricante", "Denominación Fabricante"])),
+      tipoComp: parseText(getValAny(r, ["Tipo Comp.", "Tipo Comp", "Tipo componente"])),
+      descripcionTipo: parseText(getValAny(r, ["Descripcion Tipo", "Descripción Tipo"])),
+      tabUnif: parseText(getValAny(r, ["Tab. Unif.", "Tab Unif", "Tab Unif."])),
+      tipoUnifCodMaterial: parseText(getValAny(r, ["Tipo.Unif.+Cod. Material", "Tipo Unif Cod Material"])),
+      codMod: parseText(getValAny(r, ["Cod. Mod.", "Cod Mod", "Cod. Mod"])),
+      modelo: parseText(getValAny(r, ["Modelo"]))
+    }))
+    .filter((r) =>
+      [
+        r.categoria,
+        r.descripcionCategoria,
+        r.sigla,
+        r.denominacionFabricante,
+        r.tipoComp,
+        r.descripcionTipo,
+        r.tabUnif,
+        r.tipoUnifCodMaterial,
+        r.codMod,
+        r.modelo
+      ].some((v) => typeof v === "string" && v.trim())
+    );
+
+  await prisma.modeloCategoriaMb.deleteMany({});
+
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      void i;
+      successCount++;
+      if ((i + 1) % 1000 === 0 && input.onProgress) {
+        await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+  }
+
+  for (const group of chunk(rows, 1000)) {
+    if (group.length === 0) continue;
+    await prisma.modeloCategoriaMb.createMany({ data: group });
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: rows.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Modelo Categoría MB: ${rows.length} cargados.`,
+    count: successCount,
+    updated: 0,
+    created: rows.length,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
+async function processCircuitosSubestacionesJob(input: {
+  data: Record<string, unknown>[];
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const target = normalizeHeader(name);
+      const key = keys.find((k) => normalizeHeader(k) === target);
+      if (key) return row[key];
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const rows = input.data
+    .map((r) => ({
+      codCircuito: parseText(getValAny(r, ["COD_CIRCUITO", "Cod_circuito", "COD CIRCUITO", "Cod circuito"])),
+      nomCircuito: parseText(getValAny(r, ["NOM_CIRCUITO", "Nom_circuito", "NOM CIRCUITO", "Nom circuito"])),
+      nomSubestacion: parseText(getValAny(r, ["NOM_SUBESTACION", "Nom_subestacion", "NOM SUBESTACION", "Nom subestacion"]))
+    }))
+    .filter((r) => typeof r.codCircuito === "string" && r.codCircuito.trim())
+    .map((r) => ({
+      codCircuito: r.codCircuito!.trim(),
+      nomCircuito: r.nomCircuito,
+      nomSubestacion: r.nomSubestacion
+    }));
+
+  await prisma.circuitoSubestacion.deleteMany({});
+
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      void i;
+      successCount++;
+      if ((i + 1) % 1000 === 0 && input.onProgress) {
+        await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+  }
+
+  for (const group of chunk(rows, 1000)) {
+    if (group.length === 0) continue;
+    await prisma.circuitoSubestacion.createMany({ data: group });
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: rows.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Circuitos/Subestaciones: ${rows.length} cargados.`,
+    count: successCount,
+    updated: 0,
+    created: rows.length,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
 async function runJob(jobId: string) {
   const claimed = await claimJob(jobId);
   if (!claimed) return;
@@ -3078,6 +3273,10 @@ async function runJob(jobId: string) {
                     userId: job.createdById,
                     onProgress: (p) => updateJobProgress(jobId, p)
                   })
+              : job.type === "MODELO_CATEGORIA_MB"
+                ? await processModeloCategoriaMbJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
+              : job.type === "CIRCUITOS_SUBESTACIONES"
+                ? await processCircuitosSubestacionesJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : (() => {
                   throw new Error("UNSUPPORTED_JOB_TYPE");
                 })();
@@ -3180,7 +3379,9 @@ carguesRouter.post(
       "ACTIVIDADES_BAREMO",
       "RECORRIDO_INCREMENTOS",
       "LEVANTAMIENTO",
-      "ENTREGA_LEVANTAMIENTO"
+      "ENTREGA_LEVANTAMIENTO",
+      "MODELO_CATEGORIA_MB",
+      "CIRCUITOS_SUBESTACIONES"
     ]);
     if (asyncTypes.has(type) && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
@@ -4036,6 +4237,12 @@ carguesRouter.post(
       res.json(payload);
     } else if (type === "ENTREGA_LEVANTAMIENTO") {
       const payload = await processEntregaLevantamientoJob({ data, userId: req.auth!.sub });
+      res.json(payload);
+    } else if (type === "MODELO_CATEGORIA_MB") {
+      const payload = await processModeloCategoriaMbJob({ data });
+      res.json(payload);
+    } else if (type === "CIRCUITOS_SUBESTACIONES") {
+      const payload = await processCircuitosSubestacionesJob({ data });
       res.json(payload);
     } else if (type === "RECORRIDO_INCREMENTOS") {
       let successCount = 0;
