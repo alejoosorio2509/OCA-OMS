@@ -148,7 +148,7 @@ export function CarguesPage() {
     <div className="card cargues-page">
       <h2>Sección de Cargues</h2>
       <p className="description">
-        Sube archivos de <strong>Actualización</strong> o <strong>Devoluciones</strong> en formato CSV o Excel.
+        Sube archivos de cargue en formato CSV o Excel.
       </p>
 
       <form onSubmit={handleUpload} className="upload-form">
