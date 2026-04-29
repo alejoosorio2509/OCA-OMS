@@ -105,6 +105,14 @@ app.get("/uploads/*path", async (req, res) => {
         : key.startsWith("postproceso/")
           ? env.SUPABASE_STORAGE_BUCKET_POSTPROCESO
           : env.SUPABASE_STORAGE_BUCKET;
+
+    const { data: signed, error: signErr } = await supabase.storage.from(bucket).createSignedUrl(key, 60 * 5);
+    if (!signErr && signed?.signedUrl) {
+      res.setHeader("cache-control", "no-store");
+      res.redirect(302, signed.signedUrl);
+      return;
+    }
+
     const { data, error } = await supabase.storage.from(bucket).download(key);
     if (error || !data) {
       res.status(404).end();
@@ -113,6 +121,7 @@ app.get("/uploads/*path", async (req, res) => {
 
     const buf = Buffer.from(await data.arrayBuffer());
     if (data.type) res.setHeader("content-type", data.type);
+    res.setHeader("cache-control", "public, max-age=3600");
     res.status(200).send(buf);
   } catch {
     res.status(500).end();
