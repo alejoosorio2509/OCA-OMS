@@ -6,8 +6,15 @@ import { requireAuth, requirePermission } from "../auth.js";
 
 export const levantamientosRouter = Router();
 
+const BOGOTA_TZ = "America/Bogota";
+const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+
 function calendarKey(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function bogotaDateKey(date: Date) {
+  return bogotaDateFmt.format(date);
 }
 
 function parseBogotaDateOnly(value: string) {
@@ -19,6 +26,53 @@ function parseBogotaDateOnly(value: string) {
     return new Date(Date.UTC(y, mo - 1, d, 5, 0, 0));
   }
   return new Date(value);
+}
+
+function buildEnelUnionSumMap(
+  rows: Array<{ orderCode: string; nombreIncremento: string; fechaInicio: Date; diasEnel: number | null }>,
+  inicioMap: Map<string, number>
+) {
+  const byOrderAndInc = new Map<string, Array<[number, number]>>();
+  for (const r of rows) {
+    if (r.diasEnel == null) continue;
+    const startNum = inicioMap.get(bogotaDateKey(r.fechaInicio));
+    if (startNum === undefined) continue;
+    const endNum = startNum + r.diasEnel;
+    const key = `${r.orderCode}||${r.nombreIncremento}`;
+    const arr = byOrderAndInc.get(key) ?? [];
+    arr.push([startNum, endNum]);
+    byOrderAndInc.set(key, arr);
+  }
+
+  const unionLen = (intervals: Array<[number, number]>) => {
+    const sorted = intervals
+      .filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s)
+      .sort((a, b) => a[0] - b[0]);
+    if (sorted.length === 0) return 0;
+    let total = 0;
+    let [cs, ce] = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      const [s, e] = sorted[i];
+      if (s <= ce) ce = Math.max(ce, e);
+      else {
+        total += ce - cs;
+        cs = s;
+        ce = e;
+      }
+    }
+    total += ce - cs;
+    return total;
+  };
+
+  const sumByOrder = new Map<string, number>();
+  for (const [key, intervals] of byOrderAndInc.entries()) {
+    const orderCode = key.split("||")[0] ?? "";
+    if (!orderCode) continue;
+    const raw = unionLen(intervals);
+    const val = raw === 0 && intervals.length > 0 ? 1 : raw;
+    sumByOrder.set(orderCode, (sumByOrder.get(orderCode) ?? 0) + val);
+  }
+  return sumByOrder;
 }
 
 type CalendarMaps = {
@@ -600,6 +654,14 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       }
     }
 
+    const enelRows = codes.length
+      ? await prisma.recorridoIncremento.findMany({
+          where: { orderCode: { in: codes }, responsable: "ENEL", diasEnel: { not: null } },
+          select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
+        })
+      : [];
+    const diasEnelByCode = buildEnelUnionSumMap(enelRows, inicioMap);
+
     const items = pageItems.map((r) => {
       const computed = computeRow(r, {
         cierreSaitAt: cierreSaitByCode.get(r.orderCode) ?? null,
@@ -608,6 +670,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
       const w = woByCode.get(r.orderCode) ?? null;
       return {
         ...computed,
+        diasEnel: diasEnelByCode.get(r.orderCode) ?? 0,
         workOrderId: w?.id ?? null,
         workOrderStatus: w?.status ?? null,
         estadoSecundario: w?.estadoSecundario ?? null
@@ -782,8 +845,15 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   const total = computed.length;
   const start = (page - 1) * pageSize;
   const items = computed.slice(start, start + pageSize);
-  const userId = req.auth!.sub;
   const pageCodes = items.map((r) => r.orderCode);
+  const enelRows = pageCodes.length
+    ? await prisma.recorridoIncremento.findMany({
+        where: { orderCode: { in: pageCodes }, responsable: "ENEL", diasEnel: { not: null } },
+        select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
+      })
+    : [];
+  const diasEnelByCode = buildEnelUnionSumMap(enelRows, inicioMap);
+  const userId = req.auth!.sub;
   if (pageCodes.length) {
     const existingCodes = await prisma.workOrder.findMany({ where: { code: { in: pageCodes } }, select: { code: true } });
     const existingSet = new Set(existingCodes.map((r) => r.code));
@@ -801,10 +871,16 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const woByCode = new Map(wo.map((o) => [o.code, o]));
     const hydrated = items.map((r) => {
       const w = woByCode.get(r.orderCode) ?? null;
-      return { ...r, workOrderId: w?.id ?? null, workOrderStatus: w?.status ?? null, estadoSecundario: w?.estadoSecundario ?? null };
+      return {
+        ...r,
+        diasEnel: diasEnelByCode.get(r.orderCode) ?? 0,
+        workOrderId: w?.id ?? null,
+        workOrderStatus: w?.status ?? null,
+        estadoSecundario: w?.estadoSecundario ?? null
+      };
     });
     res.json({ items: hydrated, total, page, pageSize });
     return;
   }
-  res.json({ items, total, page, pageSize });
+  res.json({ items: items.map((r) => ({ ...r, diasEnel: diasEnelByCode.get(r.orderCode) ?? 0 })), total, page, pageSize });
 });

@@ -820,14 +820,15 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasAprobacionPost")}>Días aprobación Post</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasCierre")}>Días cierre</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("diasGestionTotal")}>Días gestión total</button></th>
+                <th>R. Incrementos</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={12} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -858,6 +859,7 @@ export function LevantamientoPage() {
                     <td style={{ fontWeight: 800, color: it.diasGestionTotalColor === "red" ? "red" : it.diasGestionTotalColor === "yellow" ? "#d39e00" : it.diasGestionTotalColor === "green" ? "green" : colorOf(it.diasGestionTotal) }}>
                       {it.diasGestionTotal ?? "—"}
                     </td>
+                    <td>{it.diasEnel || 0}</td>
                     <td style={{ minWidth: 220 }}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button

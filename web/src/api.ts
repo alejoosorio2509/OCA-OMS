@@ -151,6 +151,7 @@ export type LevantamientoListItem = {
   diasAprobacionPost: number | null;
   diasCierre: number | null;
   diasNovedades: number;
+  diasEnel: number;
   diasGestionTotal: number | null;
   diasAsignaColor: "red" | "yellow" | "green" | null;
   diasAprobacionPostColor: "red" | "yellow" | "green" | null;
