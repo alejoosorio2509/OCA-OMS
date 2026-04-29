@@ -3174,15 +3174,22 @@ async function processCircuitosSubestacionesJob(input: {
 
   await prisma.circuitoSubestacion.deleteMany({});
 
-  const chunk = <T,>(arr: T[], size: number) => {
-    const out: T[][] = [];
-    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-    return out;
-  };
-
+  const mergedByCode = new Map<string, { codCircuito: string; nomCircuito: string | null; nomSubestacion: string | null }>();
+  let duplicatesMerged = 0;
   for (let i = 0; i < rows.length; i++) {
     try {
-      void i;
+      const r = rows[i]!;
+      const existing = mergedByCode.get(r.codCircuito);
+      if (existing) {
+        duplicatesMerged++;
+        mergedByCode.set(r.codCircuito, {
+          codCircuito: r.codCircuito,
+          nomCircuito: r.nomCircuito ?? existing.nomCircuito,
+          nomSubestacion: r.nomSubestacion ?? existing.nomSubestacion
+        });
+      } else {
+        mergedByCode.set(r.codCircuito, r);
+      }
       successCount++;
       if ((i + 1) % 1000 === 0 && input.onProgress) {
         await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
@@ -3194,9 +3201,17 @@ async function processCircuitosSubestacionesJob(input: {
     }
   }
 
-  for (const group of chunk(rows, 1000)) {
+  const uniqueRows = Array.from(mergedByCode.values());
+
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (const group of chunk(uniqueRows, 1000)) {
     if (group.length === 0) continue;
-    await prisma.circuitoSubestacion.createMany({ data: group });
+    await prisma.circuitoSubestacion.createMany({ data: group, skipDuplicates: true });
   }
 
   if (input.onProgress) {
@@ -3204,10 +3219,10 @@ async function processCircuitosSubestacionesJob(input: {
   }
 
   return {
-    message: `Circuitos/Subestaciones: ${rows.length} cargados.`,
+    message: `Circuitos/Subestaciones: ${uniqueRows.length} cargados.${duplicatesMerged > 0 ? ` (${duplicatesMerged} duplicados de COD_CIRCUITO unificados)` : ""}`,
     count: successCount,
     updated: 0,
-    created: rows.length,
+    created: uniqueRows.length,
     errors: errorCount,
     errorDetails: rowErrors
   };
