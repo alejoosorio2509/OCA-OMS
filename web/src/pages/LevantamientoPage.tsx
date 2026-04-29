@@ -133,6 +133,9 @@ export function LevantamientoPage() {
   const [draftTipoOt, setDraftTipoOt] = useState(() => initialParams.get("tipoOt") || "");
   const [draftEntrega, setDraftEntrega] = useState(() => initialParams.get("entrega") || "");
   const [draftEtapa, setDraftEtapa] = useState(() => initialParams.get("etapa") || "");
+  const [draftFechaFiltro, setDraftFechaFiltro] = useState<"PRIMER_ELEMENTO" | "ASIGNACION">(
+    () => (initialParams.get("fechaFiltro") as "PRIMER_ELEMENTO" | "ASIGNACION" | null) || "PRIMER_ELEMENTO"
+  );
   const [draftAsignacionStart, setDraftAsignacionStart] = useState(() => initialParams.get("asignacionStart") || "");
   const [draftAsignacionEnd, setDraftAsignacionEnd] = useState(() => initialParams.get("asignacionEnd") || "");
   const [nivelesTension, setNivelesTension] = useState<string[]>([]);
@@ -159,6 +162,7 @@ export function LevantamientoPage() {
     tipoOt: string;
     entrega: string;
     etapa: "" | "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
+    fechaFiltro: "PRIMER_ELEMENTO" | "ASIGNACION";
     asignacionStart: string;
     asignacionEnd: string;
     diasAsignaColor: "" | "red" | "yellow" | "green";
@@ -174,6 +178,7 @@ export function LevantamientoPage() {
     tipoOt: initialParams.get("tipoOt") || "",
     entrega: initialParams.get("entrega") || "",
     etapa: (initialParams.get("etapa") as Filters["etapa"] | null) || "",
+    fechaFiltro: (initialParams.get("fechaFiltro") as Filters["fechaFiltro"] | null) || "PRIMER_ELEMENTO",
     asignacionStart: initialParams.get("asignacionStart") || "",
     asignacionEnd: initialParams.get("asignacionEnd") || "",
     diasAsignaColor: (initialParams.get("diasAsignaColor") as "" | "red" | "yellow" | "green" | null) || "",
@@ -209,6 +214,7 @@ export function LevantamientoPage() {
       tipoOt: draftTipoOt,
       entrega: draftEntrega,
       etapa: (draftEtapa as Filters["etapa"]) || "",
+      fechaFiltro: draftFechaFiltro,
       asignacionStart: draftAsignacionStart,
       asignacionEnd: draftAsignacionEnd,
       diasAsignaColor: draftDiasAsignaColor,
@@ -235,6 +241,7 @@ export function LevantamientoPage() {
     setDraftTipoOt("");
     setDraftEntrega("");
     setDraftEtapa("");
+    setDraftFechaFiltro("PRIMER_ELEMENTO");
     setDraftAsignacionStart("");
     setDraftAsignacionEnd("");
     setDraftDiasAsignaColor("");
@@ -248,6 +255,7 @@ export function LevantamientoPage() {
       tipoOt: "",
       entrega: "",
       etapa: "",
+      fechaFiltro: "PRIMER_ELEMENTO",
       asignacionStart: "",
       asignacionEnd: "",
       diasAsignaColor: "",
@@ -271,6 +279,7 @@ export function LevantamientoPage() {
     if (applied.tipoOt.trim()) next.set("tipoOt", applied.tipoOt.trim());
     if (applied.entrega.trim()) next.set("entrega", applied.entrega.trim());
     if (applied.etapa) next.set("etapa", applied.etapa);
+    if (applied.fechaFiltro) next.set("fechaFiltro", applied.fechaFiltro);
     if (applied.asignacionStart) next.set("asignacionStart", applied.asignacionStart);
     if (applied.asignacionEnd) next.set("asignacionEnd", applied.asignacionEnd);
     if (applied.diasAsignaColor) next.set("diasAsignaColor", applied.diasAsignaColor);
@@ -292,6 +301,7 @@ export function LevantamientoPage() {
       tipoOt: applied.tipoOt.trim() || undefined,
       entrega: applied.entrega.trim() || undefined,
       etapa: applied.etapa || undefined,
+      fechaFiltro: applied.fechaFiltro || undefined,
       asignacionStart: applied.asignacionStart || undefined,
       asignacionEnd: applied.asignacionEnd || undefined,
       diasAsignaColor: applied.diasAsignaColor || undefined,
@@ -341,6 +351,7 @@ export function LevantamientoPage() {
       cuadrilla: query.cuadrilla,
       tipoOt: query.tipoOt,
       entrega: query.entrega,
+      fechaFiltro: query.fechaFiltro,
       asignacionStart: query.asignacionStart,
       asignacionEnd: query.asignacionEnd
     })
@@ -378,6 +389,7 @@ export function LevantamientoPage() {
     if (applied.tipoOt.trim()) p.set("tipoOt", applied.tipoOt.trim());
     if (applied.entrega.trim()) p.set("entrega", applied.entrega.trim());
     if (applied.etapa) p.set("etapa", applied.etapa);
+    if (applied.fechaFiltro) p.set("fechaFiltro", applied.fechaFiltro);
     if (applied.asignacionStart) p.set("asignacionStart", applied.asignacionStart);
     if (applied.asignacionEnd) p.set("asignacionEnd", applied.asignacionEnd);
     if (applied.diasAsignaColor) p.set("diasAsignaColor", applied.diasAsignaColor);
@@ -714,12 +726,23 @@ export function LevantamientoPage() {
             </select>
           </div>
 
+          <div className="field" style={{ width: 220 }}>
+            <label>Filtrar fecha por</label>
+            <select
+              value={draftFechaFiltro}
+              onChange={(e) => setDraftFechaFiltro(e.target.value as "PRIMER_ELEMENTO" | "ASIGNACION")}
+              style={{ width: "100%" }}
+            >
+              <option value="PRIMER_ELEMENTO">Fecha Primer Elemento</option>
+              <option value="ASIGNACION">Fecha Asignación</option>
+            </select>
+          </div>
           <div className="field" style={{ width: 180 }}>
-            <label>Primer elemento desde</label>
+            <label>{draftFechaFiltro === "ASIGNACION" ? "Asignación desde" : "Primer elemento desde"}</label>
             <input type="date" value={draftAsignacionStart} onChange={(e) => setDraftAsignacionStart(e.target.value)} />
           </div>
           <div className="field" style={{ width: 180 }}>
-            <label>Primer elemento hasta</label>
+            <label>{draftFechaFiltro === "ASIGNACION" ? "Asignación hasta" : "Primer elemento hasta"}</label>
             <input type="date" value={draftAsignacionEnd} onChange={(e) => setDraftAsignacionEnd(e.target.value)} />
           </div>
 

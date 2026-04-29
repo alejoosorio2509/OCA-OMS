@@ -17,6 +17,16 @@ function bogotaDateKey(date: Date) {
   return bogotaDateFmt.format(date);
 }
 
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function isEntregada(subestado: string | null) {
+  const v = (subestado ?? "").trim().toLowerCase();
+  if (!v) return false;
+  return v === "entregada" || v === "entregado" || v.includes("entregad");
+}
+
 function parseBogotaDateOnly(value: string) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (m) {
@@ -189,6 +199,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     cuadrilla: z.string().min(1).optional(),
     tipoOt: z.string().min(1).optional(),
     entrega: z.string().min(1).optional(),
+    fechaFiltro: z.enum(["PRIMER_ELEMENTO", "ASIGNACION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional()
   });
@@ -199,7 +210,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     return;
   }
 
-  const { search, nivelTension, cuadrilla, tipoOt, entrega, asignacionStart, asignacionEnd } = parsed.data;
+  const { search, nivelTension, cuadrilla, tipoOt, entrega, fechaFiltro, asignacionStart, asignacionEnd } = parsed.data;
 
   const parseDay = (value: string) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
@@ -216,6 +227,8 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   }
   const endExclusive = endDate ? new Date(endDate.getTime() + 24 * 60 * 60 * 1000) : null;
 
+  const field = fechaFiltro === "ASIGNACION" ? "fechaAsignacion" : "fechaPrimerElemento";
+
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
@@ -224,10 +237,19 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
-          fechaPrimerElemento: {
-            ...(startDate ? { gte: startDate } : {}),
-            ...(endExclusive ? { lt: endExclusive } : {})
-          }
+          ...(field === "fechaAsignacion"
+            ? {
+                fechaAsignacion: {
+                  ...(startDate ? { gte: startDate } : {}),
+                  ...(endExclusive ? { lt: endExclusive } : {})
+                }
+              }
+            : {
+                fechaPrimerElemento: {
+                  ...(startDate ? { gte: startDate } : {}),
+                  ...(endExclusive ? { lt: endExclusive } : {})
+                }
+              })
         }
       : {})
   };
@@ -237,6 +259,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
       where,
       select: {
         orderCode: true,
+        subestado: true,
         fechaAsignacion: true,
         fechaPrimerElemento: true,
         fechaEntregaPostproceso: true,
@@ -308,7 +331,10 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), a
   let aprobacionNoCumple = 0;
 
   for (const r of rows) {
-    const entrega = r.fechaEntregaPostproceso ?? entregaByCode.get(r.orderCode) ?? null;
+    const entrega =
+      r.fechaEntregaPostproceso ??
+      entregaByCode.get(r.orderCode) ??
+      (r.fechaPrimerElemento && isEntregada(r.subestado) ? addDays(r.fechaPrimerElemento, 1) : null);
     const diasNovedades = novedadSumByCode.get(r.orderCode) ?? 0;
     const etapa =
       r.fechaGestion
@@ -368,6 +394,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     tipoOt: z.string().min(1).optional(),
     entrega: z.string().min(1).optional(),
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
+    fechaFiltro: z.enum(["PRIMER_ELEMENTO", "ASIGNACION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
     diasAsignaColor: z.enum(["red", "yellow", "green"]).optional(),
@@ -407,6 +434,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     tipoOt,
     entrega,
     etapa,
+    fechaFiltro,
     asignacionStart,
     asignacionEnd,
     diasAsignaColor,
@@ -416,7 +444,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   } = parsed.data;
   const page = parsed.data.page ?? 1;
   const pageSize = parsed.data.pageSize ?? 50;
-  const sortKey = parsed.data.sortKey ?? "fechaPrimerElemento";
+  const sortKey = parsed.data.sortKey ?? (fechaFiltro === "ASIGNACION" ? "fechaAsignacion" : "fechaPrimerElemento");
   const sortDir = parsed.data.sortDir ?? "desc";
 
   const parseDay = (value: string) => {
@@ -434,6 +462,8 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
   }
   const endExclusive = endDate ? new Date(endDate.getTime() + 24 * 60 * 60 * 1000) : null;
 
+  const field = fechaFiltro === "ASIGNACION" ? "fechaAsignacion" : "fechaPrimerElemento";
+
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
@@ -442,10 +472,19 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
-          fechaPrimerElemento: {
-            ...(startDate ? { gte: startDate } : {}),
-            ...(endExclusive ? { lt: endExclusive } : {})
-          }
+          ...(field === "fechaAsignacion"
+            ? {
+                fechaAsignacion: {
+                  ...(startDate ? { gte: startDate } : {}),
+                  ...(endExclusive ? { lt: endExclusive } : {})
+                }
+              }
+            : {
+                fechaPrimerElemento: {
+                  ...(startDate ? { gte: startDate } : {}),
+                  ...(endExclusive ? { lt: endExclusive } : {})
+                }
+              })
         }
       : {})
   };
@@ -509,7 +548,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const refDate = row.fechaGestion ?? now;
     const refNum = finMap.get(calendarKey(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
-    const entregaPost = row.fechaEntregaPostproceso ?? extra.cierreSaitAt ?? null;
+    const entregaPost =
+      row.fechaEntregaPostproceso ??
+      extra.cierreSaitAt ??
+      (row.fechaPrimerElemento && isEntregada(row.subestado) ? addDays(row.fechaPrimerElemento, 1) : null);
     const aprobRef = entregaPost ?? now;
     const aprobEndNum = finMap.get(calendarKey(aprobRef));
     const aprobDeadlineNum = baseNum !== undefined ? baseNum + SLA_APROBACION_POST_DIAS + diasNovedades : undefined;
@@ -570,9 +612,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
             ? { estado: sortDir }
             : sortKey === "subestado"
               ? { subestado: sortDir }
-              : sortKey === "fechaPrimerElemento"
-                ? { fechaPrimerElemento: sortDir }
-                : { fechaAsignacion: sortDir };
+              : sortKey === "fechaAsignacion"
+                ? { fechaAsignacion: sortDir }
+                : { fechaPrimerElemento: sortDir };
 
     const [total, pageItems] = await Promise.all([
       prisma.levantamiento.count({ where }),
@@ -727,7 +769,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const etapaByCode = new Map<string, "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION" | "SIN">();
   for (const r of base) {
-    const entrega = r.fechaEntregaPostproceso ?? cierreSaitByCode.get(r.orderCode) ?? null;
+    const entrega =
+      r.fechaEntregaPostproceso ??
+      cierreSaitByCode.get(r.orderCode) ??
+      (r.fechaPrimerElemento && isEntregada(r.subestado) ? addDays(r.fechaPrimerElemento, 1) : null);
     const e =
       r.fechaGestion
         ? "GESTION"

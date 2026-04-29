@@ -337,6 +337,7 @@ export async function getLevantamientoMetrics(
     cuadrilla?: string;
     tipoOt?: string;
     entrega?: string;
+    fechaFiltro?: "PRIMER_ELEMENTO" | "ASIGNACION";
     asignacionStart?: string;
     asignacionEnd?: string;
   } = {}
@@ -347,6 +348,7 @@ export async function getLevantamientoMetrics(
   if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
   if (query.tipoOt) qs.set("tipoOt", query.tipoOt);
   if (query.entrega) qs.set("entrega", query.entrega);
+  if (query.fechaFiltro) qs.set("fechaFiltro", query.fechaFiltro);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
@@ -374,6 +376,7 @@ export async function listLevantamientos(
     tipoOt?: string;
     entrega?: string;
     etapa?: "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
+    fechaFiltro?: "PRIMER_ELEMENTO" | "ASIGNACION";
     asignacionStart?: string;
     asignacionEnd?: string;
     diasAsignaColor?: "red" | "yellow" | "green";
@@ -404,6 +407,7 @@ export async function listLevantamientos(
   if (query.tipoOt) qs.set("tipoOt", query.tipoOt);
   if (query.entrega) qs.set("entrega", query.entrega);
   if (query.etapa) qs.set("etapa", query.etapa);
+  if (query.fechaFiltro) qs.set("fechaFiltro", query.fechaFiltro);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
   if (query.diasAsignaColor) qs.set("diasAsignaColor", query.diasAsignaColor);

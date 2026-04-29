@@ -153,6 +153,16 @@ function parseBogotaDateOnly(value: string) {
   return new Date(value);
 }
 
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function isEntregada(subestado: string | null) {
+  const v = (subestado ?? "").trim().toLowerCase();
+  if (!v) return false;
+  return v === "entregada" || v === "entregado" || v.includes("entregad");
+}
+
 function diffByCalendar(inicioMap: Map<string, number>, finMap: Map<string, number>, start: Date | null, end: Date | null) {
   if (!start || !end) return null;
   const startNum = inicioMap.get(normalizeDateStr(start));
@@ -542,6 +552,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     tipoOt: z.string().min(1).optional(),
     entrega: z.string().min(1).optional(),
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
+    fechaFiltro: z.enum(["PRIMER_ELEMENTO", "ASIGNACION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional(),
     dateStart: z.string().optional(),
@@ -565,6 +576,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     tipoOt,
     entrega,
     etapa,
+    fechaFiltro,
     asignacionStart,
     asignacionEnd,
     dateStart,
@@ -592,6 +604,8 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
   }
   const endExclusive = endDate ? new Date(endDate.getTime() + 24 * 60 * 60 * 1000) : null;
 
+  const field = fechaFiltro === "ASIGNACION" ? "fechaAsignacion" : "fechaPrimerElemento";
+
   const where: Prisma.LevantamientoWhereInput = {
     ...(nivelTension ? { nivelTension: { contains: nivelTension } } : {}),
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
@@ -600,10 +614,19 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
-          fechaPrimerElemento: {
-            ...(startDate ? { gte: startDate } : {}),
-            ...(endExclusive ? { lt: endExclusive } : {})
-          }
+          ...(field === "fechaAsignacion"
+            ? {
+                fechaAsignacion: {
+                  ...(startDate ? { gte: startDate } : {}),
+                  ...(endExclusive ? { lt: endExclusive } : {})
+                }
+              }
+            : {
+                fechaPrimerElemento: {
+                  ...(startDate ? { gte: startDate } : {}),
+                  ...(endExclusive ? { lt: endExclusive } : {})
+                }
+              })
         }
       : {})
   };
@@ -611,7 +634,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
   const [rows, calendar] = await Promise.all([
     prisma.levantamiento.findMany({
       where,
-      orderBy: { fechaPrimerElemento: "desc" },
+      orderBy: field === "fechaAsignacion" ? { fechaAsignacion: "desc" } : { fechaPrimerElemento: "desc" },
       select: {
         orderCode: true,
         nivelTension: true,
@@ -733,7 +756,10 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
       );
       const diasAsigna = applyNovedades(diasAsignaRaw);
 
-      const entregaPost = r.fechaEntregaPostproceso ?? cierreSaitByCode.get(r.orderCode) ?? null;
+      const entregaPost =
+        r.fechaEntregaPostproceso ??
+        cierreSaitByCode.get(r.orderCode) ??
+        (r.fechaPrimerElemento && isEntregada(r.subestado) ? addDays(r.fechaPrimerElemento, 1) : null);
       const aprobRef = entregaPost ?? now;
       const aprobEndNum = finMap.get(normalizeDateStr(aprobRef));
       const aprobDeadlineNum = baseNum !== undefined ? baseNum + SLA_APROBACION_POST_DIAS + diasNovedades : undefined;
