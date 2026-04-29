@@ -10,6 +10,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { CarguesPage } from "./pages/CarguesPage";
 import { ExportesPage } from "./pages/ExportesPage";
 import { LevantamientoPage } from "./pages/LevantamientoPage";
+import { SolCdsNuevosPage } from "./pages/SolCdsNuevosPage";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/orders/:id" element={<OrderDetailsPage />} />
             <Route path="/levantamiento" element={<LevantamientoPage />} />
+            <Route path="/sol-cds-nuevos" element={<SolCdsNuevosPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/cargues" element={<CarguesPage />} />
             <Route path="/exportes" element={<ExportesPage />} />

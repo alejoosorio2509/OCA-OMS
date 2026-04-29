@@ -51,6 +51,7 @@ model User {
   role         UserRole    @default(USER)
   canOrders    Boolean     @default(true)
   canLevantamiento Boolean @default(true)
+  canSolCdsNuevos Boolean  @default(true)
   canCargues   Boolean     @default(true)
   canExportes  Boolean     @default(true)
   canUsers     Boolean     @default(false)
@@ -61,6 +62,7 @@ model User {
   assignedOrders WorkOrder[] @relation("assignedOrders")
   statusChanges  WorkOrderHistory[]
   cargueJobs     CargueJob[]
+  solCdsNuevos   SolCdsNuevo[]
 }
 
 model WorkOrder {
@@ -299,4 +301,47 @@ model CircuitoSubestacion {
   nomSubestacion String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model UnidadTerritorial {
+  id       String  @id @default(cuid())
+  municipio String?
+  terDesc   String?
+  orgDesc   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([municipio])
+  @@index([orgDesc])
+}
+
+model SolCdsNuevo {
+  id                  Int      @id @default(autoincrement())
+  registro            String   @unique
+  ot                  String
+  incremento          String
+  tipoOrden           String
+  cd                  String
+  subestacionSbItm    String
+  codCircuitStm       String
+  circuitoStm         String
+  marca               String
+  modelo              String
+  punFisico           String
+  direccion           String
+  terDesc             String
+  orgDesc             String
+  usoTrafo            String
+  propiedad           String
+  tipRedTransformador String
+  fase                String
+  coordenadasX        String
+  coordenadasY        String
+
+  createdAt           DateTime @default(now())
+  createdById         String
+  createdBy           User     @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+  @@index([createdAt])
 }

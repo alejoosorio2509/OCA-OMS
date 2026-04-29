@@ -29,6 +29,7 @@ authRouter.post("/login", async (req, res) => {
       passwordHash: true,
       canOrders: true,
       canLevantamiento: true,
+      canSolCdsNuevos: true,
       canCargues: true,
       canExportes: true,
       canUsers: true
@@ -55,6 +56,7 @@ authRouter.post("/login", async (req, res) => {
       role: user.role,
       canOrders: user.canOrders,
       canLevantamiento: user.canLevantamiento,
+      canSolCdsNuevos: user.canSolCdsNuevos,
       canCargues: user.canCargues,
       canExportes: user.canExportes,
       canUsers: user.canUsers
@@ -72,6 +74,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       role: true,
       canOrders: true,
       canLevantamiento: true,
+      canSolCdsNuevos: true,
       canCargues: true,
       canExportes: true,
       canUsers: true
@@ -88,6 +91,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     role: user.role,
     canOrders: user.canOrders,
     canLevantamiento: user.canLevantamiento,
+    canSolCdsNuevos: user.canSolCdsNuevos,
     canCargues: user.canCargues,
     canExportes: user.canExportes,
     canUsers: user.canUsers

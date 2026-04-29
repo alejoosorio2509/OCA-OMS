@@ -1,0 +1,282 @@
+import { useEffect, useMemo, useState } from "react";
+import { createSolCdsNuevo, getSolCdsNuevoOptions, type SolCdsNuevoCreateInput, type SolCdsNuevoOptions } from "../api";
+import { useAuth } from "../auth";
+
+export function SolCdsNuevosPage() {
+  const { token, user } = useAuth();
+  const canSolCdsNuevos = user?.role === "ADMIN" || !!user?.canSolCdsNuevos;
+
+  const [options, setOptions] = useState<SolCdsNuevoOptions | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successRegistro, setSuccessRegistro] = useState<string | null>(null);
+
+  const [form, setForm] = useState<SolCdsNuevoCreateInput>(() => ({
+    ot: "",
+    incremento: "",
+    tipoOrden: "Inconsistencia",
+    cd: "",
+    subestacionSbItm: "",
+    codCircuitStm: "",
+    circuitoStm: "",
+    marca: "",
+    modelo: "",
+    punFisico: "",
+    direccion: "",
+    terDesc: "",
+    orgDesc: "",
+    usoTrafo: "ENEL",
+    propiedad: "ENEL",
+    tipRedTransformador: "Subterranea",
+    fase: "Trifasico",
+    coordenadasX: "",
+    coordenadasY: ""
+  }));
+
+  useEffect(() => {
+    if (!token || !canSolCdsNuevos) return;
+    setLoading(true);
+    setError(null);
+    getSolCdsNuevoOptions(token)
+      .then((data) => {
+        setOptions(data);
+      })
+      .catch(() => {
+        setError("No se pudieron cargar las opciones.");
+      })
+      .finally(() => setLoading(false));
+  }, [token, canSolCdsNuevos]);
+
+  const tipoOrdenOptions = useMemo(() => options?.tipoOrden ?? [], [options]);
+
+  if (!canSolCdsNuevos) return <div className="card">No autorizado.</div>;
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setError(null);
+    setSuccessRegistro(null);
+    setSaving(true);
+    try {
+      const created = await createSolCdsNuevo(token, form);
+      setSuccessRegistro(created.registro);
+      setForm((prev) => ({
+        ...prev,
+        ot: "",
+        incremento: "",
+        cd: "",
+        punFisico: "",
+        direccion: "",
+        coordenadasX: "",
+        coordenadasY: ""
+      }));
+    } catch {
+      setError("No se pudo crear la solicitud. Revisa que todos los campos estén completos.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const disabled = loading || saving || !options;
+
+  return (
+    <div className="card">
+      <h2>Sol. CDS Nuevos</h2>
+      <p style={{ marginTop: 0 }}>Al crear la solicitud, el sistema asigna un número de registro que inicia con CDN.</p>
+
+      {loading ? <div>Cargando opciones...</div> : null}
+      {error ? <div className="message error">{error}</div> : null}
+      {successRegistro ? <div className="message success">Solicitud creada. Registro: {successRegistro}</div> : null}
+
+      <form onSubmit={onSubmit} className="upload-form" style={{ marginTop: 12 }}>
+        <div className="field">
+          <label>OT</label>
+          <input value={form.ot} onChange={(e) => setForm({ ...form, ot: e.target.value })} disabled={disabled} />
+        </div>
+        <div className="field">
+          <label>INCREMENTO</label>
+          <input value={form.incremento} onChange={(e) => setForm({ ...form, incremento: e.target.value })} disabled={disabled} />
+        </div>
+        <div className="field">
+          <label>TIPO DE ORDEN</label>
+          <select
+            value={form.tipoOrden}
+            onChange={(e) => setForm({ ...form, tipoOrden: e.target.value as SolCdsNuevoCreateInput["tipoOrden"] })}
+            disabled={disabled}
+          >
+            {tipoOrdenOptions.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>CD</label>
+          <input value={form.cd} onChange={(e) => setForm({ ...form, cd: e.target.value })} disabled={disabled} />
+        </div>
+
+        <div className="field">
+          <label>SUBESTACION_SB:ITM</label>
+          <select
+            value={form.subestacionSbItm}
+            onChange={(e) => setForm({ ...form, subestacionSbItm: e.target.value })}
+            disabled={disabled}
+          >
+            <option value="">Selecciona...</option>
+            {(options?.subestaciones ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>COD_CIRCUIT_STM</label>
+          <select
+            value={form.codCircuitStm}
+            onChange={(e) => setForm({ ...form, codCircuitStm: e.target.value })}
+            disabled={disabled}
+          >
+            <option value="">Selecciona...</option>
+            {(options?.codCircuitStm ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>CIRCUITO_STM</label>
+          <select
+            value={form.circuitoStm}
+            onChange={(e) => setForm({ ...form, circuitoStm: e.target.value })}
+            disabled={disabled}
+          >
+            <option value="">Selecciona...</option>
+            {(options?.circuitoStm ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label>MARCA</label>
+          <select value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} disabled={disabled}>
+            <option value="">Selecciona...</option>
+            {(options?.marcas ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>MODELO</label>
+          <select value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} disabled={disabled}>
+            <option value="">Selecciona...</option>
+            {(options?.modelos ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label>PUN_FISICO</label>
+          <input value={form.punFisico} onChange={(e) => setForm({ ...form, punFisico: e.target.value })} disabled={disabled} />
+        </div>
+        <div className="field">
+          <label>DIRECCION</label>
+          <input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} disabled={disabled} />
+        </div>
+
+        <div className="field">
+          <label>TER_DESC</label>
+          <select value={form.terDesc} onChange={(e) => setForm({ ...form, terDesc: e.target.value })} disabled={disabled}>
+            <option value="">Selecciona...</option>
+            {(options?.terDesc ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>ORG_DESC</label>
+          <select value={form.orgDesc} onChange={(e) => setForm({ ...form, orgDesc: e.target.value })} disabled={disabled}>
+            <option value="">Selecciona...</option>
+            {(options?.orgDesc ?? []).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label>USO_TRAFO</label>
+          <select
+            value={form.usoTrafo}
+            onChange={(e) => setForm({ ...form, usoTrafo: e.target.value as SolCdsNuevoCreateInput["usoTrafo"] })}
+            disabled={disabled}
+          >
+            <option value="ENEL">ENEL</option>
+            <option value="CLIENTE">CLIENTE</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>PROPIEDAD</label>
+          <select
+            value={form.propiedad}
+            onChange={(e) => setForm({ ...form, propiedad: e.target.value as SolCdsNuevoCreateInput["propiedad"] })}
+            disabled={disabled}
+          >
+            <option value="ENEL">ENEL</option>
+            <option value="CLIENTE">CLIENTE</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>TIP_RED_TRANSFORMADOR</label>
+          <select
+            value={form.tipRedTransformador}
+            onChange={(e) =>
+              setForm({ ...form, tipRedTransformador: e.target.value as SolCdsNuevoCreateInput["tipRedTransformador"] })
+            }
+            disabled={disabled}
+          >
+            <option value="Subterranea">Subterranea</option>
+            <option value="Aerea">Aerea</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>FASE</label>
+          <select value={form.fase} onChange={(e) => setForm({ ...form, fase: e.target.value as SolCdsNuevoCreateInput["fase"] })} disabled={disabled}>
+            <option value="Trifasico">Trifasico</option>
+            <option value="Bifasico">Bifasico</option>
+            <option value="Monofasico">Monofasico</option>
+          </select>
+        </div>
+
+        <div className="field">
+          <label>COORDENADAS X</label>
+          <input value={form.coordenadasX} onChange={(e) => setForm({ ...form, coordenadasX: e.target.value })} disabled={disabled} />
+        </div>
+        <div className="field">
+          <label>COORDENADAS Y</label>
+          <input value={form.coordenadasY} onChange={(e) => setForm({ ...form, coordenadasY: e.target.value })} disabled={disabled} />
+        </div>
+
+        <div className="actions" style={{ marginTop: 12 }}>
+          <button className="btn" disabled={disabled}>
+            {saving ? "Guardando..." : "Crear solicitud"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

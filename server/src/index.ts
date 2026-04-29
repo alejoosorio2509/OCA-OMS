@@ -7,6 +7,7 @@ import { workOrdersRouter } from "./routes/workOrders.js";
 import { carguesRouter } from "./routes/cargues.js";
 import { exportsRouter } from "./routes/exports.js";
 import { levantamientosRouter } from "./routes/levantamientos.js";
+import { solCdsNuevosRouter } from "./routes/solCdsNuevos.js";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "./prisma.js";
@@ -27,6 +28,7 @@ async function ensureLevantamientoEntregaColumns() {
 async function ensureUserPermissionColumns() {
   try {
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canLevantamiento" BOOLEAN NOT NULL DEFAULT true');
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canSolCdsNuevos" BOOLEAN NOT NULL DEFAULT true');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`WARN: No se pudo asegurar columnas de permisos de usuario: ${msg}`);
@@ -66,6 +68,51 @@ async function ensureCarguesCatalogTables() {
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "UnidadTerritorial" (
+        "id" TEXT PRIMARY KEY,
+        "municipio" TEXT,
+        "terDesc" TEXT,
+        "orgDesc" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UnidadTerritorial_municipio_idx" ON "UnidadTerritorial"("municipio")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UnidadTerritorial_orgDesc_idx" ON "UnidadTerritorial"("orgDesc")`);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "SolCdsNuevo" (
+        "id" BIGSERIAL PRIMARY KEY,
+        "registro" TEXT NOT NULL,
+        "ot" TEXT NOT NULL,
+        "incremento" TEXT NOT NULL,
+        "tipoOrden" TEXT NOT NULL,
+        "cd" TEXT NOT NULL,
+        "subestacionSbItm" TEXT NOT NULL,
+        "codCircuitStm" TEXT NOT NULL,
+        "circuitoStm" TEXT NOT NULL,
+        "marca" TEXT NOT NULL,
+        "modelo" TEXT NOT NULL,
+        "punFisico" TEXT NOT NULL,
+        "direccion" TEXT NOT NULL,
+        "terDesc" TEXT NOT NULL,
+        "orgDesc" TEXT NOT NULL,
+        "usoTrafo" TEXT NOT NULL,
+        "propiedad" TEXT NOT NULL DEFAULT 'ENEL',
+        "tipRedTransformador" TEXT NOT NULL,
+        "fase" TEXT NOT NULL,
+        "coordenadasX" TEXT NOT NULL,
+        "coordenadasY" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "createdById" TEXT NOT NULL
+      )
+    `);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "SolCdsNuevo" ADD COLUMN IF NOT EXISTS "propiedad" TEXT NOT NULL DEFAULT 'ENEL'`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "SolCdsNuevo_registro_key" ON "SolCdsNuevo"("registro")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SolCdsNuevo_createdById_idx" ON "SolCdsNuevo"("createdById")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SolCdsNuevo_createdAt_idx" ON "SolCdsNuevo"("createdAt")`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`WARN: No se pudo asegurar tablas de catálogos de cargues: ${msg}`);
@@ -172,6 +219,7 @@ app.use("/users", usersRouter);
 app.use("/work-orders", workOrdersRouter);
 app.use("/cargues", carguesRouter);
 app.use("/levantamientos", levantamientosRouter);
+app.use("/sol-cds-nuevos", solCdsNuevosRouter);
 app.use("/exports", exportsRouter);
 
 app.use((_req, res) => {

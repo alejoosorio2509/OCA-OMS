@@ -555,7 +555,8 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       input.type === "RECORRIDO_INCREMENTOS" ||
       input.type === "LEVANTAMIENTO" ||
       input.type === "MODELO_CATEGORIA_MB" ||
-      input.type === "CIRCUITOS_SUBESTACIONES"
+      input.type === "CIRCUITOS_SUBESTACIONES" ||
+      input.type === "UNIDADES_TERRITORIALES"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
@@ -3212,6 +3213,92 @@ async function processCircuitosSubestacionesJob(input: {
   };
 }
 
+async function processUnidadesTerritorialesJob(input: {
+  data: Record<string, unknown>[];
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const target = normalizeHeader(name);
+      const key = keys.find((k) => normalizeHeader(k) === target);
+      if (key) return row[key];
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const rows = input.data
+    .map((r) => ({
+      municipio: parseText(getValAny(r, ["MUNICIPIO", "Municipio"])),
+      terDesc: parseText(getValAny(r, ["TER_DESC", "TER DESC", "Ter_desc", "Ter desc"])),
+      orgDesc: parseText(getValAny(r, ["ORG_DESC", "ORG DESC", "Org_desc", "Org desc"]))
+    }))
+    .filter((r) =>
+      [r.municipio, r.terDesc, r.orgDesc].some((v) => typeof v === "string" && v.trim())
+    );
+
+  await prisma.unidadTerritorial.deleteMany({});
+
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      void i;
+      successCount++;
+      if ((i + 1) % 1000 === 0 && input.onProgress) {
+        await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+  }
+
+  for (const group of chunk(rows, 1000)) {
+    if (group.length === 0) continue;
+    await prisma.unidadTerritorial.createMany({ data: group });
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: rows.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Unidades territoriales: ${rows.length} cargados.`,
+    count: successCount,
+    updated: 0,
+    created: rows.length,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
 async function runJob(jobId: string) {
   const claimed = await claimJob(jobId);
   if (!claimed) return;
@@ -3277,6 +3364,8 @@ async function runJob(jobId: string) {
                 ? await processModeloCategoriaMbJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : job.type === "CIRCUITOS_SUBESTACIONES"
                 ? await processCircuitosSubestacionesJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
+              : job.type === "UNIDADES_TERRITORIALES"
+                ? await processUnidadesTerritorialesJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : (() => {
                   throw new Error("UNSUPPORTED_JOB_TYPE");
                 })();
@@ -3381,7 +3470,8 @@ carguesRouter.post(
       "LEVANTAMIENTO",
       "ENTREGA_LEVANTAMIENTO",
       "MODELO_CATEGORIA_MB",
-      "CIRCUITOS_SUBESTACIONES"
+      "CIRCUITOS_SUBESTACIONES",
+      "UNIDADES_TERRITORIALES"
     ]);
     if (asyncTypes.has(type) && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
@@ -4243,6 +4333,9 @@ carguesRouter.post(
       res.json(payload);
     } else if (type === "CIRCUITOS_SUBESTACIONES") {
       const payload = await processCircuitosSubestacionesJob({ data });
+      res.json(payload);
+    } else if (type === "UNIDADES_TERRITORIALES") {
+      const payload = await processUnidadesTerritorialesJob({ data });
       res.json(payload);
     } else if (type === "RECORRIDO_INCREMENTOS") {
       let successCount = 0;

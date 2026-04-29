@@ -38,6 +38,7 @@ export function UsersPage() {
       role: UserRole;
       canOrders?: boolean;
       canLevantamiento?: boolean;
+      canSolCdsNuevos?: boolean;
       canCargues?: boolean;
       canExportes?: boolean;
       canUsers?: boolean;
@@ -54,17 +55,19 @@ export function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [canOrders, setCanOrders] = useState(true);
   const [canLevantamiento, setCanLevantamiento] = useState(true);
+  const [canSolCdsNuevos, setCanSolCdsNuevos] = useState(true);
   const [canCargues, setCanCargues] = useState(true);
   const [canExportes, setCanExportes] = useState(true);
   const [canUsers, setCanUsers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resetPw, setResetPw] = useState<Record<string, string>>({});
 
-  const modulesLabel = (u: { role: UserRole; canOrders?: boolean; canLevantamiento?: boolean; canCargues?: boolean; canExportes?: boolean; canUsers?: boolean }) => {
+  const modulesLabel = (u: { role: UserRole; canOrders?: boolean; canLevantamiento?: boolean; canSolCdsNuevos?: boolean; canCargues?: boolean; canExportes?: boolean; canUsers?: boolean }) => {
     if (u.role === "ADMIN") return "Admin (todos)";
     const parts: string[] = [];
     if (u.canOrders) parts.push("Actualización");
     if (u.canLevantamiento) parts.push("Levantamiento");
+    if (u.canSolCdsNuevos) parts.push("Sol. CDS Nuevos");
     if (u.canCargues) parts.push("Cargues");
     if (u.canExportes) parts.push("Exportes");
     if (u.canUsers) parts.push("Usuarios");
@@ -79,6 +82,7 @@ export function UsersPage() {
       role: UserRole;
       canOrders: boolean;
       canLevantamiento: boolean;
+      canSolCdsNuevos: boolean;
       canCargues: boolean;
       canExportes: boolean;
       canUsers: boolean;
@@ -116,7 +120,7 @@ export function UsersPage() {
     setError(null);
     setSaving(true);
     try {
-      await createUser(token!, { email, name, password, role, canOrders, canLevantamiento, canCargues, canExportes, canUsers });
+      await createUser(token!, { email, name, password, role, canOrders, canLevantamiento, canSolCdsNuevos, canCargues, canExportes, canUsers });
       setEmail("");
       setName("");
       setPassword("");
@@ -124,6 +128,7 @@ export function UsersPage() {
       setShowPassword(false);
       setCanOrders(true);
       setCanLevantamiento(true);
+      setCanSolCdsNuevos(true);
       setCanCargues(true);
       setCanExportes(true);
       setCanUsers(false);
@@ -199,6 +204,10 @@ export function UsersPage() {
                   Levantamiento
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input type="checkbox" checked={canSolCdsNuevos} onChange={(e) => setCanSolCdsNuevos(e.target.checked)} />
+                  Sol. CDS Nuevos
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={canCargues} onChange={(e) => setCanCargues(e.target.checked)} />
                   Cargues
                 </label>
@@ -235,6 +244,7 @@ export function UsersPage() {
                 <th>Rol</th>
                 <th>Actualización</th>
                 <th>Levantamiento</th>
+                <th>Sol. CDS Nuevos</th>
                 <th>Cargues</th>
                 <th>Exportes</th>
                 <th>Usuarios</th>
@@ -353,6 +363,26 @@ export function UsersPage() {
                         } catch (err) {
                           const data = getApiErrorData(err);
                           const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Levantamiento.";
+                          setError(msg);
+                          await refresh();
+                        }
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={u.canSolCdsNuevos ?? false}
+                      onChange={async (e) => {
+                        const next = e.target.checked;
+                        setError(null);
+                        patchItem(u.id, { canSolCdsNuevos: next });
+                        try {
+                          await updateUser(token!, u.id, { canSolCdsNuevos: next });
+                          await refresh();
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Sol. CDS Nuevos.";
                           setError(msg);
                           await refresh();
                         }

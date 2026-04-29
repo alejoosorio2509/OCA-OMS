@@ -9,6 +9,7 @@ export type User = {
   role: UserRole;
   canOrders?: boolean;
   canLevantamiento?: boolean;
+  canSolCdsNuevos?: boolean;
   canCargues?: boolean;
   canExportes?: boolean;
   canUsers?: boolean;
@@ -211,6 +212,7 @@ export async function createUser(
     role?: UserRole;
     canOrders?: boolean;
     canLevantamiento?: boolean;
+    canSolCdsNuevos?: boolean;
     canCargues?: boolean;
     canExportes?: boolean;
     canUsers?: boolean;
@@ -228,12 +230,60 @@ export async function updateUser(
     role: UserRole;
     canOrders: boolean;
     canLevantamiento: boolean;
+    canSolCdsNuevos: boolean;
     canCargues: boolean;
     canExportes: boolean;
     canUsers: boolean;
   }>
 ) {
   return apiFetch<User>(`/users/${id}`, { token, method: "PATCH", body: JSON.stringify(input) });
+}
+
+export type SolCdsNuevoOptions = {
+  tipoOrden: string[];
+  subestaciones: string[];
+  codCircuitStm: string[];
+  circuitoStm: string[];
+  marcas: string[];
+  modelos: string[];
+  terDesc: string[];
+  orgDesc: string[];
+};
+
+export async function getSolCdsNuevoOptions(token: string) {
+  return apiFetch<SolCdsNuevoOptions>("/sol-cds-nuevos/options", { token });
+}
+
+export type SolCdsNuevoCreateInput = {
+  ot: string;
+  incremento: string;
+  tipoOrden: "Inconsistencia" | "Incrementos Ex Post" | "Incremento por PDL/PST";
+  cd: string;
+  subestacionSbItm: string;
+  codCircuitStm: string;
+  circuitoStm: string;
+  marca: string;
+  modelo: string;
+  punFisico: string;
+  direccion: string;
+  terDesc: string;
+  orgDesc: string;
+  usoTrafo: "ENEL" | "CLIENTE";
+  propiedad: "ENEL" | "CLIENTE";
+  tipRedTransformador: "Subterranea" | "Aerea";
+  fase: "Trifasico" | "Bifasico" | "Monofasico";
+  coordenadasX: string;
+  coordenadasY: string;
+};
+
+export type SolCdsNuevoCreated = {
+  id: number;
+  registro: string;
+  createdAt: string;
+};
+
+export async function createSolCdsNuevo(token: string, input: SolCdsNuevoCreateInput) {
+  return apiFetch<SolCdsNuevoCreated>("/sol-cds-nuevos", { token, method: "POST", body: JSON.stringify(input) });
 }
 
 export async function resetUserPassword(token: string, id: string, password?: string) {

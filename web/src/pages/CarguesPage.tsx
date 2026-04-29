@@ -16,7 +16,8 @@ type UploadType =
   | "LEVANTAMIENTO"
   | "ENTREGA_LEVANTAMIENTO"
   | "MODELO_CATEGORIA_MB"
-  | "CIRCUITOS_SUBESTACIONES";
+  | "CIRCUITOS_SUBESTACIONES"
+  | "UNIDADES_TERRITORIALES";
 
 export function CarguesPage() {
   const { token, user } = useAuth();
@@ -168,6 +169,7 @@ export function CarguesPage() {
             <option value="ENTREGA_LEVANTAMIENTO">Entrega Levantamiento</option>
             <option value="MODELO_CATEGORIA_MB">Modelo Categoría MB</option>
             <option value="CIRCUITOS_SUBESTACIONES">Circuitos/Subestaciones</option>
+            <option value="UNIDADES_TERRITORIALES">Unidades territoriales</option>
           </select>
         </div>
 
@@ -222,6 +224,16 @@ export function CarguesPage() {
               <li>COD_CIRCUITO</li>
               <li>NOM_CIRCUITO</li>
               <li>NOM_SUBESTACION</li>
+            </ul>
+          </>
+        ) : null}
+        {uploadType === "UNIDADES_TERRITORIALES" ? (
+          <>
+            <h4 style={{ marginTop: 12 }}>Columnas requeridas (Unidades territoriales)</h4>
+            <ul>
+              <li>MUNICIPIO</li>
+              <li>TER_DESC</li>
+              <li>ORG_DESC</li>
             </ul>
           </>
         ) : null}
