@@ -704,7 +704,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     }
   }
 
-  const THRESHOLD_DIAS_ASIGNA = 4;
+  const SLA_ASIGNA_DIAS = 2;
   const SLA_APROBACION_POST_DIAS = 3;
   const THRESHOLD_DIAS_CIERRE = 3;
   const now = new Date();
@@ -745,16 +745,10 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
           : null;
       const fechaGestionEfectiva = r.fechaGestion ?? fechaGestionCalculada;
 
-      const applyNovedades = (v: number | null) => (v === null ? null : Math.max(0, v - diasNovedades));
-
-      const diasAsignaRaw = diffByCalendarEndNow(
-        inicioMap,
-        finMap,
-        r.fechaAprobacionValorizacionSt ?? null,
-        r.fechaAsignacion,
-        now
-      );
-      const diasAsigna = applyNovedades(diasAsignaRaw);
+      const asignaStartNum = r.fechaAprobacionValorizacionSt ? inicioMap.get(normalizeDateStr(r.fechaAprobacionValorizacionSt)) : undefined;
+      const asignaRefNum = finMap.get(normalizeDateStr(r.fechaAsignacion ?? now));
+      const asignaDeadlineNum = asignaStartNum !== undefined ? asignaStartNum + SLA_ASIGNA_DIAS + diasNovedades : undefined;
+      const diasAsigna = asignaDeadlineNum !== undefined && asignaRefNum !== undefined ? asignaDeadlineNum - asignaRefNum : null;
 
       const entregaPost =
         r.fechaEntregaPostproceso ??
@@ -783,7 +777,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
           return `${t.slice(0, 4).toUpperCase()}_${e}`;
         })();
 
-      const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
+      const diasAsignaColorCalc = diasAsigna === null ? null : diasAsigna < 0 ? "red" : diasAsigna <= 1 ? "yellow" : "green";
       const diasAprobacionPostColorCalc =
         diasAprobacionPost === null ? null : diasAprobacionPost < 0 ? "red" : diasAprobacionPost <= 2 ? "yellow" : "green";
       const diasCierreColorCalc = diasCierre === null ? null : diasCierre < 0 ? "red" : diasCierre <= 2 ? "yellow" : "green";

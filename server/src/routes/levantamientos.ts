@@ -500,7 +500,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
 
   const { inicioMap, finMap, finNumberToDate } = await loadCalendarMaps();
 
-  const THRESHOLD_DIAS_ASIGNA = 4;
+  const SLA_ASIGNA_DIAS = 2;
   const SLA_APROBACION_POST_DIAS = 3;
   const THRESHOLD_DIAS_CIERRE = 3;
   const THRESHOLD_DIAS_GESTION_TOTAL = 8;
@@ -535,16 +535,10 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
         : null;
     const fechaGestionEfectiva = row.fechaGestion ?? fechaGestionCalculada;
 
-    const applyNovedades = (v: number | null) => (v === null ? null : Math.max(0, v - diasNovedades));
-
-    const diasAsignaRaw = diffByCalendarEndNow(
-      inicioMap,
-      finMap,
-      row.fechaAprobacionValorizacionSt ?? null,
-      row.fechaAsignacion,
-      now
-    );
-    const diasAsigna = applyNovedades(diasAsignaRaw);
+    const asignaStartNum = row.fechaAprobacionValorizacionSt ? inicioMap.get(calendarKey(row.fechaAprobacionValorizacionSt)) : undefined;
+    const asignaRefNum = finMap.get(calendarKey(row.fechaAsignacion ?? now));
+    const asignaDeadlineNum = asignaStartNum !== undefined ? asignaStartNum + SLA_ASIGNA_DIAS + diasNovedades : undefined;
+    const diasAsigna = asignaDeadlineNum !== undefined && asignaRefNum !== undefined ? asignaDeadlineNum - asignaRefNum : null;
     const refDate = row.fechaGestion ?? now;
     const refNum = finMap.get(calendarKey(refDate));
     const diasGestionTotal = vencimientoNum !== undefined && refNum !== undefined ? vencimientoNum - refNum : null;
@@ -561,7 +555,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("ORDERS"), async (r
     const cierreRefNum = finMap.get(calendarKey(row.fechaGestion ?? now));
     const diasCierre = cierreDeadlineNum !== undefined && cierreRefNum !== undefined ? cierreDeadlineNum - cierreRefNum : null;
 
-    const diasAsignaColorCalc = colorByThreshold(diasAsigna, THRESHOLD_DIAS_ASIGNA);
+    const diasAsignaColorCalc = diasAsigna === null ? null : diasAsigna < 0 ? "red" : diasAsigna <= 1 ? "yellow" : "green";
     const diasAprobacionPostColorCalc =
       diasAprobacionPost === null ? null : diasAprobacionPost < 0 ? "red" : diasAprobacionPost <= 2 ? "yellow" : "green";
     const diasCierreColorCalc = diasCierre === null ? null : diasCierre < 0 ? "red" : diasCierre <= 2 ? "yellow" : "green";
