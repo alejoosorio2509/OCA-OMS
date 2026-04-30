@@ -1161,7 +1161,7 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
       utm ? String(utm.northing) : "",
       "0",
       today,
-      "|||",
+      "||||",
       lFlag
     ].map(pipeEscape);
 
