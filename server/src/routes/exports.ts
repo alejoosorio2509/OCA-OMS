@@ -60,6 +60,11 @@ function pipeEscape(value: unknown) {
   return String(value).replaceAll("|", " ").replaceAll("\r", " ").replaceAll("\n", " ").trim();
 }
 
+function pipeEscapeKeepBars(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).replaceAll("\r", " ").replaceAll("\n", " ").trim();
+}
+
 function beforeFirstSlash(value: string) {
   const idx = value.indexOf("/");
   return (idx >= 0 ? value.slice(0, idx) : value).trim();
@@ -1161,9 +1166,9 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
       utm ? String(utm.northing) : "",
       "0",
       today,
-      "||||",
+      "|",
       lFlag
-    ].map(pipeEscape);
+    ].map((v, idx) => (idx === 22 ? pipeEscapeKeepBars(v) : pipeEscape(v)));
 
     lines.push(fields.join("|"));
   }
