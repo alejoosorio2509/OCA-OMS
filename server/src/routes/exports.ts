@@ -168,6 +168,11 @@ function normalizeDateStr(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function formatDateDDMMYYYY(date: Date) {
+  const [y, m, d] = normalizeDateStr(date).split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function calendarKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -1120,7 +1125,7 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
     if (!mbByDescripcionTipo.has(k) && v) mbByDescripcionTipo.set(k, v);
   }
 
-  const today = normalizeDateStr(new Date());
+  const today = formatDateDDMMYYYY(new Date());
   const lines: string[] = [];
   for (const r of rows) {
     const mbModelo = mbByDescripcionTipo.get(r.modelo.trim()) ?? "";
@@ -1156,7 +1161,7 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
       utm ? String(utm.northing) : "",
       "0",
       today,
-      "3|||",
+      "|||",
       lFlag
     ].map(pipeEscape);
 
