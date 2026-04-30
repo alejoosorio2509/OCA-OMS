@@ -33,7 +33,7 @@ export function ExportesPage() {
 
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
-  const [loading, setLoading] = useState<"" | "general" | "devoluciones" | "historial" | "levantamiento">("");
+  const [loading, setLoading] = useState<"" | "general" | "devoluciones" | "historial" | "levantamiento" | "solCdsNuevos">("");
   const [error, setError] = useState<string | null>(null);
 
   const query = useMemo(
@@ -47,7 +47,7 @@ export function ExportesPage() {
 
   if (!canExportes) return <div className="card">No autorizado.</div>;
 
-  const handle = async (kind: "general" | "devoluciones" | "historial" | "levantamiento") => {
+  const handle = async (kind: "general" | "devoluciones" | "historial" | "levantamiento" | "solCdsNuevos") => {
     if (!token) return;
     setError(null);
     setLoading(kind);
@@ -64,6 +64,9 @@ export function ExportesPage() {
       }
       if (kind === "levantamiento") {
         await downloadCsv(token, `/exports/levantamientos.csv${query}`, `levantamiento_${range}.csv`);
+      }
+      if (kind === "solCdsNuevos") {
+        await downloadCsv(token, `/exports/sol-cds-nuevos.txt`, `sol_cds_nuevos_${range}.txt`);
       }
     } catch {
       setError("No se pudo descargar el reporte.");
@@ -103,6 +106,9 @@ export function ExportesPage() {
           </button>
           <button className="btn" onClick={() => handle("levantamiento")} disabled={!!loading}>
             {loading === "levantamiento" ? "Generando..." : "Exportar levantamiento"}
+          </button>
+          <button className="btn" onClick={() => handle("solCdsNuevos")} disabled={!!loading}>
+            {loading === "solCdsNuevos" ? "Generando..." : "Exportar Sol. CDS Nuevos"}
           </button>
         </div>
       </div>

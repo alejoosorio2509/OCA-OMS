@@ -55,6 +55,22 @@ function toCsv(headers: string[], rows: unknown[][]) {
   return `\ufeff${lines.join("\n")}\n`;
 }
 
+function pipeEscape(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).replaceAll("|", " ").replaceAll("\r", " ").replaceAll("\n", " ").trim();
+}
+
+function beforeFirstSlash(value: string) {
+  const idx = value.indexOf("/");
+  return (idx >= 0 ? value.slice(0, idx) : value).trim();
+}
+
+function nthParenContent(value: string, n: number) {
+  const matches = Array.from(value.matchAll(/\(([^)]*)\)/g));
+  const hit = matches[n - 1]?.[1];
+  return (hit ?? "").trim();
+}
+
 function normalizeDateStr(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -970,4 +986,86 @@ exportsRouter.get("/historial.csv", requireAuth, requirePermission("EXPORTES"), 
   res.setHeader("content-type", "text/csv; charset=utf-8");
   res.setHeader("content-disposition", `attachment; filename="reporte_historial.csv"`);
   res.send(csv);
+});
+
+exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
+  const all = req.auth?.role === "ADMIN" && (req.query.all === "1" || req.query.all === "true");
+
+  const [rows, mbRows] = await Promise.all([
+    prisma.solCdsNuevo.findMany({
+      where: all ? {} : { createdById: req.auth!.sub },
+      orderBy: { createdAt: "asc" },
+      select: {
+        cd: true,
+        subestacionSbItm: true,
+        codCircuitStm: true,
+        circuitoStm: true,
+        marca: true,
+        modelo: true,
+        punFisico: true,
+        direccion: true,
+        terDesc: true,
+        orgDesc: true,
+        usoTrafo: true,
+        tipRedTransformador: true,
+        fase: true,
+        propiedad: true,
+        coordenadasX: true,
+        coordenadasY: true
+      }
+    }),
+    prisma.modeloCategoriaMb.findMany({
+      select: { descripcionTipo: true, modelo: true }
+    })
+  ]);
+
+  const mbByDescripcionTipo = new Map<string, string>();
+  for (const r of mbRows) {
+    const k = (r.descripcionTipo ?? "").trim();
+    const v = (r.modelo ?? "").trim();
+    if (!k) continue;
+    if (!mbByDescripcionTipo.has(k) && v) mbByDescripcionTipo.set(k, v);
+  }
+
+  const today = normalizeDateStr(new Date());
+  const lines: string[] = [];
+  for (const r of rows) {
+    const mbModelo = mbByDescripcionTipo.get(r.modelo.trim()) ?? "";
+    const usoTrafo = r.usoTrafo === "ENEL" ? "GE" : r.usoTrafo === "CLIENTE" ? "EX" : "";
+    const terStart = (r.terDesc ?? "").trim();
+    const lFlag = terStart.toUpperCase().startsWith("L") ? "1" : "4";
+
+    const fields = [
+      r.cd,
+      r.subestacionSbItm,
+      r.codCircuitStm,
+      r.circuitoStm,
+      beforeFirstSlash(r.modelo),
+      r.marca,
+      nthParenContent(mbModelo, 2),
+      r.punFisico,
+      r.direccion,
+      r.terDesc,
+      r.orgDesc,
+      r.terDesc,
+      beforeFirstSlash(mbModelo),
+      "Nivel II",
+      usoTrafo,
+      r.tipRedTransformador,
+      r.fase,
+      r.propiedad,
+      r.coordenadasX,
+      r.coordenadasY,
+      "0",
+      today,
+      "|||",
+      lFlag
+    ].map(pipeEscape);
+
+    lines.push(fields.join("|"));
+  }
+
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.setHeader("content-disposition", `attachment; filename="sol_cds_nuevos.txt"`);
+  res.send(`${lines.join("\n")}\n`);
 });
