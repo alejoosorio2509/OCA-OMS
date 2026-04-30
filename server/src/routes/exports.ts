@@ -65,10 +65,103 @@ function beforeFirstSlash(value: string) {
   return (idx >= 0 ? value.slice(0, idx) : value).trim();
 }
 
+function afterFirstSlashBeforeParen(value: string) {
+  const idx = value.indexOf("/");
+  const after = (idx >= 0 ? value.slice(idx + 1) : value).trim();
+  const p = after.indexOf("(");
+  return (p >= 0 ? after.slice(0, p) : after).trim();
+}
+
+function normalizeNumericText(value: string) {
+  const v = value.trim();
+  const sep = v.includes(",") ? "," : v.includes(".") ? "." : null;
+  if (!sep) return v;
+  const [aRaw, bRaw = ""] = v.split(sep);
+  const a = aRaw.trim();
+  const b = bRaw.trim().replace(/[^0-9]+/g, "");
+  const bTrim = b.replace(/0+$/g, "");
+  if (!bTrim) return a;
+  return `${a}${sep}${bTrim}`;
+}
+
 function nthParenContent(value: string, n: number) {
   const matches = Array.from(value.matchAll(/\(([^)]*)\)/g));
   const hit = matches[n - 1]?.[1];
   return (hit ?? "").trim();
+}
+
+function lastParenContent(value: string) {
+  const matches = Array.from(value.matchAll(/\(([^)]*)\)/g));
+  const hit = matches.length ? matches[matches.length - 1]?.[1] : undefined;
+  return (hit ?? "").trim();
+}
+
+function parseFloatFlexible(value: string) {
+  const v = value.trim().replaceAll(" ", "");
+  const normalized = v.includes(",") && !v.includes(".") ? v.replaceAll(",", ".") : v.replaceAll(",", "");
+  const n = Number.parseFloat(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function latLonToUtm(latDeg: number, lonDeg: number) {
+  const a = 6378137.0;
+  const f = 1 / 298.257223563;
+  const k0 = 0.9996;
+  const eccSquared = 2 * f - f * f;
+  const eccPrimeSquared = eccSquared / (1 - eccSquared);
+
+  const latRad = (latDeg * Math.PI) / 180;
+  const lonRad = (lonDeg * Math.PI) / 180;
+  const zoneNumber = Math.floor((lonDeg + 180) / 6) + 1;
+  const lonOrigin = (zoneNumber - 1) * 6 - 180 + 3;
+  const lonOriginRad = (lonOrigin * Math.PI) / 180;
+
+  const sinLat = Math.sin(latRad);
+  const cosLat = Math.cos(latRad);
+  const tanLat = Math.tan(latRad);
+
+  const N = a / Math.sqrt(1 - eccSquared * sinLat * sinLat);
+  const T = tanLat * tanLat;
+  const C = eccPrimeSquared * cosLat * cosLat;
+  const A = cosLat * (lonRad - lonOriginRad);
+
+  const M =
+    a *
+    ((1 -
+      eccSquared / 4 -
+      (3 * eccSquared * eccSquared) / 64 -
+      (5 * eccSquared * eccSquared * eccSquared) / 256) *
+      latRad -
+      ((3 * eccSquared) / 8 +
+        (3 * eccSquared * eccSquared) / 32 +
+        (45 * eccSquared * eccSquared * eccSquared) / 1024) *
+        Math.sin(2 * latRad) +
+      ((15 * eccSquared * eccSquared) / 256 + (45 * eccSquared * eccSquared * eccSquared) / 1024) *
+        Math.sin(4 * latRad) -
+      ((35 * eccSquared * eccSquared * eccSquared) / 3072) * Math.sin(6 * latRad));
+
+  let easting =
+    k0 *
+      N *
+      (A +
+        ((1 - T + C) * A * A * A) / 6 +
+        ((5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A) / 120) +
+    500000.0;
+
+  let northing =
+    k0 *
+    (M +
+      N *
+        tanLat *
+        ((A * A) / 2 +
+          ((5 - T + 9 * C + 4 * C * C) * A * A * A * A) / 24 +
+          ((61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A) / 720));
+
+  if (latDeg < 0) northing += 10000000.0;
+
+  easting = Math.round(easting);
+  northing = Math.round(northing);
+  return { easting, northing, zoneNumber };
 }
 
 function normalizeDateStr(date: Date) {
@@ -1032,17 +1125,22 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
   for (const r of rows) {
     const mbModelo = mbByDescripcionTipo.get(r.modelo.trim()) ?? "";
     const usoTrafo = r.usoTrafo === "ENEL" ? "GE" : r.usoTrafo === "CLIENTE" ? "EX" : "";
+    const propiedad = r.propiedad === "ENEL" ? "E" : r.propiedad === "CLIENTE" ? "P" : "";
     const terStart = (r.terDesc ?? "").trim();
     const lFlag = terStart.toUpperCase().startsWith("L") ? "1" : "4";
+
+    const lat = parseFloatFlexible(r.coordenadasY);
+    const lon = parseFloatFlexible(r.coordenadasX);
+    const utm = lat !== null && lon !== null ? latLonToUtm(lat, lon) : null;
 
     const fields = [
       r.cd,
       r.subestacionSbItm,
-      r.codCircuitStm,
       r.circuitoStm,
-      beforeFirstSlash(r.modelo),
+      r.codCircuitStm,
+      normalizeNumericText(afterFirstSlashBeforeParen(r.modelo)),
       r.marca,
-      nthParenContent(mbModelo, 2),
+      lastParenContent(mbModelo),
       r.punFisico,
       r.direccion,
       r.terDesc,
@@ -1053,12 +1151,12 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
       usoTrafo,
       r.tipRedTransformador,
       r.fase,
-      r.propiedad,
-      r.coordenadasX,
-      r.coordenadasY,
+      propiedad,
+      utm ? String(utm.easting) : "",
+      utm ? String(utm.northing) : "",
       "0",
       today,
-      "|||",
+      "3|||",
       lFlag
     ].map(pipeEscape);
 
