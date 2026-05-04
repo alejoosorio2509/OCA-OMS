@@ -10,11 +10,9 @@ export type User = {
   canOrders?: boolean;
   canLevantamiento?: boolean;
   canSolCdsNuevos?: boolean;
-  canAsignacionCompAt?: boolean;
   canCargues?: boolean;
   canExportes?: boolean;
   canUsers?: boolean;
-  isTecnologo?: boolean;
 };
 
 export type WorkOrderStatus =
@@ -215,11 +213,9 @@ export async function createUser(
     canOrders?: boolean;
     canLevantamiento?: boolean;
     canSolCdsNuevos?: boolean;
-    canAsignacionCompAt?: boolean;
     canCargues?: boolean;
     canExportes?: boolean;
     canUsers?: boolean;
-    isTecnologo?: boolean;
   }
 ) {
   return apiFetch<User>("/users", { token, method: "POST", body: JSON.stringify(input) });
@@ -235,53 +231,33 @@ export async function updateUser(
     canOrders: boolean;
     canLevantamiento: boolean;
     canSolCdsNuevos: boolean;
-    canAsignacionCompAt: boolean;
     canCargues: boolean;
     canExportes: boolean;
     canUsers: boolean;
-    isTecnologo: boolean;
   }>
 ) {
   return apiFetch<User>(`/users/${id}`, { token, method: "PATCH", body: JSON.stringify(input) });
 }
 
-export type TecnologoOption = { id: string; name: string; email: string };
-
-export type AsignacionCompAtRow = {
-  rotulo: string;
-  fechaAsignacionEnel: string | null;
+export type ComponenteAtRow = {
+  codigo: string;
   tipo: string | null;
   tecnologo: string | null;
-  fechaAsignacion: string | null;
-  fechaInstalacion: string | null;
-  estado: string | null;
-  asignadoA: string;
+  fechaAsignaEnel: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export async function listAsignacionCompAt(
+export async function listComponentesAt(
   token: string,
-  query: { estado?: string; tipo?: string; tecnologo?: string } = {}
+  query: { codigo?: string; tipo?: string; tecnologo?: string } = {}
 ) {
   const qs = new URLSearchParams();
-  if (query.estado) qs.set("estado", query.estado);
+  if (query.codigo) qs.set("codigo", query.codigo);
   if (query.tipo) qs.set("tipo", query.tipo);
   if (query.tecnologo) qs.set("tecnologo", query.tecnologo);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return apiFetch<AsignacionCompAtRow[]>(`/asignacion-comp-at${suffix}`, { token });
-}
-
-export async function listTecnologos(token: string) {
-  return apiFetch<TecnologoOption[]>("/asignacion-comp-at/tecnologos", { token });
-}
-
-export async function asignarCompAt(token: string, rotulo: string, tecnologoId: string) {
-  return apiFetch<AsignacionCompAtRow>(`/asignacion-comp-at/${encodeURIComponent(rotulo)}/asignar`, {
-    token,
-    method: "POST",
-    body: JSON.stringify({ tecnologoId })
-  });
+  return apiFetch<ComponenteAtRow[]>(`/componentes-at${suffix}`, { token });
 }
 
 export type SolCdsNuevoOptions = {

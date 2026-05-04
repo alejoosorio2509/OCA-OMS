@@ -39,11 +39,9 @@ export function UsersPage() {
       canOrders?: boolean;
       canLevantamiento?: boolean;
       canSolCdsNuevos?: boolean;
-      canAsignacionCompAt?: boolean;
       canCargues?: boolean;
       canExportes?: boolean;
       canUsers?: boolean;
-      isTecnologo?: boolean;
       createdAt: string;
     }[]
   >([]);
@@ -58,11 +56,9 @@ export function UsersPage() {
   const [canOrders, setCanOrders] = useState(true);
   const [canLevantamiento, setCanLevantamiento] = useState(true);
   const [canSolCdsNuevos, setCanSolCdsNuevos] = useState(true);
-  const [canAsignacionCompAt, setCanAsignacionCompAt] = useState(true);
   const [canCargues, setCanCargues] = useState(true);
   const [canExportes, setCanExportes] = useState(true);
   const [canUsers, setCanUsers] = useState(false);
-  const [isTecnologo, setIsTecnologo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resetPw, setResetPw] = useState<Record<string, string>>({});
 
@@ -71,7 +67,6 @@ export function UsersPage() {
     canOrders?: boolean;
     canLevantamiento?: boolean;
     canSolCdsNuevos?: boolean;
-    canAsignacionCompAt?: boolean;
     canCargues?: boolean;
     canExportes?: boolean;
     canUsers?: boolean;
@@ -81,7 +76,6 @@ export function UsersPage() {
     if (u.canOrders) parts.push("Actualización");
     if (u.canLevantamiento) parts.push("Levantamiento");
     if (u.canSolCdsNuevos) parts.push("Sol. CDS Nuevos");
-    if (u.canAsignacionCompAt) parts.push("Asig. comp. AT");
     if (u.canCargues) parts.push("Cargues");
     if (u.canExportes) parts.push("Exportes");
     if (u.canUsers) parts.push("Usuarios");
@@ -97,11 +91,9 @@ export function UsersPage() {
       canOrders: boolean;
       canLevantamiento: boolean;
       canSolCdsNuevos: boolean;
-      canAsignacionCompAt: boolean;
       canCargues: boolean;
       canExportes: boolean;
       canUsers: boolean;
-      isTecnologo: boolean;
     }>
   ) {
     setItems((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
@@ -144,11 +136,9 @@ export function UsersPage() {
         canOrders,
         canLevantamiento,
         canSolCdsNuevos,
-        canAsignacionCompAt,
         canCargues,
         canExportes,
-        canUsers,
-        isTecnologo
+        canUsers
       });
       setEmail("");
       setName("");
@@ -158,11 +148,9 @@ export function UsersPage() {
       setCanOrders(true);
       setCanLevantamiento(true);
       setCanSolCdsNuevos(true);
-      setCanAsignacionCompAt(true);
       setCanCargues(true);
       setCanExportes(true);
       setCanUsers(false);
-      setIsTecnologo(false);
       await refresh();
     } catch (err) {
       let msg = "No se pudo crear el usuario (¿email ya existe?).";
@@ -239,10 +227,6 @@ export function UsersPage() {
                   Sol. CDS Nuevos
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={canAsignacionCompAt} onChange={(e) => setCanAsignacionCompAt(e.target.checked)} />
-                  Asignación comp. AT
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={canCargues} onChange={(e) => setCanCargues(e.target.checked)} />
                   Cargues
                 </label>
@@ -253,10 +237,6 @@ export function UsersPage() {
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={canUsers} onChange={(e) => setCanUsers(e.target.checked)} />
                   Usuarios
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={isTecnologo} onChange={(e) => setIsTecnologo(e.target.checked)} />
-                  Tecnólogo
                 </label>
               </div>
             </div>
@@ -284,11 +264,9 @@ export function UsersPage() {
                 <th>Actualización</th>
                 <th>Levantamiento</th>
                 <th>Sol. CDS Nuevos</th>
-                <th>Asig. comp. AT</th>
                 <th>Cargues</th>
                 <th>Exportes</th>
                 <th>Usuarios</th>
-                <th>Tecnólogo</th>
                 <th>Módulos</th>
                 <th>Creado</th>
                 <th>Acciones</th>
@@ -433,26 +411,6 @@ export function UsersPage() {
                   <td>
                     <input
                       type="checkbox"
-                      checked={u.canAsignacionCompAt ?? false}
-                      onChange={async (e) => {
-                        const next = e.target.checked;
-                        setError(null);
-                        patchItem(u.id, { canAsignacionCompAt: next });
-                        try {
-                          await updateUser(token!, u.id, { canAsignacionCompAt: next });
-                          await refresh();
-                        } catch (err) {
-                          const data = getApiErrorData(err);
-                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Asignación comp. AT.";
-                          setError(msg);
-                          await refresh();
-                        }
-                      }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
                       checked={u.canCargues ?? false}
                       onChange={async (e) => {
                         const next = e.target.checked;
@@ -504,26 +462,6 @@ export function UsersPage() {
                         } catch (err) {
                           const data = getApiErrorData(err);
                           const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Usuarios.";
-                          setError(msg);
-                          await refresh();
-                        }
-                      }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={u.isTecnologo ?? false}
-                      onChange={async (e) => {
-                        const next = e.target.checked;
-                        setError(null);
-                        patchItem(u.id, { isTecnologo: next });
-                        try {
-                          await updateUser(token!, u.id, { isTecnologo: next });
-                          await refresh();
-                        } catch (err) {
-                          const data = getApiErrorData(err);
-                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar Tecnólogo.";
                           setError(msg);
                           await refresh();
                         }

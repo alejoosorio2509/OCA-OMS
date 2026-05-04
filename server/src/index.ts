@@ -8,7 +8,7 @@ import { carguesRouter } from "./routes/cargues.js";
 import { exportsRouter } from "./routes/exports.js";
 import { levantamientosRouter } from "./routes/levantamientos.js";
 import { solCdsNuevosRouter } from "./routes/solCdsNuevos.js";
-import { asignacionCompAtRouter } from "./routes/asignacionCompAt.js";
+import { componentesAtRouter } from "./routes/componentesAt.js";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "./prisma.js";
@@ -30,8 +30,6 @@ async function ensureUserPermissionColumns() {
   try {
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canLevantamiento" BOOLEAN NOT NULL DEFAULT true');
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canSolCdsNuevos" BOOLEAN NOT NULL DEFAULT true');
-    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canAsignacionCompAt" BOOLEAN NOT NULL DEFAULT true');
-    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isTecnologo" BOOLEAN NOT NULL DEFAULT false');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`WARN: No se pudo asegurar columnas de permisos de usuario: ${msg}`);
@@ -89,28 +87,15 @@ async function ensureCarguesCatalogTables() {
       CREATE TABLE IF NOT EXISTS "ComponenteAt" (
         "codigo" TEXT PRIMARY KEY,
         "tipo" TEXT,
+        "tecnologo" TEXT,
         "fechaAsignaEnel" TIMESTAMP(3),
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await prisma.$executeRawUnsafe('ALTER TABLE "ComponenteAt" ADD COLUMN IF NOT EXISTS "tecnologo" TEXT');
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ComponenteAt_tipo_idx" ON "ComponenteAt"("tipo")`);
-
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "AsignacionCompAt" (
-        "rotulo" TEXT PRIMARY KEY,
-        "fechaAsignacionEnel" TIMESTAMP(3),
-        "tipo" TEXT,
-        "tecnologo" TEXT,
-        "fechaAsignacion" TIMESTAMP(3),
-        "fechaInstalacion" TIMESTAMP(3),
-        "estado" TEXT,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "AsignacionCompAt_estado_idx" ON "AsignacionCompAt"("estado")`);
-    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "AsignacionCompAt_tecnologo_idx" ON "AsignacionCompAt"("tecnologo")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ComponenteAt_tecnologo_idx" ON "ComponenteAt"("tecnologo")`);
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "SolCdsNuevo" (
@@ -250,7 +235,7 @@ app.use("/work-orders", workOrdersRouter);
 app.use("/cargues", carguesRouter);
 app.use("/levantamientos", levantamientosRouter);
 app.use("/sol-cds-nuevos", solCdsNuevosRouter);
-app.use("/asignacion-comp-at", asignacionCompAtRouter);
+app.use("/componentes-at", componentesAtRouter);
 app.use("/exports", exportsRouter);
 
 app.use((_req, res) => {

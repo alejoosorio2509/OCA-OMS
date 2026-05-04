@@ -23,11 +23,9 @@ usersRouter.get("/", requireAuth, requirePermission("USERS"), async (_req, res) 
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
-      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
-      isTecnologo: true,
       createdAt: true
     }
   });
@@ -43,11 +41,9 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
     canOrders: z.boolean().optional(),
     canLevantamiento: z.boolean().optional(),
     canSolCdsNuevos: z.boolean().optional(),
-    canAsignacionCompAt: z.boolean().optional(),
     canCargues: z.boolean().optional(),
     canExportes: z.boolean().optional(),
-    canUsers: z.boolean().optional(),
-    isTecnologo: z.boolean().optional()
+    canUsers: z.boolean().optional()
   });
 
   const parsed = bodySchema.safeParse(req.body);
@@ -64,14 +60,12 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
     canOrders,
     canLevantamiento,
     canSolCdsNuevos,
-    canAsignacionCompAt,
     canCargues,
     canExportes,
-    canUsers,
-    isTecnologo
+    canUsers
   } = parsed.data;
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) {
     res.status(409).json({ error: "EMAIL_IN_USE" });
     return;
@@ -87,11 +81,9 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
       ...(canOrders !== undefined ? { canOrders } : {}),
       ...(canLevantamiento !== undefined ? { canLevantamiento } : {}),
       ...(canSolCdsNuevos !== undefined ? { canSolCdsNuevos } : {}),
-      ...(canAsignacionCompAt !== undefined ? { canAsignacionCompAt } : {}),
       ...(canCargues !== undefined ? { canCargues } : {}),
       ...(canExportes !== undefined ? { canExportes } : {}),
-      ...(canUsers !== undefined ? { canUsers } : {}),
-      ...(isTecnologo !== undefined ? { isTecnologo } : {})
+      ...(canUsers !== undefined ? { canUsers } : {})
     },
     select: {
       id: true,
@@ -101,11 +93,9 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
-      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
-      isTecnologo: true,
       createdAt: true
     }
   });
@@ -127,11 +117,9 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
     canOrders: z.boolean().optional(),
     canLevantamiento: z.boolean().optional(),
     canSolCdsNuevos: z.boolean().optional(),
-    canAsignacionCompAt: z.boolean().optional(),
     canCargues: z.boolean().optional(),
     canExportes: z.boolean().optional(),
-    canUsers: z.boolean().optional(),
-    isTecnologo: z.boolean().optional()
+    canUsers: z.boolean().optional()
   });
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -140,14 +128,14 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
   }
 
   const id = params.data.id;
-  const current = await prisma.user.findUnique({ where: { id } });
+  const current = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true } });
   if (!current) {
     res.status(404).json({ error: "NOT_FOUND" });
     return;
   }
 
   if (parsed.data.email && parsed.data.email !== current.email) {
-    const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+    const existing = await prisma.user.findUnique({ where: { email: parsed.data.email }, select: { id: true } });
     if (existing) {
       res.status(409).json({ error: "EMAIL_IN_USE" });
       return;
@@ -165,11 +153,9 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
-      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
-      isTecnologo: true,
       createdAt: true
     }
   });

@@ -11,7 +11,7 @@ import { CarguesPage } from "./pages/CarguesPage";
 import { ExportesPage } from "./pages/ExportesPage";
 import { LevantamientoPage } from "./pages/LevantamientoPage";
 import { SolCdsNuevosPage } from "./pages/SolCdsNuevosPage";
-import { AsignacionCompAtPage } from "./pages/AsignacionCompAtPage";
+import { ComponentesAtPage } from "./pages/ComponentesAtPage";
 
 export default function App() {
   return (
@@ -26,7 +26,7 @@ export default function App() {
             <Route path="/orders/:id" element={<OrderDetailsPage />} />
             <Route path="/levantamiento" element={<LevantamientoPage />} />
             <Route path="/sol-cds-nuevos" element={<SolCdsNuevosPage />} />
-            <Route path="/asignacion-comp-at" element={<AsignacionCompAtPage />} />
+            <Route path="/componentes-at" element={<ComponentesAtPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/cargues" element={<CarguesPage />} />
             <Route path="/exportes" element={<ExportesPage />} />

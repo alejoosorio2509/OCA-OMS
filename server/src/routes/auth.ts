@@ -30,11 +30,9 @@ authRouter.post("/login", async (req, res) => {
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
-      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
-      canUsers: true,
-      isTecnologo: true
+      canUsers: true
     }
   });
   if (!user) {
@@ -59,11 +57,9 @@ authRouter.post("/login", async (req, res) => {
       canOrders: user.canOrders,
       canLevantamiento: user.canLevantamiento,
       canSolCdsNuevos: user.canSolCdsNuevos,
-      canAsignacionCompAt: user.canAsignacionCompAt,
       canCargues: user.canCargues,
       canExportes: user.canExportes,
-      canUsers: user.canUsers,
-      isTecnologo: user.isTecnologo
+      canUsers: user.canUsers
     }
   });
 });
@@ -79,11 +75,9 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
-      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
-      canUsers: true,
-      isTecnologo: true
+      canUsers: true
     }
   });
   if (!user) {
@@ -98,11 +92,9 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     canOrders: user.canOrders,
     canLevantamiento: user.canLevantamiento,
     canSolCdsNuevos: user.canSolCdsNuevos,
-    canAsignacionCompAt: user.canAsignacionCompAt,
     canCargues: user.canCargues,
     canExportes: user.canExportes,
-    canUsers: user.canUsers,
-    isTecnologo: user.isTecnologo
+    canUsers: user.canUsers
   });
 });
 
