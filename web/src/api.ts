@@ -310,6 +310,7 @@ export type SolCdsNuevoRow = {
   coordenadasY: string;
   createdAt: string;
   createdById: string;
+  createdBy?: { name: string; email: string };
 };
 
 export async function listSolCdsNuevos(token: string, query: { all?: boolean } = {}) {

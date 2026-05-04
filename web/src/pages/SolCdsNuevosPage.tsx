@@ -160,7 +160,7 @@ export function SolCdsNuevosPage() {
   };
 
   return (
-    <div style={{ display: "grid", gap: 14 }}>
+    <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(520px, 1fr) 520px", alignItems: "start" }}>
       <div className="card">
       <h2>Sol. CDS Nuevos</h2>
       <p style={{ marginTop: 0 }}>Al crear la solicitud, el sistema asigna un número de registro que inicia con CDN.</p>
@@ -401,6 +401,7 @@ export function SolCdsNuevosPage() {
                   <th>Incremento</th>
                   <th>CD</th>
                   <th>Subestación</th>
+                  <th>Usuario</th>
                   <th>Creado</th>
                 </tr>
               </thead>
@@ -413,12 +414,13 @@ export function SolCdsNuevosPage() {
                       <td>{r.incremento}</td>
                       <td>{r.cd}</td>
                       <td>{r.subestacionSbItm}</td>
+                      <td>{r.createdBy?.name || r.createdBy?.email || r.createdById}</td>
                       <td>{formatDate(r.createdAt)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} style={{ opacity: 0.75 }}>
+                    <td colSpan={7} style={{ opacity: 0.75 }}>
                       Sin registros.
                     </td>
                   </tr>

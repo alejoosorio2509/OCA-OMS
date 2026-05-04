@@ -206,7 +206,8 @@ solCdsNuevosRouter.get("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), as
       coordenadasX: true,
       coordenadasY: true,
       createdAt: true,
-      createdById: true
+      createdById: true,
+      createdBy: { select: { name: true, email: true } }
     }
   });
   res.json(rows);
