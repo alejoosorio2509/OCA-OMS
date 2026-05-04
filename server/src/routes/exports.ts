@@ -178,6 +178,12 @@ function formatDateDDMMYYYY(date: Date) {
   return `${d}/${m}/${y}`;
 }
 
+function formatYmdToDmy(value: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!m) return value.trim();
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
 function calendarKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -1091,12 +1097,30 @@ exportsRouter.get("/historial.csv", requireAuth, requirePermission("EXPORTES"), 
   res.send(csv);
 });
 
-exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
-  const all = req.auth?.role === "ADMIN" && (req.query.all === "1" || req.query.all === "true");
+exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, async (req, res) => {
+  const parsed = dateRangeSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "INVALID_QUERY" });
+    return;
+  }
+
+  const { dateStart, dateEnd } = parsed.data;
+  const start = dateStart ? toDateStart(dateStart) : null;
+  const end = dateEnd ? toDateEnd(dateEnd) : null;
+  const where = {
+    ...(start || end
+      ? {
+          createdAt: {
+            ...(start ? { gte: start } : {}),
+            ...(end ? { lte: end } : {})
+          }
+        }
+      : {})
+  };
 
   const [rows, mbRows] = await Promise.all([
     prisma.solCdsNuevo.findMany({
-      where: all ? {} : { createdById: req.auth!.sub },
+      where,
       orderBy: { createdAt: "asc" },
       select: {
         cd: true,
@@ -1130,7 +1154,10 @@ exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, requirePermission("EXPORTE
     if (!mbByDescripcionTipo.has(k) && v) mbByDescripcionTipo.set(k, v);
   }
 
-  const today = formatDateDDMMYYYY(new Date());
+  const today =
+    (dateStart ? formatYmdToDmy(dateStart) : "") ||
+    (dateEnd ? formatYmdToDmy(dateEnd) : "") ||
+    formatDateDDMMYYYY(new Date());
   const lines: string[] = [];
   for (const r of rows) {
     const mbModelo = mbByDescripcionTipo.get(r.modelo.trim()) ?? "";

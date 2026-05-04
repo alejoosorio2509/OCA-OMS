@@ -8,7 +8,7 @@ export function Layout() {
   const canLevantamiento = user?.role === "ADMIN" || !!user?.canLevantamiento;
   const canSolCdsNuevos = user?.role === "ADMIN" || !!user?.canSolCdsNuevos;
   const canCargues = user?.role === "ADMIN" || !!user?.canCargues;
-  const canExportes = user?.role === "ADMIN" || !!user?.canExportes;
+  const canExportes = !!user;
   const canUsers = user?.role === "ADMIN" || !!user?.canUsers;
   return (
     <div className="layout">

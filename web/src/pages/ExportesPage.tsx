@@ -29,7 +29,8 @@ async function downloadCsv(token: string, path: string, filename: string) {
 
 export function ExportesPage() {
   const { token, user } = useAuth();
-  const canExportes = user?.role === "ADMIN" || !!user?.canExportes;
+  const canFullExportes = user?.role === "ADMIN" || !!user?.canExportes;
+  const canSolExport = !!user;
 
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
@@ -45,7 +46,7 @@ export function ExportesPage() {
     [dateStart, dateEnd]
   );
 
-  if (!canExportes) return <div className="card">No autorizado.</div>;
+  if (!canSolExport) return <div className="card">No autorizado.</div>;
 
   const handle = async (kind: "general" | "devoluciones" | "historial" | "levantamiento" | "solCdsNuevos") => {
     if (!token) return;
@@ -53,20 +54,20 @@ export function ExportesPage() {
     setLoading(kind);
     try {
       const range = dateStart || dateEnd ? `${dateStart || "inicio"}-${dateEnd || "fin"}` : "todas";
-      if (kind === "general") {
+      if (kind === "general" && canFullExportes) {
         await downloadCsv(token, `/exports/general.csv${query}`, `reporte_general_${range}.csv`);
       }
-      if (kind === "devoluciones") {
+      if (kind === "devoluciones" && canFullExportes) {
         await downloadCsv(token, `/exports/devoluciones.csv${query}`, `reporte_devoluciones_${range}.csv`);
       }
-      if (kind === "historial") {
+      if (kind === "historial" && canFullExportes) {
         await downloadCsv(token, `/exports/historial.csv${query}`, `reporte_historial_${range}.csv`);
       }
-      if (kind === "levantamiento") {
+      if (kind === "levantamiento" && canFullExportes) {
         await downloadCsv(token, `/exports/levantamientos.csv${query}`, `levantamiento_${range}.csv`);
       }
       if (kind === "solCdsNuevos") {
-        await downloadCsv(token, `/exports/sol-cds-nuevos.txt`, `sol_cds_nuevos_${range}.txt`);
+        await downloadCsv(token, `/exports/sol-cds-nuevos.txt${query}`, `sol_cds_nuevos_${range}.txt`);
       }
     } catch {
       setError("No se pudo descargar el reporte.");
@@ -95,18 +96,22 @@ export function ExportesPage() {
 
       <div className="card">
         <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-          <button className="btn" onClick={() => handle("general")} disabled={!!loading}>
-            {loading === "general" ? "Generando..." : "Exportar reporte general"}
-          </button>
-          <button className="btn" onClick={() => handle("devoluciones")} disabled={!!loading}>
-            {loading === "devoluciones" ? "Generando..." : "Exportar reporte de devoluciones"}
-          </button>
-          <button className="btn" onClick={() => handle("historial")} disabled={!!loading}>
-            {loading === "historial" ? "Generando..." : "Exportar historial de órdenes"}
-          </button>
-          <button className="btn" onClick={() => handle("levantamiento")} disabled={!!loading}>
-            {loading === "levantamiento" ? "Generando..." : "Exportar levantamiento"}
-          </button>
+          {canFullExportes ? (
+            <>
+              <button className="btn" onClick={() => handle("general")} disabled={!!loading}>
+                {loading === "general" ? "Generando..." : "Exportar reporte general"}
+              </button>
+              <button className="btn" onClick={() => handle("devoluciones")} disabled={!!loading}>
+                {loading === "devoluciones" ? "Generando..." : "Exportar reporte de devoluciones"}
+              </button>
+              <button className="btn" onClick={() => handle("historial")} disabled={!!loading}>
+                {loading === "historial" ? "Generando..." : "Exportar historial de órdenes"}
+              </button>
+              <button className="btn" onClick={() => handle("levantamiento")} disabled={!!loading}>
+                {loading === "levantamiento" ? "Generando..." : "Exportar levantamiento"}
+              </button>
+            </>
+          ) : null}
           <button className="btn" onClick={() => handle("solCdsNuevos")} disabled={!!loading}>
             {loading === "solCdsNuevos" ? "Generando..." : "Exportar Sol. CDS Nuevos"}
           </button>
