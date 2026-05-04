@@ -160,7 +160,7 @@ export function SolCdsNuevosPage() {
   };
 
   return (
-    <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(520px, 1fr) 520px", alignItems: "start" }}>
+    <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(520px, 1fr) 1040px", alignItems: "start" }}>
       <div className="card">
       <h2>Sol. CDS Nuevos</h2>
       <p style={{ marginTop: 0 }}>Al crear la solicitud, el sistema asigna un número de registro que inicia con CDN.</p>
