@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { createSolCdsNuevo, getSolCdsNuevoOptions, type SolCdsNuevoCreateInput, type SolCdsNuevoOptions } from "../api";
+import {
+  createSolCdsNuevo,
+  getSolCdsNuevoOptions,
+  listSolCdsNuevos,
+  type SolCdsNuevoCreateInput,
+  type SolCdsNuevoOptions,
+  type SolCdsNuevoRow
+} from "../api";
 import { useAuth } from "../auth";
 
 export function SolCdsNuevosPage() {
@@ -8,9 +15,11 @@ export function SolCdsNuevosPage() {
 
   const [options, setOptions] = useState<SolCdsNuevoOptions | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingList, setLoadingList] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successRegistro, setSuccessRegistro] = useState<string | null>(null);
+  const [recent, setRecent] = useState<SolCdsNuevoRow[]>([]);
 
   const [form, setForm] = useState<SolCdsNuevoCreateInput>(() => ({
     ot: "",
@@ -47,6 +56,18 @@ export function SolCdsNuevosPage() {
       })
       .finally(() => setLoading(false));
   }, [token, canSolCdsNuevos]);
+
+  const canAll = user?.role === "ADMIN";
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    if (!token || !canSolCdsNuevos) return;
+    setLoadingList(true);
+    listSolCdsNuevos(token, { all: canAll && showAll })
+      .then((rows) => setRecent(rows))
+      .catch(() => {})
+      .finally(() => setLoadingList(false));
+  }, [token, canSolCdsNuevos, canAll, showAll]);
 
   const tipoOrdenOptions = useMemo(() => options?.tipoOrden ?? [], [options]);
 
@@ -118,6 +139,11 @@ export function SolCdsNuevosPage() {
         coordenadasX: "",
         coordenadasY: ""
       }));
+      setLoadingList(true);
+      listSolCdsNuevos(token, { all: canAll && showAll })
+        .then((rows) => setRecent(rows))
+        .catch(() => {})
+        .finally(() => setLoadingList(false));
     } catch {
       setError("No se pudo crear la solicitud. Revisa que todos los campos estén completos.");
     } finally {
@@ -127,8 +153,15 @@ export function SolCdsNuevosPage() {
 
   const disabled = loading || saving || !options;
 
+  const formatDate = (value: string) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+  };
+
   return (
-    <div className="card">
+    <div style={{ display: "grid", gap: 14 }}>
+      <div className="card">
       <h2>Sol. CDS Nuevos</h2>
       <p style={{ marginTop: 0 }}>Al crear la solicitud, el sistema asigna un número de registro que inicia con CDN.</p>
 
@@ -340,6 +373,61 @@ export function SolCdsNuevosPage() {
           </button>
         </div>
       </form>
+      </div>
+
+      <div className="card">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "end", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h3 style={{ marginTop: 0, marginBottom: 6 }}>Solicitudes recientes</h3>
+            <div style={{ opacity: 0.75, fontSize: 12 }}>Máximo 200</div>
+          </div>
+          {canAll ? (
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+              Ver todas (admin)
+            </label>
+          ) : null}
+        </div>
+
+        {loadingList ? <div style={{ marginTop: 10 }}>Cargando...</div> : null}
+
+        {!loadingList ? (
+          <div style={{ overflowX: "auto", marginTop: 10 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Registro</th>
+                  <th>OT</th>
+                  <th>Incremento</th>
+                  <th>CD</th>
+                  <th>Subestación</th>
+                  <th>Creado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.length ? (
+                  recent.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.registro}</td>
+                      <td>{r.ot}</td>
+                      <td>{r.incremento}</td>
+                      <td>{r.cd}</td>
+                      <td>{r.subestacionSbItm}</td>
+                      <td>{formatDate(r.createdAt)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ opacity: 0.75 }}>
+                      Sin registros.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -286,6 +286,39 @@ export async function createSolCdsNuevo(token: string, input: SolCdsNuevoCreateI
   return apiFetch<SolCdsNuevoCreated>("/sol-cds-nuevos", { token, method: "POST", body: JSON.stringify(input) });
 }
 
+export type SolCdsNuevoRow = {
+  id: number;
+  registro: string;
+  ot: string;
+  incremento: string;
+  tipoOrden: string;
+  cd: string;
+  subestacionSbItm: string;
+  codCircuitStm: string;
+  circuitoStm: string;
+  marca: string;
+  modelo: string;
+  punFisico: string;
+  direccion: string;
+  terDesc: string;
+  orgDesc: string;
+  usoTrafo: string;
+  propiedad: string;
+  tipRedTransformador: string;
+  fase: string;
+  coordenadasX: string;
+  coordenadasY: string;
+  createdAt: string;
+  createdById: string;
+};
+
+export async function listSolCdsNuevos(token: string, query: { all?: boolean } = {}) {
+  const qs = new URLSearchParams();
+  if (query.all) qs.set("all", "1");
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiFetch<SolCdsNuevoRow[]>(`/sol-cds-nuevos${suffix}`, { token });
+}
+
 export async function resetUserPassword(token: string, id: string, password?: string) {
   return apiFetch<{ id: string; password: string }>(`/users/${id}/reset-password`, {
     token,
