@@ -251,15 +251,38 @@ export type ComponenteAtRow = {
   updatedAt: string;
 };
 
+export type ComponentesAtOptions = {
+  tipos: string[];
+  tecnologos: string[];
+  estados: string[];
+};
+
+export async function getComponentesAtOptions(token: string) {
+  return apiFetch<ComponentesAtOptions>("/componentes-at/options", { token });
+}
+
 export async function listComponentesAt(
   token: string,
-  query: { rotulo?: string; tipo?: string; tecnologo?: string; estado?: string } = {}
+  query: {
+    rotulo?: string;
+    tipo?: string;
+    tecnologo?: string;
+    estado?: string;
+    asignacionStart?: string;
+    asignacionEnd?: string;
+    instalacionStart?: string;
+    instalacionEnd?: string;
+  } = {}
 ) {
   const qs = new URLSearchParams();
   if (query.rotulo) qs.set("rotulo", query.rotulo);
   if (query.tipo) qs.set("tipo", query.tipo);
   if (query.tecnologo) qs.set("tecnologo", query.tecnologo);
   if (query.estado) qs.set("estado", query.estado);
+  if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
+  if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
+  if (query.instalacionStart) qs.set("instalacionStart", query.instalacionStart);
+  if (query.instalacionEnd) qs.set("instalacionEnd", query.instalacionEnd);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return apiFetch<ComponenteAtRow[]>(`/componentes-at${suffix}`, { token });
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { listComponentesAt, type ComponenteAtRow } from "../api";
+import { getComponentesAtOptions, listComponentesAt, type ComponenteAtRow } from "../api";
 import { useAuth } from "../auth";
 
 function fmtDate(value: string | null) {
@@ -18,25 +18,53 @@ export function ComponentesAtPage() {
   const [tipo, setTipo] = useState("");
   const [tecnologo, setTecnologo] = useState("");
   const [estado, setEstado] = useState("");
+  const [asignacionDesde, setAsignacionDesde] = useState("");
+  const [asignacionHasta, setAsignacionHasta] = useState("");
+  const [instalacionDesde, setInstalacionDesde] = useState("");
+  const [instalacionHasta, setInstalacionHasta] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const query = useMemo(
+  const [tipos, setTipos] = useState<string[]>([]);
+  const [tecnologos, setTecnologos] = useState<string[]>([]);
+  const [estados, setEstados] = useState<string[]>([]);
+
+  const [appliedQuery, setAppliedQuery] = useState<{
+    rotulo?: string;
+    tipo?: string;
+    tecnologo?: string;
+    estado?: string;
+    asignacionStart?: string;
+    asignacionEnd?: string;
+    instalacionStart?: string;
+    instalacionEnd?: string;
+  }>({});
+
+  const queryDraft = useMemo(
     () => ({
       rotulo: rotulo.trim() || undefined,
       tipo: tipo.trim() || undefined,
       tecnologo: tecnologo.trim() || undefined,
-      estado: estado.trim() || undefined
+      estado: estado.trim() || undefined,
+      asignacionStart: asignacionDesde.trim() || undefined,
+      asignacionEnd: asignacionHasta.trim() || undefined,
+      instalacionStart: instalacionDesde.trim() || undefined,
+      instalacionEnd: instalacionHasta.trim() || undefined
     }),
-    [rotulo, tipo, tecnologo, estado]
+    [rotulo, tipo, tecnologo, estado, asignacionDesde, asignacionHasta, instalacionDesde, instalacionHasta]
   );
 
-  async function refresh() {
+  async function refresh(nextQuery: {
+    rotulo?: string;
+    tipo?: string;
+    tecnologo?: string;
+    estado?: string;
+  }) {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await listComponentesAt(token, query);
+      const data = await listComponentesAt(token, nextQuery);
       setRows(data);
     } catch {
       setError("No se pudo cargar el módulo.");
@@ -47,8 +75,21 @@ export function ComponentesAtPage() {
 
   useEffect(() => {
     if (!token || !canView) return;
-    refresh().catch(() => {});
-  }, [token, canView, query]);
+    refresh(appliedQuery).catch(() => {});
+  }, [token, canView, appliedQuery]);
+
+  useEffect(() => {
+    if (!token || !canView) return;
+    getComponentesAtOptions(token)
+      .then((data) => {
+        setTipos(Array.isArray(data.tipos) ? data.tipos : []);
+        setTecnologos(Array.isArray(data.tecnologos) ? data.tecnologos : []);
+        setEstados(Array.isArray(data.estados) ? data.estados : []);
+      })
+      .catch(() => {
+        return;
+      });
+  }, [token, canView]);
 
   if (!canView) return <div className="card">No autorizado.</div>;
 
@@ -63,19 +104,64 @@ export function ComponentesAtPage() {
         </div>
         <div className="field" style={{ minWidth: 220 }}>
           <label>Tipo</label>
-          <input value={tipo} onChange={(e) => setTipo(e.target.value)} placeholder="Filtrar por tipo..." />
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="">Todos</option>
+            {tipos.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="field" style={{ minWidth: 220 }}>
           <label>Tecnólogo</label>
-          <input
-            value={tecnologo}
-            onChange={(e) => setTecnologo(e.target.value)}
-            placeholder="Filtrar por tecnólogo..."
-          />
+          <select value={tecnologo} onChange={(e) => setTecnologo(e.target.value)}>
+            <option value="">Todos</option>
+            {tecnologos.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="field" style={{ minWidth: 220 }}>
           <label>Estado</label>
-          <input value={estado} onChange={(e) => setEstado(e.target.value)} placeholder="Filtrar por estado..." />
+          <select value={estado} onChange={(e) => setEstado(e.target.value)}>
+            <option value="">Todos</option>
+            {estados.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>F. Asignación desde</label>
+          <input type="date" value={asignacionDesde} onChange={(e) => setAsignacionDesde(e.target.value)} />
+        </div>
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>F. Asignación hasta</label>
+          <input type="date" value={asignacionHasta} onChange={(e) => setAsignacionHasta(e.target.value)} />
+        </div>
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>F. Instalación desde</label>
+          <input type="date" value={instalacionDesde} onChange={(e) => setInstalacionDesde(e.target.value)} />
+        </div>
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>F. Instalación hasta</label>
+          <input type="date" value={instalacionHasta} onChange={(e) => setInstalacionHasta(e.target.value)} />
+        </div>
+        <div className="field" style={{ minWidth: 140, alignSelf: "flex-end" }}>
+          <button
+            className="btn"
+            onClick={() => {
+              setAppliedQuery(queryDraft);
+            }}
+            disabled={loading}
+            type="button"
+          >
+            Buscar
+          </button>
         </div>
       </div>
 
