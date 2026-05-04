@@ -18,9 +18,11 @@ usersRouter.get("/", requireAuth, requirePermission("USERS"), async (_req, res) 
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
+      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
+      isTecnologo: true,
       createdAt: true
     }
   });
@@ -36,9 +38,11 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
     canOrders: z.boolean().optional(),
     canLevantamiento: z.boolean().optional(),
     canSolCdsNuevos: z.boolean().optional(),
+    canAsignacionCompAt: z.boolean().optional(),
     canCargues: z.boolean().optional(),
     canExportes: z.boolean().optional(),
-    canUsers: z.boolean().optional()
+    canUsers: z.boolean().optional(),
+    isTecnologo: z.boolean().optional()
   });
 
   const parsed = bodySchema.safeParse(req.body);
@@ -47,7 +51,20 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
     return;
   }
 
-  const { email, name, password, role, canOrders, canLevantamiento, canSolCdsNuevos, canCargues, canExportes, canUsers } = parsed.data;
+  const {
+    email,
+    name,
+    password,
+    role,
+    canOrders,
+    canLevantamiento,
+    canSolCdsNuevos,
+    canAsignacionCompAt,
+    canCargues,
+    canExportes,
+    canUsers,
+    isTecnologo
+  } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -65,9 +82,11 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
       ...(canOrders !== undefined ? { canOrders } : {}),
       ...(canLevantamiento !== undefined ? { canLevantamiento } : {}),
       ...(canSolCdsNuevos !== undefined ? { canSolCdsNuevos } : {}),
+      ...(canAsignacionCompAt !== undefined ? { canAsignacionCompAt } : {}),
       ...(canCargues !== undefined ? { canCargues } : {}),
       ...(canExportes !== undefined ? { canExportes } : {}),
-      ...(canUsers !== undefined ? { canUsers } : {})
+      ...(canUsers !== undefined ? { canUsers } : {}),
+      ...(isTecnologo !== undefined ? { isTecnologo } : {})
     },
     select: {
       id: true,
@@ -77,9 +96,11 @@ usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) 
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
+      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
+      isTecnologo: true,
       createdAt: true
     }
   });
@@ -101,9 +122,11 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
     canOrders: z.boolean().optional(),
     canLevantamiento: z.boolean().optional(),
     canSolCdsNuevos: z.boolean().optional(),
+    canAsignacionCompAt: z.boolean().optional(),
     canCargues: z.boolean().optional(),
     canExportes: z.boolean().optional(),
-    canUsers: z.boolean().optional()
+    canUsers: z.boolean().optional(),
+    isTecnologo: z.boolean().optional()
   });
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -137,9 +160,11 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
+      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true,
+      isTecnologo: true,
       createdAt: true
     }
   });

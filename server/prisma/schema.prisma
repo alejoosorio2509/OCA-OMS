@@ -52,9 +52,11 @@ model User {
   canOrders    Boolean     @default(true)
   canLevantamiento Boolean @default(true)
   canSolCdsNuevos Boolean  @default(true)
+  canAsignacionCompAt Boolean @default(true)
   canCargues   Boolean     @default(true)
   canExportes  Boolean     @default(true)
   canUsers     Boolean     @default(false)
+  isTecnologo  Boolean     @default(false)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -313,6 +315,31 @@ model UnidadTerritorial {
 
   @@index([municipio])
   @@index([orgDesc])
+}
+
+model ComponenteAt {
+  codigo          String   @id
+  tipo            String?
+  fechaAsignaEnel DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tipo])
+}
+
+model AsignacionCompAt {
+  rotulo              String   @id
+  fechaAsignacionEnel DateTime?
+  tipo                String?
+  tecnologo           String?
+  fechaAsignacion     DateTime?
+  fechaInstalacion    DateTime?
+  estado              String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([estado])
+  @@index([tecnologo])
 }
 
 model SolCdsNuevo {

@@ -17,7 +17,9 @@ type UploadType =
   | "ENTREGA_LEVANTAMIENTO"
   | "MODELO_CATEGORIA_MB"
   | "CIRCUITOS_SUBESTACIONES"
-  | "UNIDADES_TERRITORIALES";
+  | "UNIDADES_TERRITORIALES"
+  | "COMPONENTES_AT"
+  | "ASIGNACION_COMP_AT";
 
 export function CarguesPage() {
   const { token, user } = useAuth();
@@ -170,6 +172,8 @@ export function CarguesPage() {
             <option value="MODELO_CATEGORIA_MB">Modelo Categoría MB</option>
             <option value="CIRCUITOS_SUBESTACIONES">Circuitos/Subestaciones</option>
             <option value="UNIDADES_TERRITORIALES">Unidades territoriales</option>
+            <option value="COMPONENTES_AT">Cargue componentes AT</option>
+            <option value="ASIGNACION_COMP_AT">Asignacion comp. AT</option>
           </select>
         </div>
 
@@ -234,6 +238,30 @@ export function CarguesPage() {
               <li>MUNICIPIO</li>
               <li>TER_DESC</li>
               <li>ORG_DESC</li>
+            </ul>
+          </>
+        ) : null}
+        {uploadType === "COMPONENTES_AT" ? (
+          <>
+            <h4 style={{ marginTop: 12 }}>Columnas requeridas (Cargue componentes AT)</h4>
+            <ul>
+              <li>CODIGO</li>
+              <li>TIPO</li>
+              <li>FECHA ASIGNA ENEL</li>
+            </ul>
+          </>
+        ) : null}
+        {uploadType === "ASIGNACION_COMP_AT" ? (
+          <>
+            <h4 style={{ marginTop: 12 }}>Columnas requeridas (Asignación comp. AT)</h4>
+            <ul>
+              <li>FECHA ASIGNACION ENEL</li>
+              <li>ROTULO</li>
+              <li>TIPO</li>
+              <li>TECNOLOGO</li>
+              <li>FECHA ASIGNACION</li>
+              <li>FECHA DE INSTALACION</li>
+              <li>ESTADO</li>
             </ul>
           </>
         ) : null}

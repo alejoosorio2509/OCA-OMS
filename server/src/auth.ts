@@ -25,6 +25,7 @@ declare module "express-serve-static-core" {
       canOrders: boolean;
       canLevantamiento: boolean;
       canSolCdsNuevos: boolean;
+      canAsignacionCompAt: boolean;
       canCargues: boolean;
       canExportes: boolean;
       canUsers: boolean;
@@ -56,7 +57,14 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-export type PermissionKey = "ORDERS" | "LEVANTAMIENTO" | "SOL_CDS_NUEVOS" | "CARGUES" | "EXPORTES" | "USERS";
+export type PermissionKey =
+  | "ORDERS"
+  | "LEVANTAMIENTO"
+  | "SOL_CDS_NUEVOS"
+  | "ASIGNACION_COMP_AT"
+  | "CARGUES"
+  | "EXPORTES"
+  | "USERS";
 
 async function loadAccess(req: Request) {
   if (req.access) return req.access;
@@ -68,6 +76,7 @@ async function loadAccess(req: Request) {
       canOrders: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
+      canAsignacionCompAt: true,
       canCargues: true,
       canExportes: true,
       canUsers: true
@@ -98,6 +107,7 @@ export function requirePermission(permission: PermissionKey) {
       (permission === "ORDERS" && access.canOrders) ||
       (permission === "LEVANTAMIENTO" && access.canLevantamiento) ||
       (permission === "SOL_CDS_NUEVOS" && access.canSolCdsNuevos) ||
+      (permission === "ASIGNACION_COMP_AT" && access.canAsignacionCompAt) ||
       (permission === "CARGUES" && access.canCargues) ||
       (permission === "EXPORTES" && access.canExportes) ||
       (permission === "USERS" && access.canUsers);

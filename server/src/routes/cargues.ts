@@ -556,7 +556,9 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       input.type === "LEVANTAMIENTO" ||
       input.type === "MODELO_CATEGORIA_MB" ||
       input.type === "CIRCUITOS_SUBESTACIONES" ||
-      input.type === "UNIDADES_TERRITORIALES"
+      input.type === "UNIDADES_TERRITORIALES" ||
+      input.type === "COMPONENTES_AT" ||
+      input.type === "ASIGNACION_COMP_AT"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
@@ -3314,6 +3316,283 @@ async function processUnidadesTerritorialesJob(input: {
   };
 }
 
+async function processComponentesAtJob(input: {
+  data: Record<string, unknown>[];
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const target = normalizeHeader(name);
+      const key = keys.find((k) => normalizeHeader(k) === target);
+      if (key) return row[key];
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const parseDate = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    if (val instanceof Date) return Number.isNaN(val.getTime()) ? null : val;
+    if (typeof val === "number" && Number.isFinite(val)) {
+      const ms = Math.round((val - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(val).split("\u0000").join("").trim();
+    if (!s) return null;
+    const m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
+    if (m) {
+      const dd = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      let yy = parseInt(m[3], 10);
+      if (yy < 100) yy = yy + 2000;
+      const hh = m[4] ? parseInt(m[4], 10) : 0;
+      const mi = m[5] ? parseInt(m[5], 10) : 0;
+      const ss = m[6] ? parseInt(m[6], 10) : 0;
+      const d = new Date(yy, mm - 1, dd, hh, mi, ss, 0);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const parsedRows = input.data
+    .map((r) => ({
+      codigo: parseText(getValAny(r, ["CODIGO", "Código", "CODIGO ", "Codigo", "Código "]))?.trim() ?? null,
+      tipo: parseText(getValAny(r, ["TIPO", "Tipo"]))?.trim() ?? null,
+      fechaAsignaEnel: parseDate(getValAny(r, ["FECHA ASIGNA ENEL", "FECHA_ASIGNA_ENEL", "Fecha asigna ENEL", "Fecha Asigna ENEL"]))
+    }))
+    .filter((r) => typeof r.codigo === "string" && r.codigo.trim());
+
+  await prisma.componenteAt.deleteMany({});
+
+  const merged = new Map<string, { codigo: string; tipo: string | null; fechaAsignaEnel: Date | null }>();
+  let duplicatesMerged = 0;
+  for (let i = 0; i < parsedRows.length; i++) {
+    try {
+      const r = parsedRows[i]!;
+      const existing = merged.get(r.codigo!);
+      if (existing) {
+        duplicatesMerged++;
+        merged.set(r.codigo!, {
+          codigo: r.codigo!,
+          tipo: r.tipo ?? existing.tipo,
+          fechaAsignaEnel: r.fechaAsignaEnel ?? existing.fechaAsignaEnel
+        });
+      } else {
+        merged.set(r.codigo!, { codigo: r.codigo!, tipo: r.tipo, fechaAsignaEnel: r.fechaAsignaEnel });
+      }
+
+      successCount++;
+      if ((i + 1) % 1000 === 0 && input.onProgress) {
+        await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+  }
+
+  const uniqueRows = Array.from(merged.values());
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (const group of chunk(uniqueRows, 1000)) {
+    if (group.length === 0) continue;
+    await prisma.componenteAt.createMany({ data: group, skipDuplicates: true });
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: parsedRows.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Componentes AT: ${uniqueRows.length} cargados.${duplicatesMerged > 0 ? ` (${duplicatesMerged} duplicados de CODIGO unificados)` : ""}`,
+    count: successCount,
+    updated: 0,
+    created: uniqueRows.length,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
+async function processAsignacionCompAtJob(input: {
+  data: Record<string, unknown>[];
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let successCount = 0;
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const target = normalizeHeader(name);
+      const key = keys.find((k) => normalizeHeader(k) === target);
+      if (key) return row[key];
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const parseDate = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    if (val instanceof Date) return Number.isNaN(val.getTime()) ? null : val;
+    if (typeof val === "number" && Number.isFinite(val)) {
+      const ms = Math.round((val - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(val).split("\u0000").join("").trim();
+    if (!s) return null;
+    const m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
+    if (m) {
+      const dd = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      let yy = parseInt(m[3], 10);
+      if (yy < 100) yy = yy + 2000;
+      const hh = m[4] ? parseInt(m[4], 10) : 0;
+      const mi = m[5] ? parseInt(m[5], 10) : 0;
+      const ss = m[6] ? parseInt(m[6], 10) : 0;
+      const d = new Date(yy, mm - 1, dd, hh, mi, ss, 0);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const parsedRows = input.data
+    .map((r) => ({
+      rotulo: parseText(getValAny(r, ["ROTULO", "Rótulo", "Rotulo"]))?.trim() ?? null,
+      fechaAsignacionEnel: parseDate(getValAny(r, ["FECHA ASIGNACION ENEL", "FECHA_ASIGNACION_ENEL", "Fecha asignacion enel"])),
+      tipo: parseText(getValAny(r, ["TIPO", "Tipo"]))?.trim() ?? null,
+      tecnologo: parseText(getValAny(r, ["TECNOLOGO", "Tecnologo", "Tecnólogo"]))?.trim() ?? null,
+      fechaAsignacion: parseDate(getValAny(r, ["FECHA ASIGNACION", "FECHA_ASIGNACION", "Fecha asignacion"])),
+      fechaInstalacion: parseDate(getValAny(r, ["FECHA DE INSTALACION", "FECHA_INSTALACION", "Fecha de instalacion", "Fecha instalacion"])),
+      estado: parseText(getValAny(r, ["ESTADO", "Estado"]))?.trim() ?? null
+    }))
+    .filter((r) => typeof r.rotulo === "string" && r.rotulo.trim());
+
+  await prisma.asignacionCompAt.deleteMany({});
+
+  const merged = new Map<
+    string,
+    {
+      rotulo: string;
+      fechaAsignacionEnel: Date | null;
+      tipo: string | null;
+      tecnologo: string | null;
+      fechaAsignacion: Date | null;
+      fechaInstalacion: Date | null;
+      estado: string | null;
+    }
+  >();
+  let duplicatesMerged = 0;
+  for (let i = 0; i < parsedRows.length; i++) {
+    try {
+      const r = parsedRows[i]!;
+      const existing = merged.get(r.rotulo!);
+      if (existing) {
+        duplicatesMerged++;
+        merged.set(r.rotulo!, {
+          rotulo: r.rotulo!,
+          fechaAsignacionEnel: r.fechaAsignacionEnel ?? existing.fechaAsignacionEnel,
+          tipo: r.tipo ?? existing.tipo,
+          tecnologo: r.tecnologo ?? existing.tecnologo,
+          fechaAsignacion: r.fechaAsignacion ?? existing.fechaAsignacion,
+          fechaInstalacion: r.fechaInstalacion ?? existing.fechaInstalacion,
+          estado: r.estado ?? existing.estado
+        });
+      } else {
+        merged.set(r.rotulo!, {
+          rotulo: r.rotulo!,
+          fechaAsignacionEnel: r.fechaAsignacionEnel,
+          tipo: r.tipo,
+          tecnologo: r.tecnologo,
+          fechaAsignacion: r.fechaAsignacion,
+          fechaInstalacion: r.fechaInstalacion,
+          estado: r.estado
+        });
+      }
+
+      successCount++;
+      if ((i + 1) % 1000 === 0 && input.onProgress) {
+        await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+      }
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+    }
+  }
+
+  const uniqueRows = Array.from(merged.values());
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  for (const group of chunk(uniqueRows, 1000)) {
+    if (group.length === 0) continue;
+    await prisma.asignacionCompAt.createMany({ data: group, skipDuplicates: true });
+  }
+
+  if (input.onProgress) {
+    await input.onProgress({ rows: parsedRows.length, success: successCount, errors: errorCount });
+  }
+
+  return {
+    message: `Asignación comp. AT: ${uniqueRows.length} cargados.${duplicatesMerged > 0 ? ` (${duplicatesMerged} duplicados de ROTULO unificados)` : ""}`,
+    count: successCount,
+    updated: 0,
+    created: uniqueRows.length,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
 async function runJob(jobId: string) {
   const claimed = await claimJob(jobId);
   if (!claimed) return;
@@ -3381,6 +3660,10 @@ async function runJob(jobId: string) {
                 ? await processCircuitosSubestacionesJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : job.type === "UNIDADES_TERRITORIALES"
                 ? await processUnidadesTerritorialesJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
+              : job.type === "COMPONENTES_AT"
+                ? await processComponentesAtJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
+              : job.type === "ASIGNACION_COMP_AT"
+                ? await processAsignacionCompAtJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : (() => {
                   throw new Error("UNSUPPORTED_JOB_TYPE");
                 })();
@@ -3486,7 +3769,9 @@ carguesRouter.post(
       "ENTREGA_LEVANTAMIENTO",
       "MODELO_CATEGORIA_MB",
       "CIRCUITOS_SUBESTACIONES",
-      "UNIDADES_TERRITORIALES"
+      "UNIDADES_TERRITORIALES",
+      "COMPONENTES_AT",
+      "ASIGNACION_COMP_AT"
     ]);
     if (asyncTypes.has(type) && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
@@ -4351,6 +4636,12 @@ carguesRouter.post(
       res.json(payload);
     } else if (type === "UNIDADES_TERRITORIALES") {
       const payload = await processUnidadesTerritorialesJob({ data });
+      res.json(payload);
+    } else if (type === "COMPONENTES_AT") {
+      const payload = await processComponentesAtJob({ data });
+      res.json(payload);
+    } else if (type === "ASIGNACION_COMP_AT") {
+      const payload = await processAsignacionCompAtJob({ data });
       res.json(payload);
     } else if (type === "RECORRIDO_INCREMENTOS") {
       let successCount = 0;

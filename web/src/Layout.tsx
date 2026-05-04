@@ -7,6 +7,7 @@ export function Layout() {
   const canOrders = user?.role === "ADMIN" || !!user?.canOrders;
   const canLevantamiento = user?.role === "ADMIN" || !!user?.canLevantamiento;
   const canSolCdsNuevos = user?.role === "ADMIN" || !!user?.canSolCdsNuevos;
+  const canAsignacionCompAt = user?.role === "ADMIN" || !!user?.canAsignacionCompAt;
   const canCargues = user?.role === "ADMIN" || !!user?.canCargues;
   const canExportes = !!user;
   const canUsers = user?.role === "ADMIN" || !!user?.canUsers;
@@ -32,6 +33,7 @@ export function Layout() {
           {canOrders ? <NavLink to="/orders" end>Actualización</NavLink> : null}
           {canLevantamiento ? <NavLink to="/levantamiento">Levantamiento</NavLink> : null}
           {canSolCdsNuevos ? <NavLink to="/sol-cds-nuevos">Sol. CDS Nuevos</NavLink> : null}
+          {canAsignacionCompAt ? <NavLink to="/asignacion-comp-at">Asignación comp. AT</NavLink> : null}
           {canCargues ? <NavLink to="/cargues">Cargues</NavLink> : null}
           {canExportes ? <NavLink to="/exportes">Exportes</NavLink> : null}
           {canUsers ? <NavLink to="/users">Usuarios</NavLink> : null}
