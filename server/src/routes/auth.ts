@@ -8,7 +8,7 @@ export const authRouter = Router();
 
 authRouter.post("/login", async (req, res) => {
   const bodySchema = z.object({
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     password: z.string().min(1)
   });
 
@@ -136,7 +136,7 @@ authRouter.post("/change-password", requireAuth, async (req, res) => {
 
 authRouter.post("/reset-password", async (req, res) => {
   const bodySchema = z.object({
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     tempPassword: z.string().min(1),
     newPassword: z.string().min(6)
   });

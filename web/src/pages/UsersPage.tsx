@@ -137,7 +137,7 @@ export function UsersPage() {
     setSaving(true);
     try {
       await createUser(token!, {
-        email,
+        email: email.trim(),
         name,
         password,
         role,

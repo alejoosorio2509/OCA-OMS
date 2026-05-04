@@ -7,6 +7,11 @@ import { requireAuth, requirePermission } from "../auth.js";
 
 export const usersRouter = Router();
 
+const emailSchema = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+  z.string().email()
+);
+
 usersRouter.get("/", requireAuth, requirePermission("USERS"), async (_req, res) => {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "asc" },
@@ -31,7 +36,7 @@ usersRouter.get("/", requireAuth, requirePermission("USERS"), async (_req, res) 
 
 usersRouter.post("/", requireAuth, requirePermission("USERS"), async (req, res) => {
   const bodySchema = z.object({
-    email: z.string().email(),
+    email: emailSchema,
     name: z.string().min(1),
     password: z.string().min(6),
     role: z.enum(["ADMIN", "USER"]).optional(),
@@ -116,7 +121,7 @@ usersRouter.patch("/:id", requireAuth, requirePermission("USERS"), async (req, r
   }
 
   const bodySchema = z.object({
-    email: z.string().email().optional(),
+    email: emailSchema.optional(),
     name: z.string().min(1).optional(),
     role: z.enum(["ADMIN", "USER"]).optional(),
     canOrders: z.boolean().optional(),
