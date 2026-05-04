@@ -5,6 +5,14 @@ import { requireAuth, requirePermission } from "../auth.js";
 
 export const solCdsNuevosRouter = Router();
 
+function cleanText(value: string) {
+  return value.trim();
+}
+
+function stringEqInsensitive(value: string) {
+  return { equals: value, mode: "insensitive" as const };
+}
+
 solCdsNuevosRouter.get("/options", requireAuth, requirePermission("SOL_CDS_NUEVOS"), async (_req, res) => {
   const [subRows, marcaRows, modeloRows, utRows] = await Promise.all([
     prisma.circuitoSubestacion.findMany({
@@ -80,6 +88,68 @@ solCdsNuevosRouter.post("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), a
     return;
   }
 
+  const data = {
+    ...parsed.data,
+    ot: cleanText(parsed.data.ot),
+    incremento: cleanText(parsed.data.incremento),
+    cd: cleanText(parsed.data.cd),
+    subestacionSbItm: cleanText(parsed.data.subestacionSbItm),
+    codCircuitStm: cleanText(parsed.data.codCircuitStm),
+    circuitoStm: cleanText(parsed.data.circuitoStm),
+    marca: cleanText(parsed.data.marca),
+    modelo: cleanText(parsed.data.modelo),
+    punFisico: cleanText(parsed.data.punFisico),
+    direccion: cleanText(parsed.data.direccion),
+    terDesc: cleanText(parsed.data.terDesc),
+    orgDesc: cleanText(parsed.data.orgDesc),
+    coordenadasX: cleanText(parsed.data.coordenadasX),
+    coordenadasY: cleanText(parsed.data.coordenadasY)
+  };
+
+  const [subOk, codOk, circuitoOk, marcaOk, modeloOk, terOk, orgOk] = await Promise.all([
+    prisma.circuitoSubestacion.findFirst({
+      where: { nomSubestacion: stringEqInsensitive(data.subestacionSbItm) },
+      select: { codCircuito: true }
+    }),
+    prisma.circuitoSubestacion.findFirst({
+      where: { nomCircuito: stringEqInsensitive(data.codCircuitStm) },
+      select: { codCircuito: true }
+    }),
+    prisma.circuitoSubestacion.findFirst({
+      where: { codCircuito: stringEqInsensitive(data.circuitoStm) },
+      select: { codCircuito: true }
+    }),
+    prisma.modeloCategoriaMb.findFirst({
+      where: { denominacionFabricante: stringEqInsensitive(data.marca) },
+      select: { id: true }
+    }),
+    prisma.modeloCategoriaMb.findFirst({
+      where: { descripcionTipo: stringEqInsensitive(data.modelo) },
+      select: { id: true }
+    }),
+    prisma.unidadTerritorial.findFirst({
+      where: { orgDesc: stringEqInsensitive(data.terDesc) },
+      select: { id: true }
+    }),
+    prisma.unidadTerritorial.findFirst({
+      where: { terDesc: stringEqInsensitive(data.orgDesc) },
+      select: { id: true }
+    })
+  ]);
+
+  const details: Array<{ path: string[]; message: string; code: string }> = [];
+  if (!subOk) details.push({ path: ["subestacionSbItm"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (!codOk) details.push({ path: ["codCircuitStm"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (!circuitoOk) details.push({ path: ["circuitoStm"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (!marcaOk) details.push({ path: ["marca"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (!modeloOk) details.push({ path: ["modelo"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (!terOk) details.push({ path: ["terDesc"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (!orgOk) details.push({ path: ["orgDesc"], message: "VALOR_NO_EN_CATALOGO", code: "custom" });
+  if (details.length) {
+    res.status(400).json({ error: "INVALID_BODY", details });
+    return;
+  }
+
   const nextRows = (await prisma.$queryRaw`SELECT nextval('"SolCdsNuevo_id_seq"') as id`) as Array<{ id: bigint | number }>;
   const nextIdRaw = nextRows[0]?.id;
   const nextId = typeof nextIdRaw === "bigint" ? Number(nextIdRaw) : Number(nextIdRaw);
@@ -94,7 +164,7 @@ solCdsNuevosRouter.post("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), a
     data: {
       id: nextId,
       registro,
-      ...parsed.data,
+      ...data,
       createdById: req.auth!.sub
     },
     select: {

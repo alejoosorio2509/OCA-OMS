@@ -60,6 +60,25 @@ export function SolCdsNuevosPage() {
     </datalist>
   );
 
+  const normalizeFromOptions = (value: string, opts: string[]) => {
+    const raw = value.trim();
+    if (!raw) return raw;
+    const lower = raw.toLowerCase();
+    const match = opts.find((o) => o.toLowerCase() === lower);
+    return match ?? raw;
+  };
+
+  const validateCatalogValue = (label: string, value: string, opts: string[], issues: string[]) => {
+    const raw = value.trim();
+    if (!raw) {
+      issues.push(label);
+      return raw;
+    }
+    const normalized = normalizeFromOptions(raw, opts);
+    if (!opts.includes(normalized)) issues.push(label);
+    return normalized;
+  };
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
@@ -67,7 +86,27 @@ export function SolCdsNuevosPage() {
     setSuccessRegistro(null);
     setSaving(true);
     try {
-      const created = await createSolCdsNuevo(token, form);
+      const issues: string[] = [];
+      const normalized: SolCdsNuevoCreateInput = options
+        ? {
+            ...form,
+            subestacionSbItm: validateCatalogValue("SUBESTACION_SB:ITM", form.subestacionSbItm, options.subestaciones, issues),
+            codCircuitStm: validateCatalogValue("COD_CIRCUIT_STM", form.codCircuitStm, options.codCircuitStm, issues),
+            circuitoStm: validateCatalogValue("CIRCUITO_STM", form.circuitoStm, options.circuitoStm, issues),
+            marca: validateCatalogValue("MARCA", form.marca, options.marcas, issues),
+            modelo: validateCatalogValue("MODELO", form.modelo, options.modelos, issues),
+            terDesc: validateCatalogValue("TER_DESC", form.terDesc, options.terDesc, issues),
+            orgDesc: validateCatalogValue("ORG_DESC", form.orgDesc, options.orgDesc, issues)
+          }
+        : form;
+
+      if (issues.length) {
+        setError(`Valores inválidos en: ${issues.join(", ")}`);
+        setSaving(false);
+        return;
+      }
+
+      const created = await createSolCdsNuevo(token, normalized);
       setSuccessRegistro(created.registro);
       setForm((prev) => ({
         ...prev,
@@ -130,6 +169,11 @@ export function SolCdsNuevosPage() {
           <input
             value={form.subestacionSbItm}
             onChange={(e) => setForm({ ...form, subestacionSbItm: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.subestacionSbItm, options.subestaciones);
+              if (next !== form.subestacionSbItm) setForm({ ...form, subestacionSbItm: next });
+            }}
             list="dl-subestacionSbItm"
             disabled={disabled}
           />
@@ -140,6 +184,11 @@ export function SolCdsNuevosPage() {
           <input
             value={form.codCircuitStm}
             onChange={(e) => setForm({ ...form, codCircuitStm: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.codCircuitStm, options.codCircuitStm);
+              if (next !== form.codCircuitStm) setForm({ ...form, codCircuitStm: next });
+            }}
             list="dl-codCircuitStm"
             disabled={disabled}
           />
@@ -150,6 +199,11 @@ export function SolCdsNuevosPage() {
           <input
             value={form.circuitoStm}
             onChange={(e) => setForm({ ...form, circuitoStm: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.circuitoStm, options.circuitoStm);
+              if (next !== form.circuitoStm) setForm({ ...form, circuitoStm: next });
+            }}
             list="dl-circuitoStm"
             disabled={disabled}
           />
@@ -158,12 +212,32 @@ export function SolCdsNuevosPage() {
 
         <div className="field">
           <label>MARCA</label>
-          <input value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} list="dl-marca" disabled={disabled} />
+          <input
+            value={form.marca}
+            onChange={(e) => setForm({ ...form, marca: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.marca, options.marcas);
+              if (next !== form.marca) setForm({ ...form, marca: next });
+            }}
+            list="dl-marca"
+            disabled={disabled}
+          />
           {renderDatalist("dl-marca", options?.marcas ?? [])}
         </div>
         <div className="field">
           <label>MODELO</label>
-          <input value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} list="dl-modelo" disabled={disabled} />
+          <input
+            value={form.modelo}
+            onChange={(e) => setForm({ ...form, modelo: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.modelo, options.modelos);
+              if (next !== form.modelo) setForm({ ...form, modelo: next });
+            }}
+            list="dl-modelo"
+            disabled={disabled}
+          />
           {renderDatalist("dl-modelo", options?.modelos ?? [])}
         </div>
 
@@ -178,12 +252,32 @@ export function SolCdsNuevosPage() {
 
         <div className="field">
           <label>TER_DESC</label>
-          <input value={form.terDesc} onChange={(e) => setForm({ ...form, terDesc: e.target.value })} list="dl-terDesc" disabled={disabled} />
+          <input
+            value={form.terDesc}
+            onChange={(e) => setForm({ ...form, terDesc: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.terDesc, options.terDesc);
+              if (next !== form.terDesc) setForm({ ...form, terDesc: next });
+            }}
+            list="dl-terDesc"
+            disabled={disabled}
+          />
           {renderDatalist("dl-terDesc", options?.terDesc ?? [])}
         </div>
         <div className="field">
           <label>ORG_DESC</label>
-          <input value={form.orgDesc} onChange={(e) => setForm({ ...form, orgDesc: e.target.value })} list="dl-orgDesc" disabled={disabled} />
+          <input
+            value={form.orgDesc}
+            onChange={(e) => setForm({ ...form, orgDesc: e.target.value })}
+            onBlur={() => {
+              if (!options) return;
+              const next = normalizeFromOptions(form.orgDesc, options.orgDesc);
+              if (next !== form.orgDesc) setForm({ ...form, orgDesc: next });
+            }}
+            list="dl-orgDesc"
+            disabled={disabled}
+          />
           {renderDatalist("dl-orgDesc", options?.orgDesc ?? [])}
         </div>
 
