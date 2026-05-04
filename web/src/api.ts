@@ -240,22 +240,26 @@ export async function updateUser(
 }
 
 export type ComponenteAtRow = {
-  codigo: string;
+  rotulo: string;
+  fechaAsignacionEnel: string | null;
   tipo: string | null;
   tecnologo: string | null;
-  fechaAsignaEnel: string | null;
+  fechaAsignacion: string | null;
+  fechaInstalacion: string | null;
+  estado: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export async function listComponentesAt(
   token: string,
-  query: { codigo?: string; tipo?: string; tecnologo?: string } = {}
+  query: { rotulo?: string; tipo?: string; tecnologo?: string; estado?: string } = {}
 ) {
   const qs = new URLSearchParams();
-  if (query.codigo) qs.set("codigo", query.codigo);
+  if (query.rotulo) qs.set("rotulo", query.rotulo);
   if (query.tipo) qs.set("tipo", query.tipo);
   if (query.tecnologo) qs.set("tecnologo", query.tecnologo);
+  if (query.estado) qs.set("estado", query.estado);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return apiFetch<ComponenteAtRow[]>(`/componentes-at${suffix}`, { token });
 }

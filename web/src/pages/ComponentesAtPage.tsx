@@ -14,19 +14,21 @@ export function ComponentesAtPage() {
   const canView = user?.role === "ADMIN" || !!user?.canCargues;
 
   const [rows, setRows] = useState<ComponenteAtRow[]>([]);
-  const [codigo, setCodigo] = useState("");
+  const [rotulo, setRotulo] = useState("");
   const [tipo, setTipo] = useState("");
   const [tecnologo, setTecnologo] = useState("");
+  const [estado, setEstado] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const query = useMemo(
     () => ({
-      codigo: codigo.trim() || undefined,
+      rotulo: rotulo.trim() || undefined,
       tipo: tipo.trim() || undefined,
-      tecnologo: tecnologo.trim() || undefined
+      tecnologo: tecnologo.trim() || undefined,
+      estado: estado.trim() || undefined
     }),
-    [codigo, tipo, tecnologo]
+    [rotulo, tipo, tecnologo, estado]
   );
 
   async function refresh() {
@@ -56,8 +58,8 @@ export function ComponentesAtPage() {
 
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
         <div className="field" style={{ minWidth: 220 }}>
-          <label>Código</label>
-          <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Buscar por código..." />
+          <label>Rótulo</label>
+          <input value={rotulo} onChange={(e) => setRotulo(e.target.value)} placeholder="Buscar por rótulo..." />
         </div>
         <div className="field" style={{ minWidth: 220 }}>
           <label>Tipo</label>
@@ -71,6 +73,10 @@ export function ComponentesAtPage() {
             placeholder="Filtrar por tecnólogo..."
           />
         </div>
+        <div className="field" style={{ minWidth: 220 }}>
+          <label>Estado</label>
+          <input value={estado} onChange={(e) => setEstado(e.target.value)} placeholder="Filtrar por estado..." />
+        </div>
       </div>
 
       {error ? <div className="message error">{error}</div> : null}
@@ -81,25 +87,31 @@ export function ComponentesAtPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Código</th>
+                <th>F. Asignación ENEL</th>
+                <th>Rótulo</th>
                 <th>Tipo</th>
                 <th>Tecnólogo</th>
-                <th>F. Asigna ENEL</th>
+                <th>F. Asignación</th>
+                <th>F. Instalación</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
               {rows.length ? (
                 rows.map((r) => (
-                  <tr key={r.codigo}>
-                    <td style={{ fontWeight: 700 }}>{r.codigo}</td>
+                  <tr key={r.rotulo}>
+                    <td>{fmtDate(r.fechaAsignacionEnel)}</td>
+                    <td style={{ fontWeight: 700 }}>{r.rotulo}</td>
                     <td>{r.tipo || "—"}</td>
                     <td>{(r.tecnologo ?? "").trim() || "—"}</td>
-                    <td>{fmtDate(r.fechaAsignaEnel)}</td>
+                    <td>{fmtDate(r.fechaAsignacion)}</td>
+                    <td>{fmtDate(r.fechaInstalacion)}</td>
+                    <td>{r.estado || "—"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} style={{ opacity: 0.75 }}>
+                  <td colSpan={7} style={{ opacity: 0.75 }}>
                     Sin registros.
                   </td>
                 </tr>

@@ -7,9 +7,10 @@ export const componentesAtRouter = Router();
 
 componentesAtRouter.get("/", requireAuth, requirePermission("CARGUES"), async (req, res) => {
   const querySchema = z.object({
-    codigo: z.string().optional(),
+    rotulo: z.string().optional(),
     tipo: z.string().optional(),
-    tecnologo: z.string().optional()
+    tecnologo: z.string().optional(),
+    estado: z.string().optional()
   });
   const parsed = querySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -17,13 +18,14 @@ componentesAtRouter.get("/", requireAuth, requirePermission("CARGUES"), async (r
     return;
   }
 
-  const { codigo, tipo, tecnologo } = parsed.data;
+  const { rotulo, tipo, tecnologo, estado } = parsed.data;
   const where: Record<string, unknown> = {};
-  if (codigo) where.codigo = { contains: codigo.trim(), mode: "insensitive" };
+  if (rotulo) where.rotulo = { contains: rotulo.trim(), mode: "insensitive" };
   if (tipo) where.tipo = { equals: tipo.trim(), mode: "insensitive" };
   if (tecnologo) where.tecnologo = { equals: tecnologo.trim(), mode: "insensitive" };
+  if (estado) where.estado = { equals: estado.trim(), mode: "insensitive" };
 
-  const rows = await prisma.componenteAt.findMany({
+  const rows = await prisma.asignacionCompAt.findMany({
     where,
     orderBy: [{ updatedAt: "desc" }],
     take: 500

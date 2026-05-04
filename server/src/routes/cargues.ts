@@ -3376,6 +3376,105 @@ async function processComponentesAtJob(input: {
     return Number.isNaN(d.getTime()) ? null : d;
   };
 
+  const hasRotuloHeader = (() => {
+    const first = input.data[0] ?? {};
+    const keys = Object.keys(first);
+    return keys.some((k) => normalizeHeader(k) === "rotulo");
+  })();
+
+  if (hasRotuloHeader) {
+    const parsedRows = input.data
+      .map((r, idx) => ({
+        __row: idx + 1,
+        rotulo: parseText(getValAny(r, ["ROTULO", "Rótulo", "Rotulo"]))?.trim() ?? null,
+        fechaAsignacionEnel: parseDate(getValAny(r, ["FECHA ASIGNACION ENEL", "FECHA_ASIGNACION_ENEL", "Fecha asignacion enel"])),
+        tipo: parseText(getValAny(r, ["TIPO", "Tipo"]))?.trim() ?? null,
+        tecnologo: parseText(getValAny(r, ["TECNOLOGO", "Tecnologo", "Tecnólogo"]))?.trim() ?? null,
+        fechaAsignacion: parseDate(getValAny(r, ["FECHA ASIGNACION", "FECHA_ASIGNACION", "Fecha asignacion"])),
+        fechaInstalacion: parseDate(getValAny(r, ["FECHA DE INSTALACION", "FECHA_INSTALACION", "Fecha de instalacion", "Fecha instalacion"])),
+        estado: parseText(getValAny(r, ["ESTADO", "Estado"]))?.trim() ?? null
+      }))
+      .filter((r) => typeof r.rotulo === "string" && r.rotulo.trim());
+
+    await prisma.asignacionCompAt.deleteMany({});
+
+    const merged = new Map<
+      string,
+      {
+        rotulo: string;
+        fechaAsignacionEnel: Date | null;
+        tipo: string | null;
+        tecnologo: string | null;
+        fechaAsignacion: Date | null;
+        fechaInstalacion: Date | null;
+        estado: string | null;
+      }
+    >();
+    let duplicatesMerged = 0;
+    for (let i = 0; i < parsedRows.length; i++) {
+      try {
+        const r = parsedRows[i]!;
+        const existing = merged.get(r.rotulo!);
+        if (existing) {
+          duplicatesMerged++;
+          merged.set(r.rotulo!, {
+            rotulo: r.rotulo!,
+            fechaAsignacionEnel: r.fechaAsignacionEnel ?? existing.fechaAsignacionEnel,
+            tipo: r.tipo ?? existing.tipo,
+            tecnologo: r.tecnologo ?? existing.tecnologo,
+            fechaAsignacion: r.fechaAsignacion ?? existing.fechaAsignacion,
+            fechaInstalacion: r.fechaInstalacion ?? existing.fechaInstalacion,
+            estado: r.estado ?? existing.estado
+          });
+        } else {
+          merged.set(r.rotulo!, {
+            rotulo: r.rotulo!,
+            fechaAsignacionEnel: r.fechaAsignacionEnel,
+            tipo: r.tipo,
+            tecnologo: r.tecnologo,
+            fechaAsignacion: r.fechaAsignacion,
+            fechaInstalacion: r.fechaInstalacion,
+            estado: r.estado
+          });
+        }
+
+        successCount++;
+        if ((i + 1) % 1000 === 0 && input.onProgress) {
+          await input.onProgress({ rows: i + 1, success: successCount, errors: errorCount });
+        }
+      } catch (err) {
+        errorCount++;
+        const msg = err instanceof Error ? err.message : "UNKNOWN";
+        rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
+      }
+    }
+
+    const uniqueRows = Array.from(merged.values());
+    const chunk = <T,>(arr: T[], size: number) => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
+
+    for (const group of chunk(uniqueRows, 1000)) {
+      if (group.length === 0) continue;
+      await prisma.asignacionCompAt.createMany({ data: group, skipDuplicates: true });
+    }
+
+    if (input.onProgress) {
+      await input.onProgress({ rows: parsedRows.length, success: successCount, errors: errorCount });
+    }
+
+    return {
+      message: `Componentes AT: ${uniqueRows.length} cargados.${duplicatesMerged > 0 ? ` (${duplicatesMerged} duplicados de ROTULO unificados)` : ""}`,
+      count: successCount,
+      updated: 0,
+      created: uniqueRows.length,
+      errors: errorCount,
+      errorDetails: rowErrors
+    };
+  }
+
   const parsedRows = input.data
     .map((r) => ({
       codigo: parseText(getValAny(r, ["CODIGO", "Código", "CODIGO ", "Codigo", "Código "]))?.trim() ?? null,

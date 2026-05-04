@@ -243,10 +243,13 @@ export function CarguesPage() {
           <>
             <h4 style={{ marginTop: 12 }}>Columnas requeridas (Cargue componentes AT)</h4>
             <ul>
-              <li>CODIGO</li>
+              <li>FECHA ASIGNACION ENEL</li>
+              <li>ROTULO</li>
               <li>TIPO</li>
-              <li>FECHA ASIGNA ENEL</li>
               <li>TECNOLOGO</li>
+              <li>FECHA ASIGNACION</li>
+              <li>FECHA DE INSTALACION</li>
+              <li>ESTADO</li>
             </ul>
           </>
         ) : null}

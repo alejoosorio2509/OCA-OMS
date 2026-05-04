@@ -98,6 +98,22 @@ async function ensureCarguesCatalogTables() {
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ComponenteAt_tecnologo_idx" ON "ComponenteAt"("tecnologo")`);
 
     await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "AsignacionCompAt" (
+        "rotulo" TEXT PRIMARY KEY,
+        "fechaAsignacionEnel" TIMESTAMP(3),
+        "tipo" TEXT,
+        "tecnologo" TEXT,
+        "fechaAsignacion" TIMESTAMP(3),
+        "fechaInstalacion" TIMESTAMP(3),
+        "estado" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "AsignacionCompAt_estado_idx" ON "AsignacionCompAt"("estado")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "AsignacionCompAt_tecnologo_idx" ON "AsignacionCompAt"("tecnologo")`);
+
+    await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "SolCdsNuevo" (
         "id" BIGSERIAL PRIMARY KEY,
         "registro" TEXT NOT NULL,
