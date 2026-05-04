@@ -52,6 +52,14 @@ export function SolCdsNuevosPage() {
 
   if (!canSolCdsNuevos) return <div className="card">No autorizado.</div>;
 
+  const renderDatalist = (id: string, opts: string[]) => (
+    <datalist id={id}>
+      {opts.map((v) => (
+        <option key={v} value={v} />
+      ))}
+    </datalist>
+  );
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
@@ -119,71 +127,44 @@ export function SolCdsNuevosPage() {
 
         <div className="field">
           <label>SUBESTACION_SB:ITM</label>
-          <select
+          <input
             value={form.subestacionSbItm}
             onChange={(e) => setForm({ ...form, subestacionSbItm: e.target.value })}
+            list="dl-subestacionSbItm"
             disabled={disabled}
-          >
-            <option value="">Selecciona...</option>
-            {(options?.subestaciones ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          />
+          {renderDatalist("dl-subestacionSbItm", options?.subestaciones ?? [])}
         </div>
         <div className="field">
           <label>COD_CIRCUIT_STM</label>
-          <select
+          <input
             value={form.codCircuitStm}
             onChange={(e) => setForm({ ...form, codCircuitStm: e.target.value })}
+            list="dl-codCircuitStm"
             disabled={disabled}
-          >
-            <option value="">Selecciona...</option>
-            {(options?.codCircuitStm ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          />
+          {renderDatalist("dl-codCircuitStm", options?.codCircuitStm ?? [])}
         </div>
         <div className="field">
           <label>CIRCUITO_STM</label>
-          <select
+          <input
             value={form.circuitoStm}
             onChange={(e) => setForm({ ...form, circuitoStm: e.target.value })}
+            list="dl-circuitoStm"
             disabled={disabled}
-          >
-            <option value="">Selecciona...</option>
-            {(options?.circuitoStm ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          />
+          {renderDatalist("dl-circuitoStm", options?.circuitoStm ?? [])}
         </div>
 
         <div className="field">
           <label>MARCA</label>
-          <select value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} disabled={disabled}>
-            <option value="">Selecciona...</option>
-            {(options?.marcas ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <input value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} list="dl-marca" disabled={disabled} />
+          {renderDatalist("dl-marca", options?.marcas ?? [])}
         </div>
         <div className="field">
           <label>MODELO</label>
-          <select value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} disabled={disabled}>
-            <option value="">Selecciona...</option>
-            {(options?.modelos ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <input value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} list="dl-modelo" disabled={disabled} />
+          {renderDatalist("dl-modelo", options?.modelos ?? [])}
         </div>
 
         <div className="field">
@@ -197,25 +178,13 @@ export function SolCdsNuevosPage() {
 
         <div className="field">
           <label>TER_DESC</label>
-          <select value={form.terDesc} onChange={(e) => setForm({ ...form, terDesc: e.target.value })} disabled={disabled}>
-            <option value="">Selecciona...</option>
-            {(options?.terDesc ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <input value={form.terDesc} onChange={(e) => setForm({ ...form, terDesc: e.target.value })} list="dl-terDesc" disabled={disabled} />
+          {renderDatalist("dl-terDesc", options?.terDesc ?? [])}
         </div>
         <div className="field">
           <label>ORG_DESC</label>
-          <select value={form.orgDesc} onChange={(e) => setForm({ ...form, orgDesc: e.target.value })} disabled={disabled}>
-            <option value="">Selecciona...</option>
-            {(options?.orgDesc ?? []).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <input value={form.orgDesc} onChange={(e) => setForm({ ...form, orgDesc: e.target.value })} list="dl-orgDesc" disabled={disabled} />
+          {renderDatalist("dl-orgDesc", options?.orgDesc ?? [])}
         </div>
 
         <div className="field">
