@@ -3379,6 +3379,7 @@ async function processComponentesAtJob(input: {
   const first = input.data[0] ?? {};
   const firstKeys = Object.keys(first).map(normalizeHeader);
   const hasRotuloOrCodigo = firstKeys.includes("rotulo") || firstKeys.includes("codigo");
+  const hasEstadoHeader = firstKeys.includes("estado");
   if (!hasRotuloOrCodigo) {
     return {
       message: "Componentes AT: no se encontraron columnas ROTULO/CODIGO.",
@@ -3412,7 +3413,11 @@ async function processComponentesAtJob(input: {
       fechaInstalacion: parseDate(
         getValAny(r, ["FECHA DE INSTALACION", "FECHA_INSTALACION", "Fecha de instalacion", "Fecha instalacion"])
       ),
-      estado: parseText(getValAny(r, ["ESTADO", "Estado"]))?.trim() ?? null
+      estado: (() => {
+        const raw = parseText(getValAny(r, ["ESTADO", "Estado"]))?.trim() ?? null;
+        if (!hasEstadoHeader) return "DISPONIBLE";
+        return raw && raw.trim() ? raw : "DISPONIBLE";
+      })()
     }))
     .filter((r) => typeof r.rotulo === "string" && r.rotulo.trim());
 
