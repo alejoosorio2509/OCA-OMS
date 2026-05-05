@@ -247,9 +247,6 @@ export function CarguesPage() {
               <li>ROTULO</li>
               <li>TIPO</li>
               <li>TECNOLOGO</li>
-              <li>FECHA ASIGNACION</li>
-              <li>FECHA DE INSTALACION</li>
-              <li>ESTADO</li>
             </ul>
           </>
         ) : null}
