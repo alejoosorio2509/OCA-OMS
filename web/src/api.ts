@@ -305,7 +305,7 @@ export async function getSolCdsNuevoOptions(token: string) {
 export type SolCdsNuevoCreateInput = {
   ot: string;
   incremento: string;
-  tipoOrden: "Inconsistencia" | "Incrementos Ex Post" | "Incremento por PDL/PST";
+  tipoOrden: "Inconsistencia" | "Incrementos Ex Post" | "Incremento por PDL/PST" | "VCR";
   cd: string;
   subestacionSbItm: string;
   codCircuitStm: string;

@@ -48,7 +48,7 @@ solCdsNuevosRouter.get("/options", requireAuth, requirePermission("SOL_CDS_NUEVO
   const orgDesc = uniq(utRows.map((r) => r.terDesc));
 
   res.json({
-    tipoOrden: ["Inconsistencia", "Incrementos Ex Post", "Incremento por PDL/PST"],
+    tipoOrden: ["Inconsistencia", "Incrementos Ex Post", "Incremento por PDL/PST", "VCR"],
     subestaciones,
     codCircuitStm,
     circuitoStm,
@@ -63,7 +63,7 @@ solCdsNuevosRouter.post("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), a
   const bodySchema = z.object({
     ot: z.string().min(1),
     incremento: z.string().min(1),
-    tipoOrden: z.enum(["Inconsistencia", "Incrementos Ex Post", "Incremento por PDL/PST"]),
+    tipoOrden: z.enum(["Inconsistencia", "Incrementos Ex Post", "Incremento por PDL/PST", "VCR"]),
     cd: z.string().min(1),
     subestacionSbItm: z.string().min(1),
     codCircuitStm: z.string().min(1),

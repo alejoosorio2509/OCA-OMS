@@ -803,6 +803,18 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
     "cumplimiento"
   ]);
 
+  function toDateStart(value: string) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  }
+
+  function toDateEnd(value: string) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  }
+
   const querySchema = z.object({
     status: z.union([statusSchema, z.array(statusSchema)]).optional(),
     assigneeId: z.string().min(1).optional(),
@@ -870,10 +882,17 @@ workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, 
   }
 
   if (dateField && (dateStart || dateEnd)) {
-    const range = {
-      ...(dateStart ? { gte: new Date(dateStart) } : {}),
-      ...(dateEnd ? { lte: new Date(dateEnd) } : {}),
-    };
+    const start = dateStart ? toDateStart(dateStart) : null;
+    const end = dateEnd ? toDateEnd(dateEnd) : null;
+    if (dateStart && !start) {
+      res.status(400).json({ error: "INVALID_DATE_START" });
+      return;
+    }
+    if (dateEnd && !end) {
+      res.status(400).json({ error: "INVALID_DATE_END" });
+      return;
+    }
+    const range = { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) };
     if (dateField === "assignedAt") where.assignedAt = range;
     if (dateField === "gestionAt") where.gestionAt = range;
   }
