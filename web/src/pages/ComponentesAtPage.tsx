@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { getComponentesAtOptions, listComponentesAt, type ComponenteAtRow } from "../api";
+import {
+  asignarComponenteAt,
+  getComponentesAtOptions,
+  listComponentesAt,
+  listTecnologosComponentesAt,
+  registrarInstalacionComponenteAt,
+  type ComponenteAtRow,
+  type TecnologoOption
+} from "../api";
 import { useAuth } from "../auth";
 
 function fmtDate(value: string | null) {
@@ -7,6 +15,16 @@ function fmtDate(value: string | null) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString();
+}
+
+function readApiError(e: unknown) {
+  const anyErr = e as unknown as { data?: unknown; message?: unknown };
+  const data = anyErr?.data as unknown as { error?: unknown; details?: unknown };
+  const err = typeof data?.error === "string" ? data.error : "";
+  const details = typeof data?.details === "string" ? data.details : "";
+  const msg = [err, details].filter(Boolean).join(": ").trim();
+  if (msg) return msg;
+  return typeof anyErr?.message === "string" && anyErr.message ? anyErr.message : "Error";
 }
 
 export function ComponentesAtPage() {
@@ -28,6 +46,7 @@ export function ComponentesAtPage() {
   const [tipos, setTipos] = useState<string[]>([]);
   const [tecnologos, setTecnologos] = useState<string[]>([]);
   const [estados, setEstados] = useState<string[]>([]);
+  const [tecnologoOptions, setTecnologoOptions] = useState<TecnologoOption[]>([]);
 
   const [appliedQuery, setAppliedQuery] = useState<{
     rotulo?: string;
@@ -54,12 +73,7 @@ export function ComponentesAtPage() {
     [rotulo, tipo, tecnologo, estado, asignacionDesde, asignacionHasta, instalacionDesde, instalacionHasta]
   );
 
-  async function refresh(nextQuery: {
-    rotulo?: string;
-    tipo?: string;
-    tecnologo?: string;
-    estado?: string;
-  }) {
+  async function refresh(nextQuery: typeof appliedQuery) {
     if (!token) return;
     setLoading(true);
     setError(null);
@@ -90,6 +104,17 @@ export function ComponentesAtPage() {
         return;
       });
   }, [token, canView]);
+
+  useEffect(() => {
+    if (!token || !canView) return;
+    listTecnologosComponentesAt(token)
+      .then((data) => setTecnologoOptions(Array.isArray(data) ? data : []))
+      .catch(() => setTecnologoOptions([]));
+  }, [token, canView]);
+
+  const [showAsignarModal, setShowAsignarModal] = useState(false);
+  const [showInstalacionModal, setShowInstalacionModal] = useState(false);
+  const [selected, setSelected] = useState<ComponenteAtRow | null>(null);
 
   if (!canView) return <div className="card">No autorizado.</div>;
 
@@ -180,6 +205,7 @@ export function ComponentesAtPage() {
                 <th>F. Asignación</th>
                 <th>F. Instalación</th>
                 <th>Estado</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -193,11 +219,33 @@ export function ComponentesAtPage() {
                     <td>{fmtDate(r.fechaAsignacion)}</td>
                     <td>{fmtDate(r.fechaInstalacion)}</td>
                     <td>{r.estado || "—"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => {
+                          setSelected(r);
+                          setShowAsignarModal(true);
+                        }}
+                      >
+                        Asignar
+                      </button>{" "}
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => {
+                          setSelected(r);
+                          setShowInstalacionModal(true);
+                        }}
+                      >
+                        Instalación
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} style={{ opacity: 0.75 }}>
+                  <td colSpan={8} style={{ opacity: 0.75 }}>
                     Sin registros.
                   </td>
                 </tr>
@@ -206,6 +254,168 @@ export function ComponentesAtPage() {
           </table>
         </div>
       ) : null}
+
+      {showAsignarModal && selected ? (
+        <AsignarModal
+          rotulo={selected.rotulo}
+          token={token}
+          options={tecnologoOptions}
+          onClose={() => {
+            setShowAsignarModal(false);
+            setSelected(null);
+          }}
+          onSaved={() => {
+            setShowAsignarModal(false);
+            setSelected(null);
+            refresh(appliedQuery).catch(() => {});
+          }}
+        />
+      ) : null}
+
+      {showInstalacionModal && selected ? (
+        <InstalacionModal
+          rotulo={selected.rotulo}
+          token={token}
+          onClose={() => {
+            setShowInstalacionModal(false);
+            setSelected(null);
+          }}
+          onSaved={() => {
+            setShowInstalacionModal(false);
+            setSelected(null);
+            refresh(appliedQuery).catch(() => {});
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AsignarModal(props: {
+  rotulo: string;
+  token: string | null;
+  options: TecnologoOption[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [tecnologo, setTecnologo] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!props.token) return;
+    setLoading(true);
+    try {
+      await asignarComponenteAt(props.token, props.rotulo, { tecnologo });
+      props.onSaved();
+    } catch (err) {
+      alert(readApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content card">
+        <h3>Asignar - {props.rotulo}</h3>
+        <form onSubmit={submit}>
+          <div className="field">
+            <label>Tecnólogo *</label>
+            <select value={tecnologo} onChange={(e) => setTecnologo(e.target.value)} required>
+              <option value="">Seleccione...</option>
+              {props.options.map((t) => (
+                <option key={t.id} value={t.email}>
+                  {t.name} ({t.email})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="actions" style={{ marginTop: "1rem" }}>
+            <button type="button" className="btn btn-secondary" onClick={props.onClose}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function InstalacionModal(props: { rotulo: string; token: string | null; onClose: () => void; onSaved: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    orden: "",
+    pf: "",
+    direccion: "",
+    municipio: "",
+    coordenadaX: "",
+    coordenadaY: ""
+  });
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!props.token) return;
+    setLoading(true);
+    try {
+      await registrarInstalacionComponenteAt(props.token, props.rotulo, {
+        orden: form.orden,
+        pf: form.pf,
+        direccion: form.direccion,
+        municipio: form.municipio,
+        coordenadaX: form.coordenadaX,
+        coordenadaY: form.coordenadaY
+      });
+      props.onSaved();
+    } catch (err) {
+      alert(readApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content card">
+        <h3>Instalación - {props.rotulo}</h3>
+        <form onSubmit={submit}>
+          <div className="field">
+            <label>ORDEN *</label>
+            <input required value={form.orden} onChange={(e) => setForm({ ...form, orden: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>PF *</label>
+            <input required value={form.pf} onChange={(e) => setForm({ ...form, pf: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>DIRECCIÓN *</label>
+            <input required value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>MUNICIPIO *</label>
+            <input required value={form.municipio} onChange={(e) => setForm({ ...form, municipio: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>COORDENADA X *</label>
+            <input required value={form.coordenadaX} onChange={(e) => setForm({ ...form, coordenadaX: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>COORDENADA Y *</label>
+            <input required value={form.coordenadaY} onChange={(e) => setForm({ ...form, coordenadaY: e.target.value })} />
+          </div>
+          <div className="actions" style={{ marginTop: "1rem" }}>
+            <button type="button" className="btn btn-secondary" onClick={props.onClose}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn" disabled={loading}>
+              {loading ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

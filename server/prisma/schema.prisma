@@ -337,6 +337,12 @@ model AsignacionCompAt {
   fechaAsignacion     DateTime?
   fechaInstalacion    DateTime?
   estado              String?
+  orden               String?
+  pf                  String?
+  direccion           String?
+  municipio           String?
+  coordenadaX         String?
+  coordenadaY         String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

@@ -106,10 +106,22 @@ async function ensureCarguesCatalogTables() {
         "fechaAsignacion" TIMESTAMP(3),
         "fechaInstalacion" TIMESTAMP(3),
         "estado" TEXT,
+        "orden" TEXT,
+        "pf" TEXT,
+        "direccion" TEXT,
+        "municipio" TEXT,
+        "coordenadaX" TEXT,
+        "coordenadaY" TEXT,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await prisma.$executeRawUnsafe('ALTER TABLE "AsignacionCompAt" ADD COLUMN IF NOT EXISTS "orden" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "AsignacionCompAt" ADD COLUMN IF NOT EXISTS "pf" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "AsignacionCompAt" ADD COLUMN IF NOT EXISTS "direccion" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "AsignacionCompAt" ADD COLUMN IF NOT EXISTS "municipio" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "AsignacionCompAt" ADD COLUMN IF NOT EXISTS "coordenadaX" TEXT');
+    await prisma.$executeRawUnsafe('ALTER TABLE "AsignacionCompAt" ADD COLUMN IF NOT EXISTS "coordenadaY" TEXT');
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "AsignacionCompAt_estado_idx" ON "AsignacionCompAt"("estado")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "AsignacionCompAt_tecnologo_idx" ON "AsignacionCompAt"("tecnologo")`);
 

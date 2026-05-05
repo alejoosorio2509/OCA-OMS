@@ -49,6 +49,105 @@ componentesAtRouter.get("/options", requireAuth, requirePermission("CARGUES"), a
   res.json({ tipos, tecnologos, estados });
 });
 
+componentesAtRouter.get("/tecnologos", requireAuth, requirePermission("CARGUES"), async (_req, res) => {
+  const rows = await prisma.user.findMany({
+    where: { isTecnologo: true },
+    select: { id: true, name: true, email: true },
+    orderBy: [{ name: "asc" }, { email: "asc" }],
+    take: 2000
+  });
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email
+    }))
+  );
+});
+
+componentesAtRouter.post("/:rotulo/asignar", requireAuth, requirePermission("CARGUES"), async (req, res) => {
+  const params = z.object({ rotulo: z.string().min(1) }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "INVALID_PARAMS" });
+    return;
+  }
+  const body = z.object({ tecnologo: z.string().min(1) }).safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "INVALID_BODY" });
+    return;
+  }
+
+  const rotulo = params.data.rotulo.trim();
+  const inputTech = body.data.tecnologo.trim();
+
+  const tech = await prisma.user.findFirst({
+    where: { isTecnologo: true, email: inputTech.toLowerCase() },
+    select: { email: true }
+  });
+  if (!tech) {
+    res.status(400).json({ error: "TECNOLOGO_NOT_FOUND" });
+    return;
+  }
+
+  const updatedCount = await prisma.asignacionCompAt.updateMany({
+    where: { rotulo },
+    data: {
+      tecnologo: tech.email,
+      estado: "ASIGNADO",
+      fechaAsignacion: new Date()
+    }
+  });
+  if (updatedCount.count === 0) {
+    res.status(404).json({ error: "NOT_FOUND" });
+    return;
+  }
+  const updated = await prisma.asignacionCompAt.findUnique({ where: { rotulo } });
+  res.json(updated);
+});
+
+componentesAtRouter.post("/:rotulo/instalacion", requireAuth, requirePermission("CARGUES"), async (req, res) => {
+  const params = z.object({ rotulo: z.string().min(1) }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "INVALID_PARAMS" });
+    return;
+  }
+  const body = z
+    .object({
+      orden: z.string().min(1),
+      pf: z.string().min(1),
+      direccion: z.string().min(1),
+      municipio: z.string().min(1),
+      coordenadaX: z.string().min(1),
+      coordenadaY: z.string().min(1)
+    })
+    .safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "INVALID_BODY" });
+    return;
+  }
+
+  const rotulo = params.data.rotulo.trim();
+  const updatedCount = await prisma.asignacionCompAt.updateMany({
+    where: { rotulo },
+    data: {
+      orden: body.data.orden.trim(),
+      pf: body.data.pf.trim(),
+      direccion: body.data.direccion.trim(),
+      municipio: body.data.municipio.trim(),
+      coordenadaX: body.data.coordenadaX.trim(),
+      coordenadaY: body.data.coordenadaY.trim(),
+      estado: "INSTALADO",
+      fechaInstalacion: new Date()
+    }
+  });
+  if (updatedCount.count === 0) {
+    res.status(404).json({ error: "NOT_FOUND" });
+    return;
+  }
+  const updated = await prisma.asignacionCompAt.findUnique({ where: { rotulo } });
+  res.json(updated);
+});
+
 componentesAtRouter.get("/", requireAuth, requirePermission("CARGUES"), async (req, res) => {
   const querySchema = z.object({
     rotulo: z.string().optional(),

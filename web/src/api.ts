@@ -287,6 +287,36 @@ export async function listComponentesAt(
   return apiFetch<ComponenteAtRow[]>(`/componentes-at${suffix}`, { token });
 }
 
+export type TecnologoOption = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export async function listTecnologosComponentesAt(token: string) {
+  return apiFetch<TecnologoOption[]>("/componentes-at/tecnologos", { token });
+}
+
+export async function asignarComponenteAt(token: string, rotulo: string, input: { tecnologo: string }) {
+  return apiFetch<ComponenteAtRow>(`/componentes-at/${encodeURIComponent(rotulo)}/asignar`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function registrarInstalacionComponenteAt(
+  token: string,
+  rotulo: string,
+  input: { orden: string; pf: string; direccion: string; municipio: string; coordenadaX: string; coordenadaY: string }
+) {
+  return apiFetch<ComponenteAtRow>(`/componentes-at/${encodeURIComponent(rotulo)}/instalacion`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export type SolCdsNuevoOptions = {
   tipoOrden: string[];
   subestaciones: string[];
