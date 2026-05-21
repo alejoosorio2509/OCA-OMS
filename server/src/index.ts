@@ -207,6 +207,40 @@ app.get("/version", (_req, res) => {
   res.json(getBuildInfo());
 });
 
+app.get("/debug/now", async (_req, res) => {
+  const now = new Date();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  const bogotaFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const bogotaKey = bogotaFmt.format(now);
+  const [y, m, d] = bogotaKey.split("-").map((v) => parseInt(v, 10));
+  const calendarDate = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 5, 0, 0));
+
+  const [today, latest] = await Promise.all([
+    prisma.calendar.findUnique({
+      where: { date: calendarDate },
+      select: { date: true, dayNumber: true, dayNumberFin: true }
+    }),
+    prisma.calendar.findFirst({
+      orderBy: [{ date: "desc" }],
+      select: { date: true, dayNumber: true, dayNumberFin: true }
+    })
+  ]);
+
+  res.json({
+    nowIso: now.toISOString(),
+    tz,
+    bogotaKey,
+    calendarDateIso: calendarDate.toISOString(),
+    today,
+    latest
+  });
+});
+
 // Servir archivos estáticos de soportes
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 const supabase =
