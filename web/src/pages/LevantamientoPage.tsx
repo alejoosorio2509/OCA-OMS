@@ -836,7 +836,7 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("orderCode")}>Orden Trabajo</button></th>
                 <th>Tipo Entrega</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
-                <th>Cuadrilla</th>
+                <th style={{ minWidth: 160 }}>Cuadrilla</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaPrimerElemento")}>Fecha Primer Elemento</button></th>
@@ -868,7 +868,7 @@ export function LevantamientoPage() {
                     </td>
                     <td>{fmtVal(it.entregaKeyLevantamiento)}</td>
                     <td>{fmtVal(it.nivelTension)}</td>
-                    <td>{fmtVal((it.cuadrilla && (CUADRILLA_LABELS[it.cuadrilla] || it.cuadrilla)) || null)}</td>
+                    <td style={{ minWidth: 160 }}>{fmtVal((it.cuadrilla && (CUADRILLA_LABELS[it.cuadrilla] || it.cuadrilla)) || null)}</td>
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>
                     <td>{fmtDate(it.fechaPrimerElemento ?? null)}</td>
