@@ -13,8 +13,8 @@
   --danger: #d9283a;
   --success: #128a4b;
   --shadow: 0 10px 20px rgba(11, 27, 51, 0.08);
-  --font-body: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-heading: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Calibri Light", Calibri, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Calibri Light", Calibri, system-ui, "Segoe UI", Roboto, sans-serif;
   --text-body-size: 15px;
   --text-body-weight: 400;
   --text-label-size: 13px;
