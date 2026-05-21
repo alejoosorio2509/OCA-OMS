@@ -836,6 +836,7 @@ export function LevantamientoPage() {
                 <th><button className="table-sort" type="button" onClick={() => onSort("orderCode")}>Orden Trabajo</button></th>
                 <th>Tipo Entrega</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("nivelTension")}>Nivel de Tensión</button></th>
+                <th>Cuadrilla</th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("estado")}>Estado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("subestado")}>Subestado</button></th>
                 <th><button className="table-sort" type="button" onClick={() => onSort("fechaPrimerElemento")}>Fecha Primer Elemento</button></th>
@@ -850,9 +851,9 @@ export function LevantamientoPage() {
             </thead>
             <tbody>
               {!hasSearched ? (
-                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
+                <tr><td colSpan={14} style={{ textAlign: "center", color: "var(--muted)" }}>Presiona Buscar para consultar.</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
+                <tr><td colSpan={14} style={{ textAlign: "center", color: "var(--muted)" }}>Sin resultados.</td></tr>
               ) : (
                 items.map((it) => (
                   <tr key={it.orderCode}>
@@ -867,6 +868,7 @@ export function LevantamientoPage() {
                     </td>
                     <td>{fmtVal(it.entregaKeyLevantamiento)}</td>
                     <td>{fmtVal(it.nivelTension)}</td>
+                    <td>{fmtVal((it.cuadrilla && (CUADRILLA_LABELS[it.cuadrilla] || it.cuadrilla)) || null)}</td>
                     <td>{fmtVal(it.estado)}</td>
                     <td>{fmtVal(it.subestado)}</td>
                     <td>{fmtDate(it.fechaPrimerElemento ?? null)}</td>
