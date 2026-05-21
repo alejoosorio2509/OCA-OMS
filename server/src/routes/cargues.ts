@@ -876,9 +876,11 @@ async function processActualizacionCsvFile(input: {
       }
 
       const assignedAtUpdate = assignedAt && isNotFutureDate(assignedAt, now) ? assignedAt : undefined;
-      const gestionAtUpdate = gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : undefined;
+      const statusAllowsGestionAt = status === "GESTIONADA" || status === "FACTURADA" || status === "CERRADA";
+      const gestionAtUpdate =
+        statusAllowsGestionAt && gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : statusAllowsGestionAt ? undefined : null;
       const assignedAtCreate = assignedAtUpdate ?? null;
-      const gestionAtCreate = gestionAtUpdate ?? null;
+      const gestionAtCreate = statusAllowsGestionAt ? gestionAtUpdate ?? null : null;
 
       const existing = await prisma.workOrder.findUnique({
         where: { code },
@@ -908,7 +910,7 @@ async function processActualizacionCsvFile(input: {
           status: lockStatus ? existing!.status : status,
           estadoSecundario: lockStatus ? undefined : null,
           assignedAt: assignedAtUpdate,
-          gestionAt: gestionAtUpdate,
+          gestionAt: lockStatus ? undefined : gestionAtUpdate,
           updatedAt: now,
           lastStatusChangeAt: lockStatus ? undefined : now
         },
@@ -1166,9 +1168,11 @@ async function processActualizacion(input: {
       }
 
       const assignedAtUpdate = assignedAt && isNotFutureDate(assignedAt, now) ? assignedAt : undefined;
-      const gestionAtUpdate = gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : undefined;
+      const statusAllowsGestionAt = status === "GESTIONADA" || status === "FACTURADA" || status === "CERRADA";
+      const gestionAtUpdate =
+        statusAllowsGestionAt && gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : statusAllowsGestionAt ? undefined : null;
       const assignedAtCreate = assignedAtUpdate ?? null;
-      const gestionAtCreate = gestionAtUpdate ?? null;
+      const gestionAtCreate = statusAllowsGestionAt ? gestionAtUpdate ?? null : null;
 
       const existing = await prisma.workOrder.findUnique({
         where: { code },
@@ -1198,7 +1202,7 @@ async function processActualizacion(input: {
           status: lockStatus ? existing!.status : status,
           estadoSecundario: lockStatus ? undefined : null,
           assignedAt: assignedAtUpdate,
-          gestionAt: gestionAtUpdate,
+          gestionAt: lockStatus ? undefined : gestionAtUpdate,
           updatedAt: now,
           lastStatusChangeAt: lockStatus ? undefined : now
         },
