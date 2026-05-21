@@ -217,12 +217,13 @@ app.get("/debug/now", async (_req, res) => {
     day: "2-digit"
   });
   const bogotaKey = bogotaFmt.format(now);
-  const [y, m, d] = bogotaKey.split("-").map((v) => parseInt(v, 10));
-  const calendarDate = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 5, 0, 0));
+  const startUtc = new Date(`${bogotaKey}T00:00:00.000Z`);
+  const endUtc = new Date(`${bogotaKey}T23:59:59.999Z`);
 
   const [today, latest] = await Promise.all([
-    prisma.calendar.findUnique({
-      where: { date: calendarDate },
+    prisma.calendar.findFirst({
+      where: { date: { gte: startUtc, lte: endUtc } },
+      orderBy: [{ date: "asc" }],
       select: { date: true, dayNumber: true, dayNumberFin: true }
     }),
     prisma.calendar.findFirst({
@@ -235,8 +236,10 @@ app.get("/debug/now", async (_req, res) => {
     nowIso: now.toISOString(),
     tz,
     bogotaKey,
-    calendarDateIso: calendarDate.toISOString(),
+    startUtcIso: startUtc.toISOString(),
+    endUtcIso: endUtc.toISOString(),
     today,
+    finHoy: today ? (today.dayNumberFin ?? today.dayNumber) : null,
     latest
   });
 });
