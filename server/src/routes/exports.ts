@@ -676,6 +676,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     cuadrilla: z.string().min(1).optional(),
     tipoOt: z.string().min(1).optional(),
     entrega: z.string().min(1).optional(),
+    estado: z.string().min(1).optional(),
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
     fechaFiltro: z.enum(["PRIMER_ELEMENTO", "ASIGNACION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
@@ -700,6 +701,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     cuadrilla,
     tipoOt,
     entrega,
+    estado,
     etapa,
     fechaFiltro,
     asignacionStart,
@@ -736,6 +738,7 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
     ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
+    ...(estado ? { estado: { equals: estado } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {

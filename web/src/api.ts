@@ -510,6 +510,7 @@ export async function getLevantamientoMetrics(
     cuadrilla?: string;
     tipoOt?: string;
     entrega?: string;
+    estado?: string;
     fechaFiltro?: "PRIMER_ELEMENTO" | "ASIGNACION";
     asignacionStart?: string;
     asignacionEnd?: string;
@@ -521,6 +522,7 @@ export async function getLevantamientoMetrics(
   if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
   if (query.tipoOt) qs.set("tipoOt", query.tipoOt);
   if (query.entrega) qs.set("entrega", query.entrega);
+  if (query.estado) qs.set("estado", query.estado);
   if (query.fechaFiltro) qs.set("fechaFiltro", query.fechaFiltro);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);
   if (query.asignacionEnd) qs.set("asignacionEnd", query.asignacionEnd);
@@ -548,6 +550,7 @@ export async function listLevantamientos(
     cuadrilla?: string;
     tipoOt?: string;
     entrega?: string;
+    estado?: string;
     etapa?: "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     fechaFiltro?: "PRIMER_ELEMENTO" | "ASIGNACION";
     asignacionStart?: string;
@@ -579,6 +582,7 @@ export async function listLevantamientos(
   if (query.cuadrilla) qs.set("cuadrilla", query.cuadrilla);
   if (query.tipoOt) qs.set("tipoOt", query.tipoOt);
   if (query.entrega) qs.set("entrega", query.entrega);
+  if (query.estado) qs.set("estado", query.estado);
   if (query.etapa) qs.set("etapa", query.etapa);
   if (query.fechaFiltro) qs.set("fechaFiltro", query.fechaFiltro);
   if (query.asignacionStart) qs.set("asignacionStart", query.asignacionStart);

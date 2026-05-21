@@ -199,6 +199,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("LEVANTAMIEN
     cuadrilla: z.string().min(1).optional(),
     tipoOt: z.string().min(1).optional(),
     entrega: z.string().min(1).optional(),
+    estado: z.string().min(1).optional(),
     fechaFiltro: z.enum(["PRIMER_ELEMENTO", "ASIGNACION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
     asignacionEnd: z.string().min(1).optional()
@@ -210,7 +211,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("LEVANTAMIEN
     return;
   }
 
-  const { search, nivelTension, cuadrilla, tipoOt, entrega, fechaFiltro, asignacionStart, asignacionEnd } = parsed.data;
+  const { search, nivelTension, cuadrilla, tipoOt, entrega, estado, fechaFiltro, asignacionStart, asignacionEnd } = parsed.data;
 
   const parseDay = (value: string) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
@@ -234,6 +235,7 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("LEVANTAMIEN
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
     ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
+    ...(estado ? { estado: { equals: estado } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -393,6 +395,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
     cuadrilla: z.string().min(1).optional(),
     tipoOt: z.string().min(1).optional(),
     entrega: z.string().min(1).optional(),
+    estado: z.string().min(1).optional(),
     etapa: z.enum(["ASIGNACION", "PRIMER_ELEMENTO", "ENTREGA_POSTPROCESO", "APROBACION_POSTPROCESO", "GESTION"]).optional(),
     fechaFiltro: z.enum(["PRIMER_ELEMENTO", "ASIGNACION"]).optional(),
     asignacionStart: z.string().min(1).optional(),
@@ -433,6 +436,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
     cuadrilla,
     tipoOt,
     entrega,
+    estado,
     etapa,
     fechaFiltro,
     asignacionStart,
@@ -469,6 +473,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
     ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
+    ...(estado ? { estado: { equals: estado } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {

@@ -42,6 +42,10 @@ function colorOf(v: number | null) {
   return "var(--text)";
 }
 
+function toKebab(value: string) {
+  return value.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-");
+}
+
 async function readApiError(res: Response) {
   const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   if (contentType.includes("application/json")) {
@@ -66,6 +70,17 @@ const CUADRILLA_LABELS: Record<string, string> = {
   CUA_10: "CUA_10",
   SUP: "WILMER MARTINEZ"
 };
+
+const ESTADO_OPCIONES = [
+  { value: "ASIGNADA", label: "Asignada" },
+  { value: "EN_EJECUCION", label: "En Ejecución" },
+  { value: "PAUSADA", label: "Pausada" },
+  { value: "GESTIONADA", label: "Gestionada" },
+  { value: "FACTURADA", label: "Facturada" },
+  { value: "CERRADA", label: "Cerrada" },
+  { value: "DEVUELTA", label: "Devuelta" },
+  { value: "EXCLUIDA", label: "Excluida" }
+] as const;
 
 const NOVEDAD_OPCIONES = [
   "STOP WORK POR LLUVIAS EN EL SECTOR",
@@ -132,6 +147,7 @@ export function LevantamientoPage() {
   const [draftCuadrilla, setDraftCuadrilla] = useState(() => initialParams.get("cuadrilla") || "");
   const [draftTipoOt, setDraftTipoOt] = useState(() => initialParams.get("tipoOt") || "");
   const [draftEntrega, setDraftEntrega] = useState(() => initialParams.get("entrega") || "");
+  const [draftEstado, setDraftEstado] = useState(() => initialParams.get("estado") || "");
   const [draftEtapa, setDraftEtapa] = useState(() => initialParams.get("etapa") || "");
   const [draftFechaFiltro, setDraftFechaFiltro] = useState<"PRIMER_ELEMENTO" | "ASIGNACION">(
     () => (initialParams.get("fechaFiltro") as "PRIMER_ELEMENTO" | "ASIGNACION" | null) || "PRIMER_ELEMENTO"
@@ -161,6 +177,7 @@ export function LevantamientoPage() {
     cuadrilla: string;
     tipoOt: string;
     entrega: string;
+    estado: string;
     etapa: "" | "ASIGNACION" | "PRIMER_ELEMENTO" | "ENTREGA_POSTPROCESO" | "APROBACION_POSTPROCESO" | "GESTION";
     fechaFiltro: "PRIMER_ELEMENTO" | "ASIGNACION";
     asignacionStart: string;
@@ -177,6 +194,7 @@ export function LevantamientoPage() {
     cuadrilla: initialParams.get("cuadrilla") || "",
     tipoOt: initialParams.get("tipoOt") || "",
     entrega: initialParams.get("entrega") || "",
+    estado: initialParams.get("estado") || "",
     etapa: (initialParams.get("etapa") as Filters["etapa"] | null) || "",
     fechaFiltro: (initialParams.get("fechaFiltro") as Filters["fechaFiltro"] | null) || "PRIMER_ELEMENTO",
     asignacionStart: initialParams.get("asignacionStart") || "",
@@ -213,6 +231,7 @@ export function LevantamientoPage() {
       cuadrilla: draftCuadrilla,
       tipoOt: draftTipoOt,
       entrega: draftEntrega,
+      estado: draftEstado,
       etapa: (draftEtapa as Filters["etapa"]) || "",
       fechaFiltro: draftFechaFiltro,
       asignacionStart: draftAsignacionStart,
@@ -240,6 +259,7 @@ export function LevantamientoPage() {
     setDraftCuadrilla("");
     setDraftTipoOt("");
     setDraftEntrega("");
+    setDraftEstado("");
     setDraftEtapa("");
     setDraftFechaFiltro("PRIMER_ELEMENTO");
     setDraftAsignacionStart("");
@@ -254,6 +274,7 @@ export function LevantamientoPage() {
       cuadrilla: "",
       tipoOt: "",
       entrega: "",
+      estado: "",
       etapa: "",
       fechaFiltro: "PRIMER_ELEMENTO",
       asignacionStart: "",
@@ -278,6 +299,7 @@ export function LevantamientoPage() {
     if (applied.cuadrilla.trim()) next.set("cuadrilla", applied.cuadrilla.trim());
     if (applied.tipoOt.trim()) next.set("tipoOt", applied.tipoOt.trim());
     if (applied.entrega.trim()) next.set("entrega", applied.entrega.trim());
+    if (applied.estado.trim()) next.set("estado", applied.estado.trim());
     if (applied.etapa) next.set("etapa", applied.etapa);
     if (applied.fechaFiltro) next.set("fechaFiltro", applied.fechaFiltro);
     if (applied.asignacionStart) next.set("asignacionStart", applied.asignacionStart);
@@ -300,6 +322,7 @@ export function LevantamientoPage() {
       cuadrilla: applied.cuadrilla.trim() || undefined,
       tipoOt: applied.tipoOt.trim() || undefined,
       entrega: applied.entrega.trim() || undefined,
+      estado: applied.estado.trim() || undefined,
       etapa: applied.etapa || undefined,
       fechaFiltro: applied.fechaFiltro || undefined,
       asignacionStart: applied.asignacionStart || undefined,
@@ -351,6 +374,7 @@ export function LevantamientoPage() {
       cuadrilla: query.cuadrilla,
       tipoOt: query.tipoOt,
       entrega: query.entrega,
+      estado: query.estado,
       fechaFiltro: query.fechaFiltro,
       asignacionStart: query.asignacionStart,
       asignacionEnd: query.asignacionEnd
@@ -388,6 +412,7 @@ export function LevantamientoPage() {
     if (applied.cuadrilla.trim()) p.set("cuadrilla", applied.cuadrilla.trim());
     if (applied.tipoOt.trim()) p.set("tipoOt", applied.tipoOt.trim());
     if (applied.entrega.trim()) p.set("entrega", applied.entrega.trim());
+    if (applied.estado.trim()) p.set("estado", applied.estado.trim());
     if (applied.etapa) p.set("etapa", applied.etapa);
     if (applied.fechaFiltro) p.set("fechaFiltro", applied.fechaFiltro);
     if (applied.asignacionStart) p.set("asignacionStart", applied.asignacionStart);
@@ -801,6 +826,39 @@ export function LevantamientoPage() {
             <button className="btn btn-accent" type="button" onClick={clearFilters}>
               Limpiar filtros
             </button>
+          </div>
+        </div>
+
+        <div className="row" style={{ marginTop: 14, alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <label style={{ fontWeight: "bold", fontSize: "0.85rem" }}>Estados:</label>
+              {draftEstado ? (
+                <button onClick={() => setDraftEstado("")} className="btn-link" style={{ fontSize: "0.75rem" }} type="button">
+                  Limpiar
+                </button>
+              ) : null}
+              {draftEstado !== applied.estado ? (
+                <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Cambios sin aplicar</span>
+              ) : null}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {ESTADO_OPCIONES.map((s) => (
+                <label
+                  key={s.value}
+                  className={`badge status-${toKebab(s.value)}`}
+                  style={{
+                    cursor: "pointer",
+                    opacity: draftEstado === s.value ? 1 : 0.4,
+                    border: draftEstado === s.value ? "2px solid #fff" : "2px solid transparent",
+                    transition: "all 0.2s"
+                  }}
+                  onClick={() => setDraftEstado((prev) => (prev === s.value ? "" : s.value))}
+                >
+                  {s.label}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
       </div>
