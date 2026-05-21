@@ -291,6 +291,22 @@ function calendarKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+workOrdersRouter.get("/debug/now", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
+  const now = new Date();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  const bogotaKey = normalizeDay(now);
+  const { inicioMap, finMap, maxFinNumber } = await loadCalendarMaps();
+
+  res.json({
+    nowIso: now.toISOString(),
+    tz,
+    bogotaKey,
+    inicioHoy: inicioMap.get(bogotaKey) ?? null,
+    finHoy: finMap.get(bogotaKey) ?? null,
+    maxFinNumber: maxFinNumber ?? null
+  });
+});
+
 function buildEnelUnionSumMap(
   rows: Array<{ orderCode: string; nombreIncremento: string; fechaInicio: Date; diasEnel: number | null }>,
   inicioMap: Map<string, number>
