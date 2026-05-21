@@ -89,6 +89,22 @@ function normalizeNumericText(value: string) {
   return `${a}${sep}${bTrim}`;
 }
 
+function estadoVariants(input: string) {
+  const v = input.trim();
+  if (!v) return [];
+  const map: Record<string, string[]> = {
+    ASIGNADA: ["ASIGNADA", "Asignada"],
+    EN_EJECUCION: ["EN_EJECUCION", "EN EJECUCION", "EN-EJECUCION", "En Ejecución", "En Ejecucion", "EN EJECUCIÓN", "EN-EJECUCIÓN"],
+    PAUSADA: ["PAUSADA", "Pausada"],
+    GESTIONADA: ["GESTIONADA", "Gestionada"],
+    FACTURADA: ["FACTURADA", "Facturada"],
+    CERRADA: ["CERRADA", "Cerrada"],
+    DEVUELTA: ["DEVUELTA", "Devuelta"],
+    EXCLUIDA: ["EXCLUIDA", "Excluida"]
+  };
+  return map[v] ?? [v];
+}
+
 function nthParenContent(value: string, n: number) {
   const matches = Array.from(value.matchAll(/\(([^)]*)\)/g));
   const hit = matches[n - 1]?.[1];
@@ -738,7 +754,6 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
     ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
-    ...(estado ? { estado: { equals: estado } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -758,10 +773,23 @@ exportsRouter.get("/levantamientos.csv", requireAuth, requirePermission("EXPORTE
         }
       : {})
   };
+  const whereWithEstado: Prisma.LevantamientoWhereInput =
+    estado && estadoVariants(estado).length
+      ? {
+          AND: [
+            where,
+            {
+              OR: estadoVariants(estado).map((x) => ({
+                estado: { equals: x, mode: "insensitive" }
+              }))
+            }
+          ]
+        }
+      : where;
 
   const [rows, calendar] = await Promise.all([
     prisma.levantamiento.findMany({
-      where,
+      where: whereWithEstado,
       orderBy: field === "fechaAsignacion" ? { fechaAsignacion: "desc" } : { fechaPrimerElemento: "desc" },
       select: {
         orderCode: true,

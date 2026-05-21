@@ -38,6 +38,22 @@ function parseBogotaDateOnly(value: string) {
   return new Date(value);
 }
 
+function estadoVariants(input: string) {
+  const v = input.trim();
+  if (!v) return [];
+  const map: Record<string, string[]> = {
+    ASIGNADA: ["ASIGNADA", "Asignada"],
+    EN_EJECUCION: ["EN_EJECUCION", "EN EJECUCION", "EN-EJECUCION", "En Ejecución", "En Ejecucion", "EN EJECUCIÓN", "EN-EJECUCIÓN"],
+    PAUSADA: ["PAUSADA", "Pausada"],
+    GESTIONADA: ["GESTIONADA", "Gestionada"],
+    FACTURADA: ["FACTURADA", "Facturada"],
+    CERRADA: ["CERRADA", "Cerrada"],
+    DEVUELTA: ["DEVUELTA", "Devuelta"],
+    EXCLUIDA: ["EXCLUIDA", "Excluida"]
+  };
+  return map[v] ?? [v];
+}
+
 function buildEnelUnionSumMap(
   rows: Array<{ orderCode: string; nombreIncremento: string; fechaInicio: Date; diasEnel: number | null }>,
   inicioMap: Map<string, number>
@@ -235,7 +251,6 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("LEVANTAMIEN
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
     ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
-    ...(estado ? { estado: { equals: estado } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -255,10 +270,23 @@ levantamientosRouter.get("/metrics", requireAuth, requirePermission("LEVANTAMIEN
         }
       : {})
   };
+  const whereWithEstado: Prisma.LevantamientoWhereInput =
+    estado && estadoVariants(estado).length
+      ? {
+          AND: [
+            where,
+            {
+              OR: estadoVariants(estado).map((x) => ({
+                estado: { equals: x, mode: "insensitive" }
+              }))
+            }
+          ]
+        }
+      : where;
 
   const [rows, calendar] = await Promise.all([
     prisma.levantamiento.findMany({
-      where,
+      where: whereWithEstado,
       select: {
         orderCode: true,
         subestado: true,
@@ -473,7 +501,6 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
     ...(cuadrilla ? { cuadrilla: { equals: cuadrilla } } : {}),
     ...(tipoOt ? { tipoOtLevantamiento: { equals: tipoOt } } : {}),
     ...(entrega ? { entregaLevantamiento: { equals: entrega } } : {}),
-    ...(estado ? { estado: { equals: estado } } : {}),
     ...(search ? { orderCode: { contains: search } } : {}),
     ...(startDate || endExclusive
       ? {
@@ -493,6 +520,19 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
         }
       : {})
   };
+  const whereWithEstado: Prisma.LevantamientoWhereInput =
+    estado && estadoVariants(estado).length
+      ? {
+          AND: [
+            where,
+            {
+              OR: estadoVariants(estado).map((x) => ({
+                estado: { equals: x, mode: "insensitive" }
+              }))
+            }
+          ]
+        }
+      : where;
 
   const requiresComputedFilter = !!(
     etapa ||
@@ -616,9 +656,9 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
                 : { fechaPrimerElemento: sortDir };
 
     const [total, pageItems] = await Promise.all([
-      prisma.levantamiento.count({ where }),
+      prisma.levantamiento.count({ where: whereWithEstado }),
       prisma.levantamiento.findMany({
-        where,
+        where: whereWithEstado,
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -722,7 +762,7 @@ levantamientosRouter.get("/", requireAuth, requirePermission("LEVANTAMIENTO"), a
   }
 
   const base = await prisma.levantamiento.findMany({
-    where,
+    where: whereWithEstado,
     select: {
       orderCode: true,
       nivelTension: true,
