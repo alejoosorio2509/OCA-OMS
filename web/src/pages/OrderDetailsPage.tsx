@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { WorkOrderCriticality, WorkOrderDetails, WorkOrderStatus } from "../api";
 import { getWorkOrder, transitionWorkOrder, updateNovedad } from "../api";
@@ -232,6 +232,36 @@ export function OrderDetailsPage() {
   if (!order) return <div className="card">No se encontró la orden.</div>;
   const canExclude = user?.role === "ADMIN";
 
+  const historyRows = useMemo(() => {
+    const recorridoItems = order.history.filter(isRecorridoHistoryItem);
+    const nonRecorridoItems = order.history.filter((h) => !isRecorridoHistoryItem(h));
+
+    if (recorridoItems.length === 0) {
+      return nonRecorridoItems.map((item) => ({ type: "item" as const, item }));
+    }
+
+    const firstRecorridoIndex = order.history.findIndex(isRecorridoHistoryItem);
+    const before = order.history
+      .slice(0, firstRecorridoIndex)
+      .filter((h) => !isRecorridoHistoryItem(h))
+      .map((item) => ({ type: "item" as const, item }));
+    const after = order.history
+      .slice(firstRecorridoIndex)
+      .filter((h) => !isRecorridoHistoryItem(h))
+      .map((item) => ({ type: "item" as const, item }));
+
+    return [
+      ...before,
+      {
+        type: "recorrido-summary" as const,
+        items: recorridoItems,
+        totalDias: order.diasEnel ?? recorridoItems.reduce((acc, item) => acc + (item.diasNovedad ?? 0), 0),
+        changedAt: recorridoItems[recorridoItems.length - 1]?.changedAt ?? null
+      },
+      ...after
+    ];
+  }, [order]);
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div className="card">
@@ -392,59 +422,73 @@ export function OrderDetailsPage() {
                   </td>
                 </tr>
               ) : (
-                order.history.map((h) => (
-                  <tr key={h.id}>
-                    <td>{fmtDate(h.changedAt)}</td>
-                    <td>{fmtStoredDate(h.fechaInicio)}</td>
-                    <td>{fmtStoredDate(h.fechaFin)}</td>
-                    <td>
-                      {h.diasNovedad !== null ? h.diasNovedad : "—"}
-                      {isRecorridoHistoryItem(h) && h.diasNovedad !== null ? (
+                historyRows.map((row) =>
+                  row.type === "recorrido-summary" ? (
+                    <tr key="recorrido-summary">
+                      <td>{fmtDate(row.changedAt)}</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td>
+                        {row.totalDias}
                         <div style={{ color: "var(--muted)", fontSize: 12 }}>días descontados</div>
-                      ) : null}
-                    </td>
-                    <td>
-                      {(() => {
-                        const url = historySoporteUrl(h);
-                        if (!url) return "—";
-                        return (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <a href={url} target="_blank" rel="noreferrer">Ver</a>
-                            <a href={url} download>Descargar</a>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td>
-                      {isRecorridoHistoryItem(h) ? (
+                      </td>
+                      <td>—</td>
+                      <td>
                         <div>
-                          <div style={{ fontWeight: 600 }}>Recorrido incrementos</div>
+                          <div style={{ fontWeight: 600 }}>Total descuento por recorrido</div>
                           <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                            {h.diasNovedad !== null ? `${h.diasNovedad} días descontados` : "Sin descuento calculado"}
+                            {row.items.length} {row.items.length === 1 ? "registro" : "registros"}
                           </div>
                         </div>
-                      ) : h.note || (
-                        <span className={`badge status-${toKebab(h.toStatus)}`}>
-                          {statusLabels[h.toStatus] || h.toStatus}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>
-                      {isRecorridoHistoryItem(h) ? (
+                      </td>
+                      <td style={{ maxWidth: 320, whiteSpace: "normal", fontSize: "0.9rem" }}>
                         <details>
-                          <summary style={{ cursor: "pointer", color: "#1565c0" }}>Ver detalle del recorrido</summary>
-                          <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-                            <div><strong>Incremento:</strong> {getRecorridoName(h)}</div>
-                            <div>{h.noteDetail || "—"}</div>
+                          <summary style={{ cursor: "pointer", color: "#1565c0" }}>Ver historial del recorrido</summary>
+                          <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+                            {row.items.map((item) => (
+                              <div key={item.id} style={{ borderTop: "1px solid #eee", paddingTop: 8 }}>
+                                <div><strong>Incremento:</strong> {getRecorridoName(item)}</div>
+                                <div><strong>Inicio:</strong> {fmtStoredDate(item.fechaInicio)}</div>
+                                <div><strong>Fin:</strong> {fmtStoredDate(item.fechaFin)}</div>
+                                <div><strong>Días descontados:</strong> {item.diasNovedad ?? "—"}</div>
+                                <div style={{ whiteSpace: "pre-wrap" }}>{item.noteDetail || "—"}</div>
+                              </div>
+                            ))}
                           </div>
                         </details>
-                      ) : (
-                        h.noteDetail || "—"
-                      )}
-                    </td>
-                    <td>{h.changedBy?.name || "Sistema"}</td>
-                  </tr>
-                ))
+                      </td>
+                      <td>Sistema</td>
+                    </tr>
+                  ) : (
+                    <tr key={row.item.id}>
+                      <td>{fmtDate(row.item.changedAt)}</td>
+                      <td>{fmtStoredDate(row.item.fechaInicio)}</td>
+                      <td>{fmtStoredDate(row.item.fechaFin)}</td>
+                      <td>{row.item.diasNovedad !== null ? row.item.diasNovedad : "—"}</td>
+                      <td>
+                        {(() => {
+                          const url = historySoporteUrl(row.item);
+                          if (!url) return "—";
+                          return (
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <a href={url} target="_blank" rel="noreferrer">Ver</a>
+                              <a href={url} download>Descargar</a>
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td>
+                        {row.item.note || (
+                          <span className={`badge status-${toKebab(row.item.toStatus)}`}>
+                            {statusLabels[row.item.toStatus] || row.item.toStatus}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>{row.item.noteDetail || "—"}</td>
+                      <td>{row.item.changedBy?.name || "Sistema"}</td>
+                    </tr>
+                  )
+                )
               )}
             </tbody>
           </table>
