@@ -71,7 +71,7 @@ export function ExportesPage() {
         await downloadCsv(token, `/exports/levantamientos.csv${query}`, `levantamiento_${range}.csv`);
       }
       if (kind === "novedadesEnel" && canFullExportes) {
-        await downloadCsv(token, `/exports/novedades-enel.csv${query}`, `novedades_enel_${range}.csv`);
+        await downloadCsv(token, "/exports/novedades-enel.csv", "novedades_enel.csv");
       }
       if (kind === "solCdsNuevos") {
         await downloadCsv(token, `/exports/sol-cds-nuevos.txt${query}`, `sol_cds_nuevos_${range}.txt`);

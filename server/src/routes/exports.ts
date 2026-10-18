@@ -1129,27 +1129,9 @@ exportsRouter.get("/historial.csv", requireAuth, requirePermission("EXPORTES"), 
 });
 
 exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
-  const parsed = dateRangeSchema.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: "INVALID_QUERY" });
-    return;
-  }
-
-  const { dateStart, dateEnd } = parsed.data;
-  const start = dateStart ? toDateStart(dateStart) : null;
-  const end = dateEnd ? toDateEnd(dateEnd) : null;
-
   const pausedOrders = await prisma.workOrder.findMany({
     where: {
-      status: "ON_HOLD",
-      ...(start || end
-        ? {
-            assignedAt: {
-              ...(start ? { gte: start } : {}),
-              ...(end ? { lte: end } : {})
-            }
-          }
-        : {})
+      status: "ON_HOLD"
     },
     orderBy: [{ gestorNombre: "asc" }, { code: "asc" }],
     select: {
@@ -1191,6 +1173,7 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
           select: {
             orderCode: true,
             responsable: true,
+            categoria: true,
             nota: true,
             nombreIncrementoSait: true,
             estado: true,
@@ -1276,11 +1259,12 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
       pauseStartedAt = openNovedad.fechaInicio.toISOString();
     } else if (backlog) {
       source = "Backlog ENEL";
-      observation = backlog.nota?.trim() || "Pausa automática: responsable ENEL (cargue Backlog)";
+      observation = backlog.categoria?.trim() || "";
       detail = [
         backlog.nombreIncrementoSait ? `Incremento=${backlog.nombreIncrementoSait}` : "",
         backlog.estado ? `Estado=${backlog.estado}` : "",
-        backlog.subestado ? `Subestado=${backlog.subestado}` : ""
+        backlog.subestado ? `Subestado=${backlog.subestado}` : "",
+        backlog.nota ? `Nota=${backlog.nota}` : ""
       ]
         .filter(Boolean)
         .join("; ");
