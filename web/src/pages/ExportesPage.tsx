@@ -34,7 +34,9 @@ export function ExportesPage() {
 
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
-  const [loading, setLoading] = useState<"" | "general" | "devoluciones" | "historial" | "levantamiento" | "solCdsNuevos">("");
+  const [loading, setLoading] = useState<
+    "" | "general" | "devoluciones" | "historial" | "levantamiento" | "novedadesEnel" | "solCdsNuevos"
+  >("");
   const [error, setError] = useState<string | null>(null);
 
   const query = useMemo(
@@ -48,7 +50,9 @@ export function ExportesPage() {
 
   if (!canSolExport) return <div className="card">No autorizado.</div>;
 
-  const handle = async (kind: "general" | "devoluciones" | "historial" | "levantamiento" | "solCdsNuevos") => {
+  const handle = async (
+    kind: "general" | "devoluciones" | "historial" | "levantamiento" | "novedadesEnel" | "solCdsNuevos"
+  ) => {
     if (!token) return;
     setError(null);
     setLoading(kind);
@@ -65,6 +69,9 @@ export function ExportesPage() {
       }
       if (kind === "levantamiento" && canFullExportes) {
         await downloadCsv(token, `/exports/levantamientos.csv${query}`, `levantamiento_${range}.csv`);
+      }
+      if (kind === "novedadesEnel" && canFullExportes) {
+        await downloadCsv(token, `/exports/novedades-enel.csv${query}`, `novedades_enel_${range}.csv`);
       }
       if (kind === "solCdsNuevos") {
         await downloadCsv(token, `/exports/sol-cds-nuevos.txt${query}`, `sol_cds_nuevos_${range}.txt`);
@@ -109,6 +116,9 @@ export function ExportesPage() {
               </button>
               <button className="btn" onClick={() => handle("levantamiento")} disabled={!!loading}>
                 {loading === "levantamiento" ? "Generando..." : "Exportar levantamiento"}
+              </button>
+              <button className="btn" onClick={() => handle("novedadesEnel")} disabled={!!loading}>
+                {loading === "novedadesEnel" ? "Generando..." : "Exportar novedades ENEL"}
               </button>
             </>
           ) : null}

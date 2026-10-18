@@ -1128,6 +1128,194 @@ exportsRouter.get("/historial.csv", requireAuth, requirePermission("EXPORTES"), 
   res.send(csv);
 });
 
+exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
+  const parsed = dateRangeSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "INVALID_QUERY" });
+    return;
+  }
+
+  const { dateStart, dateEnd } = parsed.data;
+  const start = dateStart ? toDateStart(dateStart) : null;
+  const end = dateEnd ? toDateEnd(dateEnd) : null;
+
+  const pausedOrders = await prisma.workOrder.findMany({
+    where: {
+      status: "ON_HOLD",
+      ...(start || end
+        ? {
+            assignedAt: {
+              ...(start ? { gte: start } : {}),
+              ...(end ? { lte: end } : {})
+            }
+          }
+        : {})
+    },
+    orderBy: [{ gestorNombre: "asc" }, { code: "asc" }],
+    select: {
+      id: true,
+      code: true,
+      gestorNombre: true,
+      assignedAt: true,
+      lastStatusChangeAt: true,
+      status: true
+    }
+  });
+
+  const workOrderIds = pausedOrders.map((order) => order.id);
+  const orderCodes = pausedOrders.map((order) => order.code);
+
+  const [openNovedades, backlogPauses, pauseHistories] = await Promise.all([
+    workOrderIds.length
+      ? prisma.novedad.findMany({
+          where: {
+            workOrderId: { in: workOrderIds },
+            fechaFin: null
+          },
+          orderBy: [{ fechaInicio: "desc" }, { updatedAt: "desc" }],
+          select: {
+            workOrderId: true,
+            fechaInicio: true,
+            descripcion: true,
+            detalle: true
+          }
+        })
+      : Promise.resolve([]),
+    orderCodes.length
+      ? prisma.backlog.findMany({
+          where: {
+            orderCode: { in: orderCodes },
+            fechaFin: null
+          },
+          orderBy: [{ fechaInicio: "desc" }, { updatedAt: "desc" }],
+          select: {
+            orderCode: true,
+            responsable: true,
+            nota: true,
+            nombreIncrementoSait: true,
+            estado: true,
+            subestado: true,
+            fechaInicio: true,
+            fechaFin: true,
+            fechaReporte: true
+          }
+        })
+      : Promise.resolve([]),
+    workOrderIds.length
+      ? prisma.workOrderHistory.findMany({
+          where: {
+            workOrderId: { in: workOrderIds },
+            toStatus: "ON_HOLD"
+          },
+          orderBy: [{ changedAt: "desc" }],
+          select: {
+            workOrderId: true,
+            changedAt: true,
+            fromStatus: true,
+            note: true,
+            noteDetail: true,
+            fechaInicio: true,
+            fechaFin: true
+          }
+        })
+      : Promise.resolve([])
+  ]);
+
+  const openNovedadByOrderId = new Map<string, (typeof openNovedades)[number]>();
+  for (const novedad of openNovedades) {
+    if (!openNovedadByOrderId.has(novedad.workOrderId)) {
+      openNovedadByOrderId.set(novedad.workOrderId, novedad);
+    }
+  }
+
+  const backlogByOrderCode = new Map<string, (typeof backlogPauses)[number]>();
+  for (const backlog of backlogPauses) {
+    if ((backlog.responsable ?? "").trim().toUpperCase() !== "ENEL") continue;
+    if (!backlogByOrderCode.has(backlog.orderCode)) {
+      backlogByOrderCode.set(backlog.orderCode, backlog);
+    }
+  }
+
+  const pauseHistoryByOrderId = new Map<string, (typeof pauseHistories)[number]>();
+  for (const history of pauseHistories) {
+    if (!pauseHistoryByOrderId.has(history.workOrderId)) {
+      pauseHistoryByOrderId.set(history.workOrderId, history);
+    }
+  }
+
+  const headers = [
+    "OT",
+    "Gestor",
+    "Estado",
+    "Fuente Pausa",
+    "Observacion",
+    "Detalle",
+    "Fecha Inicio Pausa",
+    "Fecha Fin Novedad",
+    "Fecha Reporte",
+    "Ultimo Cambio Estado",
+    "Fecha Asignacion"
+  ];
+
+  const rows = pausedOrders.map((order) => {
+    const openNovedad = openNovedadByOrderId.get(order.id);
+    const backlog = backlogByOrderCode.get(order.code);
+    const history = pauseHistoryByOrderId.get(order.id);
+
+    let source = "";
+    let observation = "";
+    let detail = "";
+    let pauseStartedAt = "";
+    let pauseEndedAt = "";
+    let reportDate = "";
+
+    if (openNovedad) {
+      source = "Novedad abierta";
+      observation = openNovedad.descripcion;
+      detail = openNovedad.detalle;
+      pauseStartedAt = openNovedad.fechaInicio.toISOString();
+    } else if (backlog) {
+      source = "Backlog ENEL";
+      observation = backlog.nota?.trim() || "Pausa automática: responsable ENEL (cargue Backlog)";
+      detail = [
+        backlog.nombreIncrementoSait ? `Incremento=${backlog.nombreIncrementoSait}` : "",
+        backlog.estado ? `Estado=${backlog.estado}` : "",
+        backlog.subestado ? `Subestado=${backlog.subestado}` : ""
+      ]
+        .filter(Boolean)
+        .join("; ");
+      pauseStartedAt = backlog.fechaInicio.toISOString();
+      pauseEndedAt = backlog.fechaFin?.toISOString() ?? "";
+      reportDate = backlog.fechaReporte?.toISOString() ?? "";
+    } else if (history) {
+      source = "Historial";
+      observation = history.note ?? "";
+      detail = history.noteDetail ?? "";
+      pauseStartedAt = history.fechaInicio ?? history.changedAt.toISOString();
+      pauseEndedAt = history.fechaFin ?? "";
+    }
+
+    return [
+      order.code,
+      order.gestorNombre ?? "",
+      order.status,
+      source,
+      observation,
+      detail,
+      pauseStartedAt,
+      pauseEndedAt,
+      reportDate,
+      order.lastStatusChangeAt?.toISOString() ?? "",
+      order.assignedAt?.toISOString() ?? ""
+    ];
+  });
+
+  const csv = toCsv(headers, rows);
+  res.setHeader("content-type", "text/csv; charset=utf-8");
+  res.setHeader("content-disposition", `attachment; filename="novedades_enel.csv"`);
+  res.send(csv);
+});
+
 exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, async (req, res) => {
   const parsed = dateRangeSchema.safeParse(req.query);
   if (!parsed.success) {
