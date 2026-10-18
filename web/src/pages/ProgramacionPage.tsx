@@ -61,6 +61,7 @@ export function ProgramacionPage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState<"" | WorkOrderStatus>("");
   const [gestorSortMode, setGestorSortMode] = useState<"alpha" | "activeLoad">("alpha");
+  const [gestorSortDir, setGestorSortDir] = useState<"asc" | "desc">("asc");
   const [orderSortKey, setOrderSortKey] = useState<"code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento">("assignedAt");
   const [orderSortDir, setOrderSortDir] = useState<"asc" | "desc">("desc");
 
@@ -114,16 +115,16 @@ export function ProgramacionPage() {
     const items = [...summaries];
     if (gestorSortMode === "activeLoad") {
       items.sort((a, b) => {
-        const diff = activeLoadCount(b) - activeLoadCount(a);
+        const diff = activeLoadCount(a) - activeLoadCount(b);
         if (diff !== 0) return diff;
         return a.gestorNombre.localeCompare(b.gestorNombre);
       });
-      return items;
+      return gestorSortDir === "asc" ? items : items.reverse();
     }
 
     items.sort((a, b) => a.gestorNombre.localeCompare(b.gestorNombre));
-    return items;
-  }, [summaries, gestorSortMode]);
+    return gestorSortDir === "asc" ? items : items.reverse();
+  }, [summaries, gestorSortDir, gestorSortMode]);
 
   const availableOrderStatuses = Array.from(new Set(gestorOrders.map((order) => order.status)))
     .sort((a, b) => statusLabels[a].localeCompare(statusLabels[b]));
@@ -202,9 +203,23 @@ export function ProgramacionPage() {
       <div className="programacion-toolbar">
         <label className="programacion-sort">
           <span>Ordenar gestores por</span>
-          <select value={gestorSortMode} onChange={(e) => setGestorSortMode(e.target.value as "alpha" | "activeLoad")}>
+          <select
+            value={gestorSortMode}
+            onChange={(e) => {
+              const nextMode = e.target.value as "alpha" | "activeLoad";
+              setGestorSortMode(nextMode);
+              setGestorSortDir(nextMode === "activeLoad" ? "desc" : "asc");
+            }}
+          >
             <option value="alpha">Orden alfabético</option>
             <option value="activeLoad">Asignadas + En ejecución</option>
+          </select>
+        </label>
+        <label className="programacion-sort">
+          <span>Sentido</span>
+          <select value={gestorSortDir} onChange={(e) => setGestorSortDir(e.target.value as "asc" | "desc")}>
+            <option value="asc">{gestorSortMode === "activeLoad" ? "Menor a mayor" : "A - Z"}</option>
+            <option value="desc">{gestorSortMode === "activeLoad" ? "Mayor a menor" : "Z - A"}</option>
           </select>
         </label>
       </div>
@@ -308,13 +323,17 @@ export function ProgramacionPage() {
                         <td colSpan={6} className="empty-orders-message">No hay órdenes con ese filtro.</td>
                       </tr>
                     ) : filteredGestorOrders.map((o) => (
-                      <tr
-                        key={o.id}
-                        className="order-row"
-                        onClick={() => navigate(`/orders/${o.id}`)}
-                        title="Ver detalle de la orden"
-                      >
-                        <td><strong className="order-code">{o.code}</strong></td>
+                      <tr key={o.id} className="order-row">
+                        <td>
+                          <button
+                            type="button"
+                            className="order-link-button"
+                            onClick={() => navigate(`/orders/${o.id}`)}
+                            title="Ver detalle de la orden"
+                          >
+                            <strong className="order-code">{o.code}</strong>
+                          </button>
+                        </td>
                         <td>{o.title}</td>
                         <td>
                           <span className={`badge-status-box ${statusClassName(o.status)}`}>

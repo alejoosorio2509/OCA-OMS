@@ -5,6 +5,8 @@
 .programacion-toolbar {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
   margin: 12px 0 4px;
 }
 
@@ -355,16 +357,14 @@
   color: #333;
 }
 
-.orders-panel .order-row {
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.orders-panel .order-row:hover {
-  background: #eef4fb;
-}
-
 .orders-panel .order-code {
   color: #1565c0;
   text-decoration: underline;
+}
+
+.order-link-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
 }
