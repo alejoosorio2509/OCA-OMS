@@ -1175,6 +1175,8 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
             responsable: true,
             categoria: true,
             nota: true,
+            dependencia: true,
+            etDepe: true,
             nombreIncrementoSait: true,
             estado: true,
             subestado: true,
@@ -1232,6 +1234,8 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
     "Estado",
     "Fuente Pausa",
     "Observacion",
+    "DEPENDENCIA",
+    "ET_DEPE",
     "Detalle",
     "Fecha Inicio Pausa",
     "Fecha Fin Novedad",
@@ -1251,6 +1255,8 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
     let pauseStartedAt = "";
     let pauseEndedAt = "";
     let reportDate = "";
+    let dependencia = "";
+    let etDepe = "";
 
     if (openNovedad) {
       source = "Novedad abierta";
@@ -1260,6 +1266,8 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
     } else if (backlog) {
       source = "Backlog ENEL";
       observation = backlog.categoria?.trim() || "";
+      dependencia = backlog.dependencia?.trim() || "";
+      etDepe = backlog.etDepe?.trim() || "";
       detail = [
         backlog.nombreIncrementoSait ? `Incremento=${backlog.nombreIncrementoSait}` : "",
         backlog.estado ? `Estado=${backlog.estado}` : "",
@@ -1285,6 +1293,8 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
       order.status,
       source,
       observation,
+      dependencia,
+      etDepe,
       detail,
       pauseStartedAt,
       pauseEndedAt,
