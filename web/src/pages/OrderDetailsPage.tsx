@@ -414,11 +414,6 @@ export function OrderDetailsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>OT</th>
-                <th>Nivel</th>
-                <th>Fecha Solicitud</th>
-                <th>Origen</th>
-                <th>Gestor</th>
                 <th>Estado</th>
                 <th>Subestado</th>
                 <th>Nombre incremento_SAIT</th>
@@ -435,24 +430,18 @@ export function OrderDetailsPage() {
                 <th>RESPONSABLE</th>
                 <th>NOTA</th>
                 <th>FECHA REPORTE</th>
-                <th>Registrado</th>
               </tr>
             </thead>
             <tbody>
               {!order.backlog || order.backlog.length === 0 ? (
                 <tr>
-                  <td colSpan={22} style={{ color: "#bdbdbd", textAlign: "center" }}>
+                  <td colSpan={16} style={{ color: "#bdbdbd", textAlign: "center" }}>
                     Sin registros de backlog.
                   </td>
                 </tr>
               ) : (
                 order.backlog.map((b) => (
                   <tr key={b.id}>
-                    <td>{b.orderCode}</td>
-                    <td>{b.nivel || "—"}</td>
-                    <td>{fmtDate(b.fechaSolicitud)}</td>
-                    <td>{b.origen || "—"}</td>
-                    <td>{b.gestor || "—"}</td>
                     <td>{b.estado || "—"}</td>
                     <td>{b.subestado || "—"}</td>
                     <td>{b.nombreIncrementoSait || "—"}</td>
@@ -469,7 +458,6 @@ export function OrderDetailsPage() {
                     <td>{b.responsable || "—"}</td>
                     <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>{b.nota || "—"}</td>
                     <td>{fmtDate(b.fechaReporte)}</td>
-                    <td>{fmtDate(b.createdAt)}</td>
                   </tr>
                 ))
               )}

@@ -3519,6 +3519,7 @@ async function processComponentesAtJob(input: {
 
 async function processBacklogJob(input: {
   data: Record<string, unknown>[];
+  userId?: string;
   onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
 }) {
   let errorCount = 0;
@@ -3630,12 +3631,16 @@ async function processBacklogJob(input: {
 
   // Cruzar con las órdenes existentes por número de orden (OT -> WorkOrder.code)
   const codes = Array.from(new Set(parsedRows.map((r) => r.orderCode)));
-  const existingCodes = new Set<string>();
+  const orderByCode = new Map<string, { id: string; status: WorkOrderStatus }>();
   for (let i = 0; i < codes.length; i += 1000) {
     const slice = codes.slice(i, i + 1000);
-    const found = await prisma.workOrder.findMany({ where: { code: { in: slice } }, select: { code: true } });
-    for (const f of found) existingCodes.add(f.code);
+    const found = await prisma.workOrder.findMany({
+      where: { code: { in: slice } },
+      select: { id: true, code: true, status: true }
+    });
+    for (const f of found) orderByCode.set(f.code, { id: f.id, status: f.status });
   }
+  const existingCodes = new Set(orderByCode.keys());
 
   const matched = parsedRows.filter((r) => existingCodes.has(r.orderCode));
   const omitted = parsedRows.length - matched.length;
@@ -3677,12 +3682,83 @@ async function processBacklogJob(input: {
     }
   }
 
+  // Pausa/Reanudación automática según el responsable (ENEL / OCA)
+  const BACKLOG_PAUSE_NOTE = "Pausa automática: responsable ENEL (cargue Backlog)";
+  const BACKLOG_RESUME_NOTE = "Reanudación automática: responsable OCA (cargue Backlog)";
+  const TERMINAL_STATUSES: WorkOrderStatus[] = ["GESTIONADA", "FACTURADA", "CERRADA"];
+
+  const responsableByCode = new Map<string, string>();
+  for (const r of matched) {
+    if (r.responsable) responsableByCode.set(r.orderCode, r.responsable);
+  }
+
+  let pausedOrders = 0;
+  let resumedOrders = 0;
+  if (input.userId) {
+    for (const [code, responsableRaw] of responsableByCode) {
+      const order = orderByCode.get(code);
+      if (!order) continue;
+      const responsable = responsableRaw.trim().toUpperCase();
+      try {
+        if (responsable === "ENEL") {
+          if (order.status !== "ON_HOLD" && !TERMINAL_STATUSES.includes(order.status)) {
+            await prisma.workOrderHistory.create({
+              data: {
+                workOrderId: order.id,
+                fromStatus: order.status,
+                toStatus: "ON_HOLD",
+                note: BACKLOG_PAUSE_NOTE,
+                changedById: input.userId
+              }
+            });
+            await prisma.workOrder.update({
+              where: { id: order.id },
+              data: { status: "ON_HOLD", lastStatusChangeAt: new Date() }
+            });
+            pausedOrders++;
+          }
+        } else if (responsable === "OCA") {
+          if (order.status === "ON_HOLD") {
+            const prev = await prisma.workOrderHistory.findFirst({
+              where: { workOrderId: order.id, toStatus: "ON_HOLD", note: BACKLOG_PAUSE_NOTE },
+              orderBy: { changedAt: "desc" },
+              select: { fromStatus: true }
+            });
+            const restore = prev?.fromStatus;
+            if (restore && restore !== "ON_HOLD") {
+              await prisma.workOrderHistory.create({
+                data: {
+                  workOrderId: order.id,
+                  fromStatus: "ON_HOLD",
+                  toStatus: restore,
+                  note: BACKLOG_RESUME_NOTE,
+                  changedById: input.userId
+                }
+              });
+              await prisma.workOrder.update({
+                where: { id: order.id },
+                data: { status: restore, lastStatusChangeAt: new Date() }
+              });
+              resumedOrders++;
+            }
+          }
+        }
+      } catch (err) {
+        errorCount++;
+        const msg = err instanceof Error ? err.message : "UNKNOWN";
+        rowErrors.push(`Error aplicando estado por responsable en la orden ${code}: ${msg}`);
+      }
+    }
+  }
+
   return {
-    message: `Backlog: ${created} registros guardados.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}`,
+    message: `Backlog: ${created} registros guardados.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
     count: created,
     created,
     omitted,
     updatedOrders: categoriaByCode.size,
+    pausedOrders,
+    resumedOrders,
     errors: errorCount,
     errorDetails: rowErrors
   };
@@ -3758,7 +3834,11 @@ async function runJob(jobId: string) {
               : job.type === "COMPONENTES_AT"
                 ? await processComponentesAtJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : job.type === "BACKLOG"
-                ? await processBacklogJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
+                ? await processBacklogJob({
+                    data,
+                    userId: job.createdById,
+                    onProgress: (p) => updateJobProgress(jobId, p)
+                  })
               : (() => {
                   throw new Error("UNSUPPORTED_JOB_TYPE");
                 })();
