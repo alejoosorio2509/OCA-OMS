@@ -230,6 +230,24 @@
   min-width: 160px;
 }
 
+.panel-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.panel-sort-button span {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
 .drawer-statuses {
   display: flex;
   flex-wrap: wrap;

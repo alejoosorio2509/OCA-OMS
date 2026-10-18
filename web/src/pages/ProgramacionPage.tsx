@@ -61,7 +61,7 @@ export function ProgramacionPage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState<"" | WorkOrderStatus>("");
   const [gestorSortMode, setGestorSortMode] = useState<"alpha" | "activeLoad">("alpha");
-  const [orderSortKey, setOrderSortKey] = useState<"code" | "status" | "assignedAt" | "diasGestion" | "cumplimiento">("assignedAt");
+  const [orderSortKey, setOrderSortKey] = useState<"code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento">("assignedAt");
   const [orderSortDir, setOrderSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
@@ -128,6 +128,20 @@ export function ProgramacionPage() {
   const availableOrderStatuses = Array.from(new Set(gestorOrders.map((order) => order.status)))
     .sort((a, b) => statusLabels[a].localeCompare(statusLabels[b]));
 
+  const handleOrderSort = (key: "code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento") => {
+    if (orderSortKey === key) {
+      setOrderSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setOrderSortKey(key);
+    setOrderSortDir(key === "assignedAt" || key === "diasGestion" ? "desc" : "asc");
+  };
+
+  const sortIndicator = (key: "code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento") => {
+    if (orderSortKey !== key) return "↕";
+    return orderSortDir === "asc" ? "↑" : "↓";
+  };
+
   const filteredGestorOrders = useMemo(() => {
     const filtered = gestorOrders.filter((order) => {
       const matchesSearch =
@@ -150,6 +164,9 @@ export function ProgramacionPage() {
       switch (orderSortKey) {
         case "code":
           result = a.code.localeCompare(b.code, undefined, { numeric: true });
+          break;
+        case "title":
+          result = a.title.localeCompare(b.title);
           break;
         case "status":
           result = statusLabels[a.status].localeCompare(statusLabels[b.status]);
@@ -250,23 +267,6 @@ export function ProgramacionPage() {
                       placeholder="Buscar por OT o título..."
                       className="drawer-search"
                     />
-                    <label className="programacion-sort drawer-sort">
-                      <span>Ordenar órdenes por</span>
-                      <select value={orderSortKey} onChange={(e) => setOrderSortKey(e.target.value as "code" | "status" | "assignedAt" | "diasGestion" | "cumplimiento")}>
-                        <option value="assignedAt">Fecha de asignación</option>
-                        <option value="code">OT</option>
-                        <option value="status">Estado</option>
-                        <option value="diasGestion">Días de gestión</option>
-                        <option value="cumplimiento">Cumplimiento</option>
-                      </select>
-                    </label>
-                    <label className="programacion-sort drawer-sort drawer-sort-small">
-                      <span>Sentido</span>
-                      <select value={orderSortDir} onChange={(e) => setOrderSortDir(e.target.value as "asc" | "desc")}>
-                        <option value="asc">Ascendente</option>
-                        <option value="desc">Descendente</option>
-                      </select>
-                    </label>
                   </div>
                   <div className="drawer-statuses">
                     <button
@@ -294,12 +294,12 @@ export function ProgramacionPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>OT</th>
-                      <th>Título</th>
-                      <th>Estado</th>
-                      <th>Asignación</th>
-                      <th>Días Gestión</th>
-                      <th>Cumplimiento</th>
+                      <th><button type="button" className="panel-sort-button" onClick={() => handleOrderSort("code")}>OT <span>{sortIndicator("code")}</span></button></th>
+                      <th><button type="button" className="panel-sort-button" onClick={() => handleOrderSort("title")}>Título <span>{sortIndicator("title")}</span></button></th>
+                      <th><button type="button" className="panel-sort-button" onClick={() => handleOrderSort("status")}>Estado <span>{sortIndicator("status")}</span></button></th>
+                      <th><button type="button" className="panel-sort-button" onClick={() => handleOrderSort("assignedAt")}>Asignación <span>{sortIndicator("assignedAt")}</span></button></th>
+                      <th><button type="button" className="panel-sort-button" onClick={() => handleOrderSort("diasGestion")}>Días Gestión <span>{sortIndicator("diasGestion")}</span></button></th>
+                      <th><button type="button" className="panel-sort-button" onClick={() => handleOrderSort("cumplimiento")}>Cumplimiento <span>{sortIndicator("cumplimiento")}</span></button></th>
                     </tr>
                   </thead>
                   <tbody>
