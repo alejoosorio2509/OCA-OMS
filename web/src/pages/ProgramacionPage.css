@@ -2,6 +2,27 @@
   padding: 20px;
 }
 
+.programacion-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 4px;
+}
+
+.programacion-sort {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.programacion-sort select {
+  min-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #fff;
+}
+
 .gestores-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -87,6 +108,11 @@
   color: #666;
 }
 
+.stat-badge.active-load {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
 .stat-badge.en-curso {
   background: #fff8e1;
   color: #f57f17;
@@ -163,12 +189,27 @@
   margin-bottom: 14px;
 }
 
+.drawer-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
 .drawer-search {
   width: 100%;
   max-width: 340px;
   padding: 10px 12px;
   border: 1px solid #d7dde7;
   border-radius: 8px;
+}
+
+.drawer-sort {
+  flex: 0 0 auto;
+}
+
+.drawer-sort-small select {
+  min-width: 160px;
 }
 
 .drawer-statuses {

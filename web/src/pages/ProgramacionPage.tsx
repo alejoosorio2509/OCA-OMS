@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth";
 import { getGestoresSummary, listWorkOrders, type GestorSummary, type WorkOrderListItem, type WorkOrderStatus } from "../api";
 import "./ProgramacionPage.css";
@@ -39,6 +39,15 @@ function statusClassName(status: WorkOrderStatus) {
   return status.toLowerCase().replaceAll("_", "-");
 }
 
+function activeLoadCount(summary: GestorSummary) {
+  return (
+    (summary.statusCounts?.ASIGNADA ?? 0) +
+    (summary.statusCounts?.ASSIGNED ?? 0) +
+    (summary.statusCounts?.EN_EJECUCION ?? 0) +
+    (summary.statusCounts?.IN_PROGRESS ?? 0)
+  );
+}
+
 export function ProgramacionPage() {
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -51,6 +60,9 @@ export function ProgramacionPage() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState<"" | WorkOrderStatus>("");
+  const [gestorSortMode, setGestorSortMode] = useState<"alpha" | "activeLoad">("alpha");
+  const [orderSortKey, setOrderSortKey] = useState<"code" | "status" | "assignedAt" | "diasGestion" | "cumplimiento">("assignedAt");
+  const [orderSortDir, setOrderSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     loadSummary();
@@ -60,11 +72,7 @@ export function ProgramacionPage() {
     try {
       setLoading(true);
       const data = await getGestoresSummary(token!);
-      // Ordenar alfabéticamente por nombre de gestor
-      const sortedData = [...data].sort((a, b) => 
-        a.gestorNombre.localeCompare(b.gestorNombre)
-      );
-      setSummaries(sortedData);
+      setSummaries(data);
       setError(null);
     } catch (e) {
       setError("Error al cargar el resumen de gestores");
@@ -102,17 +110,70 @@ export function ProgramacionPage() {
     }
   }
 
+  const sortedSummaries = useMemo(() => {
+    const items = [...summaries];
+    if (gestorSortMode === "activeLoad") {
+      items.sort((a, b) => {
+        const diff = activeLoadCount(b) - activeLoadCount(a);
+        if (diff !== 0) return diff;
+        return a.gestorNombre.localeCompare(b.gestorNombre);
+      });
+      return items;
+    }
+
+    items.sort((a, b) => a.gestorNombre.localeCompare(b.gestorNombre));
+    return items;
+  }, [summaries, gestorSortMode]);
+
   const availableOrderStatuses = Array.from(new Set(gestorOrders.map((order) => order.status)))
     .sort((a, b) => statusLabels[a].localeCompare(statusLabels[b]));
 
-  const filteredGestorOrders = gestorOrders.filter((order) => {
-    const matchesSearch =
-      !orderSearch.trim() ||
-      order.code.toLowerCase().includes(orderSearch.trim().toLowerCase()) ||
-      order.title.toLowerCase().includes(orderSearch.trim().toLowerCase());
-    const matchesStatus = !orderStatusFilter || order.status === orderStatusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredGestorOrders = useMemo(() => {
+    const filtered = gestorOrders.filter((order) => {
+      const matchesSearch =
+        !orderSearch.trim() ||
+        order.code.toLowerCase().includes(orderSearch.trim().toLowerCase()) ||
+        order.title.toLowerCase().includes(orderSearch.trim().toLowerCase());
+      const matchesStatus = !orderStatusFilter || order.status === orderStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+
+    const cumplimientoRank = (value: WorkOrderListItem["cumplimiento"]) => {
+      if (value === "Cumple") return 1;
+      if (value === "No cumple") return 2;
+      return 3;
+    };
+
+    filtered.sort((a, b) => {
+      let result = 0;
+
+      switch (orderSortKey) {
+        case "code":
+          result = a.code.localeCompare(b.code, undefined, { numeric: true });
+          break;
+        case "status":
+          result = statusLabels[a.status].localeCompare(statusLabels[b.status]);
+          break;
+        case "assignedAt":
+          result = (a.assignedAt ? new Date(a.assignedAt).getTime() : 0) - (b.assignedAt ? new Date(b.assignedAt).getTime() : 0);
+          break;
+        case "diasGestion":
+          result = (a.diasGestion ?? -999999) - (b.diasGestion ?? -999999);
+          break;
+        case "cumplimiento":
+          result = cumplimientoRank(a.cumplimiento) - cumplimientoRank(b.cumplimiento);
+          break;
+      }
+
+      if (result === 0) {
+        result = a.code.localeCompare(b.code, undefined, { numeric: true });
+      }
+
+      return orderSortDir === "asc" ? result : -result;
+    });
+
+    return filtered;
+  }, [gestorOrders, orderSearch, orderStatusFilter, orderSortKey, orderSortDir]);
 
   if (loading) return <div className="programacion-page">Cargando...</div>;
   if (error) return <div className="programacion-page error">{error}</div>;
@@ -121,9 +182,18 @@ export function ProgramacionPage() {
     <div className="programacion-page">
       <h1>Programación por Gestor</h1>
       <p>Resumen de carga de trabajo por responsable.</p>
+      <div className="programacion-toolbar">
+        <label className="programacion-sort">
+          <span>Ordenar gestores por</span>
+          <select value={gestorSortMode} onChange={(e) => setGestorSortMode(e.target.value as "alpha" | "activeLoad")}>
+            <option value="alpha">Orden alfabético</option>
+            <option value="activeLoad">Asignadas + En ejecución</option>
+          </select>
+        </label>
+      </div>
 
       <div className="gestores-grid">
-        {summaries.map((g) => (
+        {sortedSummaries.map((g) => (
           <div 
             key={g.gestorNombre} 
             className={`gestor-card ${selectedGestor === g.gestorNombre ? "active" : ""}`}
@@ -142,6 +212,9 @@ export function ProgramacionPage() {
             <div className="gestor-stats">
               <div className="stat-badge total">
                 <span>📊</span> {g.total} Total
+              </div>
+              <div className="stat-badge active-load">
+                <span>⚙️</span> {activeLoadCount(g)} Asignadas + En ejecución
               </div>
               {cardStatusOrder
                 .filter((status) => (g.statusCounts?.[status] ?? 0) > 0)
@@ -169,12 +242,31 @@ export function ProgramacionPage() {
           ) : (
             <div className="table-container">
               <div className="drawer-filters">
-                <input
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder="Buscar por OT o título..."
-                  className="drawer-search"
-                />
+                <div className="drawer-controls-row">
+                  <input
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Buscar por OT o título..."
+                    className="drawer-search"
+                  />
+                  <label className="programacion-sort drawer-sort">
+                    <span>Ordenar órdenes por</span>
+                    <select value={orderSortKey} onChange={(e) => setOrderSortKey(e.target.value as "code" | "status" | "assignedAt" | "diasGestion" | "cumplimiento")}>
+                      <option value="assignedAt">Fecha de asignación</option>
+                      <option value="code">OT</option>
+                      <option value="status">Estado</option>
+                      <option value="diasGestion">Días de gestión</option>
+                      <option value="cumplimiento">Cumplimiento</option>
+                    </select>
+                  </label>
+                  <label className="programacion-sort drawer-sort drawer-sort-small">
+                    <span>Sentido</span>
+                    <select value={orderSortDir} onChange={(e) => setOrderSortDir(e.target.value as "asc" | "desc")}>
+                      <option value="asc">Ascendente</option>
+                      <option value="desc">Descendente</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="drawer-statuses">
                   <button
                     type="button"
