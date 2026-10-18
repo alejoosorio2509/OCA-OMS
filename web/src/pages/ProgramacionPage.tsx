@@ -22,7 +22,11 @@ export function ProgramacionPage() {
     try {
       setLoading(true);
       const data = await getGestoresSummary(token!);
-      setSummaries(data);
+      // Ordenar alfabéticamente por nombre de gestor
+      const sortedData = [...data].sort((a, b) => 
+        a.gestorNombre.localeCompare(b.gestorNombre)
+      );
+      setSummaries(sortedData);
       setError(null);
     } catch (e) {
       setError("Error al cargar el resumen de gestores");
@@ -117,8 +121,9 @@ export function ProgramacionPage() {
                     <th>OT</th>
                     <th>Título</th>
                     <th>Estado</th>
-                    <th>Prioridad</th>
-                    <th>Vencimiento</th>
+                    <th>Asignación</th>
+                    <th>Días Gestión</th>
+                    <th>Cumplimiento</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -128,12 +133,23 @@ export function ProgramacionPage() {
                       <td><strong>{o.code}</strong></td>
                       <td>{o.title}</td>
                       <td>
-                        <span className={`badge-status ${o.status.toLowerCase().replace("_", "-")}`}>
+                        <span className={`badge-status-box ${o.status.toLowerCase().replace("_", "-")}`}>
                           {o.status}
                         </span>
                       </td>
-                      <td>{o.criticality}</td>
-                      <td>{o.dueAt ? new Date(o.dueAt).toLocaleDateString() : "—"}</td>
+                      <td>{o.assignedAt ? new Date(o.assignedAt).toLocaleDateString() : "—"}</td>
+                      <td>
+                        <span className="days-count">
+                          {o.diasGestion ?? 0} {Math.abs(o.diasGestion ?? 0) === 1 ? "día" : "días"}
+                        </span>
+                      </td>
+                      <td>
+                        {o.cumplimiento ? (
+                          <span className={`compliance-tag ${o.cumplimiento.toLowerCase().replace(" ", "-")}`}>
+                            {o.cumplimiento}
+                          </span>
+                        ) : "—"}
+                      </td>
                       <td>
                         <Link to={`/orders/${o.id}`} className="btn-small">Ver detalle</Link>
                       </td>

@@ -121,3 +121,82 @@
 .btn-close:hover {
   background: #e0e0e0;
 }
+
+/* Status Badges Box Style */
+.badge-status-box {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid transparent;
+}
+
+.badge-status-box.asignada,
+.badge-status-box.assigned {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border-color: #bbdefb;
+}
+
+.badge-status-box.en-ejecucion,
+.badge-status-box.in-progress {
+  background-color: #fff3e0;
+  color: #f57c00;
+  border-color: #ffe0b2;
+}
+
+.badge-status-box.on-hold,
+.badge-status-box.en-pausa {
+  background-color: #fbe9e7;
+  color: #d84315;
+  border-color: #ffccbc;
+}
+
+.badge-status-box.completed,
+.badge-status-box.completada,
+.badge-status-box.gestionada {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-color: #c8e6c9;
+}
+
+.badge-status-box.devuelta {
+  background-color: #fce4ec;
+  color: #c2185b;
+  border-color: #f8bbd0;
+}
+
+.badge-status-box.cancelled,
+.badge-status-box.cancelada {
+  background-color: #eeeeee;
+  color: #616161;
+  border-color: #e0e0e0;
+}
+
+/* Compliance Tags */
+.compliance-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.compliance-tag.cumple {
+  background-color: #4caf50;
+  color: white;
+}
+
+.compliance-tag.no-cumple {
+  background-color: #f44336;
+  color: white;
+}
+
+.days-count {
+  font-weight: 600;
+  color: #333;
+}
