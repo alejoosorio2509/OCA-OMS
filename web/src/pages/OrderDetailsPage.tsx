@@ -38,8 +38,8 @@ function NovedadItem({ novedad, orderId, onUpdated }: {
         <div>
           <div style={{ fontWeight: "bold", fontSize: "0.95rem" }}>{novedad.descripcion}</div>
           <div style={{ fontSize: "0.85rem", color: "#666" }}>
-            Inicio: {fmtDate(novedad.fechaInicio)} | 
-            Fin: {isClosed ? fmtDate(novedad.fechaFin) : <span style={{ color: "orange", fontWeight: "bold" }}>Pausado</span>}
+            Inicio: {fmtStoredDate(novedad.fechaInicio)} |
+            Fin: {isClosed ? fmtStoredDate(novedad.fechaFin) : <span style={{ color: "orange", fontWeight: "bold" }}>Pausado</span>}
           </div>
         </div>
         {!isClosed && !editing && (
@@ -86,6 +86,16 @@ function fmtDate(value: string | null) {
   return d.toLocaleString();
 }
 
+function fmtStoredDate(value: string | null) {
+  if (!value) return "—";
+  const trimmed = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+  return trimmed;
+}
+
 const BOGOTA_TZ = "America/Bogota";
 const bogotaDateOnlyFmt = new Intl.DateTimeFormat("es-CO", { timeZone: BOGOTA_TZ, year: "numeric", month: "2-digit", day: "2-digit" });
 
@@ -98,6 +108,15 @@ function fmtDateOnlyBogota(value: string | null) {
 
 function toKebab(value: string) {
   return value.toLowerCase().replaceAll("_", "-");
+}
+
+function isRecorridoHistoryItem(h: WorkOrderDetails["history"][0]) {
+  return (h.note ?? "").toLowerCase().startsWith("recorrido incrementos -");
+}
+
+function getRecorridoName(h: WorkOrderDetails["history"][0]) {
+  const note = h.note ?? "";
+  return note.replace(/^Recorrido Incrementos\s*-\s*/i, "").trim() || "Sin nombre";
 }
 
 export function OrderDetailsPage() {
@@ -376,9 +395,14 @@ export function OrderDetailsPage() {
                 order.history.map((h) => (
                   <tr key={h.id}>
                     <td>{fmtDate(h.changedAt)}</td>
-                    <td>{fmtDate(h.fechaInicio)}</td>
-                    <td>{fmtDate(h.fechaFin)}</td>
-                    <td>{h.diasNovedad !== null ? h.diasNovedad : "—"}</td>
+                    <td>{fmtStoredDate(h.fechaInicio)}</td>
+                    <td>{fmtStoredDate(h.fechaFin)}</td>
+                    <td>
+                      {h.diasNovedad !== null ? h.diasNovedad : "—"}
+                      {isRecorridoHistoryItem(h) && h.diasNovedad !== null ? (
+                        <div style={{ color: "var(--muted)", fontSize: 12 }}>días descontados</div>
+                      ) : null}
+                    </td>
                     <td>
                       {(() => {
                         const url = historySoporteUrl(h);
@@ -392,13 +416,32 @@ export function OrderDetailsPage() {
                       })()}
                     </td>
                     <td>
-                      {h.note || (
+                      {isRecorridoHistoryItem(h) ? (
+                        <div>
+                          <div style={{ fontWeight: 600 }}>Recorrido incrementos</div>
+                          <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                            {h.diasNovedad !== null ? `${h.diasNovedad} días descontados` : "Sin descuento calculado"}
+                          </div>
+                        </div>
+                      ) : h.note || (
                         <span className={`badge status-${toKebab(h.toStatus)}`}>
                           {statusLabels[h.toStatus] || h.toStatus}
                         </span>
                       )}
                     </td>
-                    <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>{h.noteDetail || "—"}</td>
+                    <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>
+                      {isRecorridoHistoryItem(h) ? (
+                        <details>
+                          <summary style={{ cursor: "pointer", color: "#1565c0" }}>Ver detalle del recorrido</summary>
+                          <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+                            <div><strong>Incremento:</strong> {getRecorridoName(h)}</div>
+                            <div>{h.noteDetail || "—"}</div>
+                          </div>
+                        </details>
+                      ) : (
+                        h.noteDetail || "—"
+                      )}
+                    </td>
                     <td>{h.changedBy?.name || "Sistema"}</td>
                   </tr>
                 ))
