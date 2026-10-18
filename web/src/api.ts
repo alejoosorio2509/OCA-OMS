@@ -483,6 +483,18 @@ export async function listGestores(token: string) {
   return apiFetch<string[]>("/work-orders/gestores", { token });
 }
 
+export type GestorSummary = {
+  gestorNombre: string;
+  gestorCc: string | null;
+  enCurso: number;
+  pausadas: number;
+  total: number;
+};
+
+export async function getGestoresSummary(token: string) {
+  return apiFetch<GestorSummary[]>("/work-orders/gestores/summary", { token });
+}
+
 export async function listOportunidades(token: string) {
   return apiFetch<string[]>("/work-orders/oportunidades", { token });
 }

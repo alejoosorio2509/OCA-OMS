@@ -451,6 +451,43 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
   return "green";
 }
 
+workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+  const gestores = await prisma.workOrder.groupBy({
+    by: ["gestorNombre", "gestorCc"],
+    where: { gestorNombre: { not: null } },
+    _count: { _all: true }
+  });
+
+  const summary = await Promise.all(
+    gestores.map(async (g) => {
+      const [enCurso, pausadas] = await Promise.all([
+        prisma.workOrder.count({
+          where: {
+            gestorNombre: g.gestorNombre,
+            status: { in: ["IN_PROGRESS", "EN_EJECUCION"] }
+          }
+        }),
+        prisma.workOrder.count({
+          where: {
+            gestorNombre: g.gestorNombre,
+            status: "ON_HOLD"
+          }
+        })
+      ]);
+
+      return {
+        gestorNombre: g.gestorNombre,
+        gestorCc: g.gestorCc,
+        total: g._count._all,
+        enCurso,
+        pausadas
+      };
+    })
+  );
+
+  res.json(summary);
+});
+
 workOrdersRouter.get("/gestores", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const rows = await prisma.workOrder.findMany({
     where: { gestorNombre: { not: null } },

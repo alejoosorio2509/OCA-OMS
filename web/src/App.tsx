@@ -12,6 +12,7 @@ import { ExportesPage } from "./pages/ExportesPage";
 import { LevantamientoPage } from "./pages/LevantamientoPage";
 import { SolCdsNuevosPage } from "./pages/SolCdsNuevosPage";
 import { ComponentesAtPage } from "./pages/ComponentesAtPage";
+import { ProgramacionPage } from "./pages/ProgramacionPage";
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/cargues" element={<CarguesPage />} />
             <Route path="/exportes" element={<ExportesPage />} />
+            <Route path="/programacion" element={<ProgramacionPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

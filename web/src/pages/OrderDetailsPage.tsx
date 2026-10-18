@@ -414,8 +414,6 @@ export function OrderDetailsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Inicio</th>
-                <th>Fin</th>
                 <th>Estado</th>
                 <th>Subestado</th>
                 <th>Nombre incremento_SAIT</th>
@@ -437,15 +435,13 @@ export function OrderDetailsPage() {
             <tbody>
               {!order.backlog || order.backlog.length === 0 ? (
                 <tr>
-                  <td colSpan={18} style={{ color: "#bdbdbd", textAlign: "center" }}>
+                  <td colSpan={16} style={{ color: "#bdbdbd", textAlign: "center" }}>
                     Sin registros de backlog.
                   </td>
                 </tr>
               ) : (
                 order.backlog.map((b) => (
                   <tr key={b.id}>
-                    <td>{fmtDate(b.fechaInicio)}</td>
-                    <td>{b.fechaFin ? fmtDate(b.fechaFin) : "En curso"}</td>
                     <td>{b.estado || "—"}</td>
                     <td>{b.subestado || "—"}</td>
                     <td>{b.nombreIncrementoSait || "—"}</td>
