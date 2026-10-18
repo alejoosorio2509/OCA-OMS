@@ -229,116 +229,118 @@ export function ProgramacionPage() {
       </div>
 
       {selectedGestor && (
-        <div className="orders-drawer">
-          <div className="drawer-header">
-            <h2>Órdenes de {selectedGestor}</h2>
-            <button className="btn-close" onClick={() => setSelectedGestor(null)}>Cerrar</button>
-          </div>
-          
-          {loadingOrders ? (
-            <p>Cargando órdenes...</p>
-          ) : gestorOrders.length === 0 ? (
-            <p>No hay órdenes asignadas.</p>
-          ) : (
-            <div className="table-container">
-              <div className="drawer-filters">
-                <div className="drawer-controls-row">
-                  <input
-                    value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
-                    placeholder="Buscar por OT o título..."
-                    className="drawer-search"
-                  />
-                  <label className="programacion-sort drawer-sort">
-                    <span>Ordenar órdenes por</span>
-                    <select value={orderSortKey} onChange={(e) => setOrderSortKey(e.target.value as "code" | "status" | "assignedAt" | "diasGestion" | "cumplimiento")}>
-                      <option value="assignedAt">Fecha de asignación</option>
-                      <option value="code">OT</option>
-                      <option value="status">Estado</option>
-                      <option value="diasGestion">Días de gestión</option>
-                      <option value="cumplimiento">Cumplimiento</option>
-                    </select>
-                  </label>
-                  <label className="programacion-sort drawer-sort drawer-sort-small">
-                    <span>Sentido</span>
-                    <select value={orderSortDir} onChange={(e) => setOrderSortDir(e.target.value as "asc" | "desc")}>
-                      <option value="asc">Ascendente</option>
-                      <option value="desc">Descendente</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="drawer-statuses">
-                  <button
-                    type="button"
-                    className={`drawer-filter-chip ${orderStatusFilter === "" ? "active" : ""}`}
-                    onClick={() => setOrderStatusFilter("")}
-                  >
-                    Todas ({gestorOrders.length})
-                  </button>
-                  {availableOrderStatuses.map((status) => {
-                    const count = gestorOrders.filter((order) => order.status === status).length;
-                    return (
-                      <button
-                        key={status}
-                        type="button"
-                        className={`drawer-filter-chip ${orderStatusFilter === status ? "active" : ""}`}
-                        onClick={() => setOrderStatusFilter(status)}
-                      >
-                        {statusLabels[status]} ({count})
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>OT</th>
-                    <th>Título</th>
-                    <th>Estado</th>
-                    <th>Asignación</th>
-                    <th>Días Gestión</th>
-                    <th>Cumplimiento</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredGestorOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="empty-orders-message">No hay órdenes con ese filtro.</td>
-                    </tr>
-                  ) : filteredGestorOrders.map((o) => (
-                    <tr
-                      key={o.id}
-                      className="order-row"
-                      onClick={() => navigate(`/orders/${o.id}`)}
-                      title="Ver detalle de la orden"
-                    >
-                      <td><strong className="order-code">{o.code}</strong></td>
-                      <td>{o.title}</td>
-                      <td>
-                        <span className={`badge-status-box ${statusClassName(o.status)}`}>
-                          {statusLabels[o.status]}
-                        </span>
-                      </td>
-                      <td>{o.assignedAt ? new Date(o.assignedAt).toLocaleDateString() : "—"}</td>
-                      <td>
-                        <span className="days-count">
-                          {o.diasGestion ?? 0} {Math.abs(o.diasGestion ?? 0) === 1 ? "día" : "días"}
-                        </span>
-                      </td>
-                      <td>
-                        {o.cumplimiento ? (
-                          <span className={`compliance-tag ${o.cumplimiento.toLowerCase().replace(" ", "-")}`}>
-                            {o.cumplimiento}
-                          </span>
-                        ) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div className="orders-panel-overlay" onClick={() => setSelectedGestor(null)}>
+          <aside className="orders-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <h2>Órdenes de {selectedGestor}</h2>
+              <button className="btn-close" onClick={() => setSelectedGestor(null)}>Cerrar</button>
             </div>
-          )}
+
+            {loadingOrders ? (
+              <p>Cargando órdenes...</p>
+            ) : gestorOrders.length === 0 ? (
+              <p>No hay órdenes asignadas.</p>
+            ) : (
+              <div className="table-container">
+                <div className="drawer-filters">
+                  <div className="drawer-controls-row">
+                    <input
+                      value={orderSearch}
+                      onChange={(e) => setOrderSearch(e.target.value)}
+                      placeholder="Buscar por OT o título..."
+                      className="drawer-search"
+                    />
+                    <label className="programacion-sort drawer-sort">
+                      <span>Ordenar órdenes por</span>
+                      <select value={orderSortKey} onChange={(e) => setOrderSortKey(e.target.value as "code" | "status" | "assignedAt" | "diasGestion" | "cumplimiento")}>
+                        <option value="assignedAt">Fecha de asignación</option>
+                        <option value="code">OT</option>
+                        <option value="status">Estado</option>
+                        <option value="diasGestion">Días de gestión</option>
+                        <option value="cumplimiento">Cumplimiento</option>
+                      </select>
+                    </label>
+                    <label className="programacion-sort drawer-sort drawer-sort-small">
+                      <span>Sentido</span>
+                      <select value={orderSortDir} onChange={(e) => setOrderSortDir(e.target.value as "asc" | "desc")}>
+                        <option value="asc">Ascendente</option>
+                        <option value="desc">Descendente</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="drawer-statuses">
+                    <button
+                      type="button"
+                      className={`drawer-filter-chip ${orderStatusFilter === "" ? "active" : ""}`}
+                      onClick={() => setOrderStatusFilter("")}
+                    >
+                      Todas ({gestorOrders.length})
+                    </button>
+                    {availableOrderStatuses.map((status) => {
+                      const count = gestorOrders.filter((order) => order.status === status).length;
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          className={`drawer-filter-chip ${orderStatusFilter === status ? "active" : ""}`}
+                          onClick={() => setOrderStatusFilter(status)}
+                        >
+                          {statusLabels[status]} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>OT</th>
+                      <th>Título</th>
+                      <th>Estado</th>
+                      <th>Asignación</th>
+                      <th>Días Gestión</th>
+                      <th>Cumplimiento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredGestorOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="empty-orders-message">No hay órdenes con ese filtro.</td>
+                      </tr>
+                    ) : filteredGestorOrders.map((o) => (
+                      <tr
+                        key={o.id}
+                        className="order-row"
+                        onClick={() => navigate(`/orders/${o.id}`)}
+                        title="Ver detalle de la orden"
+                      >
+                        <td><strong className="order-code">{o.code}</strong></td>
+                        <td>{o.title}</td>
+                        <td>
+                          <span className={`badge-status-box ${statusClassName(o.status)}`}>
+                            {statusLabels[o.status]}
+                          </span>
+                        </td>
+                        <td>{o.assignedAt ? new Date(o.assignedAt).toLocaleDateString() : "—"}</td>
+                        <td>
+                          <span className="days-count">
+                            {o.diasGestion ?? 0} {Math.abs(o.diasGestion ?? 0) === 1 ? "día" : "días"}
+                          </span>
+                        </td>
+                        <td>
+                          {o.cumplimiento ? (
+                            <span className={`compliance-tag ${o.cumplimiento.toLowerCase().replace(" ", "-")}`}>
+                              {o.cumplimiento}
+                            </span>
+                          ) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </aside>
         </div>
       )}
     </div>
