@@ -453,42 +453,54 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
 
 workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const excludedStatuses: WorkOrderStatus[] = ["CERRADA", "FACTURADA", "GESTIONADA"];
-  
-  const gestores = await prisma.workOrder.groupBy({
-    by: ["gestorNombre", "gestorCc"],
-    where: { 
+  const grouped = await prisma.workOrder.groupBy({
+    by: ["gestorNombre", "gestorCc", "status"],
+    where: {
       gestorNombre: { not: null },
       status: { notIn: excludedStatuses }
     },
     _count: { _all: true }
   });
 
-  const summary = await Promise.all(
-    gestores.map(async (g) => {
-      const [enCurso, pausadas] = await Promise.all([
-        prisma.workOrder.count({
-          where: {
-            gestorNombre: g.gestorNombre,
-            status: { in: ["IN_PROGRESS", "EN_EJECUCION"] }
-          }
-        }),
-        prisma.workOrder.count({
-          where: {
-            gestorNombre: g.gestorNombre,
-            status: "ON_HOLD"
-          }
-        })
-      ]);
+  const byGestor = new Map<
+    string,
+    {
+      gestorNombre: string;
+      gestorCc: string | null;
+      total: number;
+      enCurso: number;
+      pausadas: number;
+      statusCounts: Partial<Record<WorkOrderStatus, number>>;
+    }
+  >();
 
-      return {
-        gestorNombre: g.gestorNombre,
-        gestorCc: g.gestorCc,
-        total: g._count._all,
-        enCurso,
-        pausadas
-      };
-    })
-  );
+  for (const row of grouped) {
+    const gestorNombre = row.gestorNombre;
+    if (!gestorNombre) continue;
+    const current = byGestor.get(gestorNombre) ?? {
+      gestorNombre,
+      gestorCc: row.gestorCc,
+      total: 0,
+      enCurso: 0,
+      pausadas: 0,
+      statusCounts: {}
+    };
+
+    const count = row._count._all;
+    current.total += count;
+    current.statusCounts[row.status] = (current.statusCounts[row.status] ?? 0) + count;
+
+    if (row.status === "IN_PROGRESS" || row.status === "EN_EJECUCION") {
+      current.enCurso += count;
+    }
+    if (row.status === "ON_HOLD") {
+      current.pausadas += count;
+    }
+
+    byGestor.set(gestorNombre, current);
+  }
+
+  const summary = Array.from(byGestor.values());
 
   res.json(summary);
 });

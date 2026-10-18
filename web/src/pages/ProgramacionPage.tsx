@@ -2,10 +2,46 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { getGestoresSummary, listWorkOrders, type GestorSummary, type WorkOrderListItem, type WorkOrderStatus } from "../api";
 import "./ProgramacionPage.css";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+
+const statusLabels: Record<WorkOrderStatus, string> = {
+  DRAFT: "Borrador",
+  CREATED: "Creada",
+  ASSIGNED: "Asignada",
+  IN_PROGRESS: "En curso",
+  ON_HOLD: "Pausada",
+  COMPLETED: "Completada",
+  CANCELLED: "Cancelada",
+  EXCLUDED: "Excluida",
+  FACTURADA: "Facturada",
+  GESTIONADA: "Gestionada",
+  CERRADA: "Cerrada",
+  ASIGNADA: "Asignada",
+  EN_EJECUCION: "En ejecución",
+  DEVUELTA: "Devuelta"
+};
+
+const cardStatusOrder: WorkOrderStatus[] = [
+  "ASIGNADA",
+  "ASSIGNED",
+  "EN_EJECUCION",
+  "IN_PROGRESS",
+  "ON_HOLD",
+  "DEVUELTA",
+  "EXCLUDED",
+  "CREATED",
+  "DRAFT",
+  "COMPLETED",
+  "CANCELLED"
+];
+
+function statusClassName(status: WorkOrderStatus) {
+  return status.toLowerCase().replaceAll("_", "-");
+}
 
 export function ProgramacionPage() {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const [summaries, setSummaries] = useState<GestorSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,6 +49,8 @@ export function ProgramacionPage() {
   const [selectedGestor, setSelectedGestor] = useState<string | null>(null);
   const [gestorOrders, setGestorOrders] = useState<WorkOrderListItem[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState<"" | WorkOrderStatus>("");
 
   useEffect(() => {
     loadSummary();
@@ -43,6 +81,8 @@ export function ProgramacionPage() {
     }
     
     setSelectedGestor(gestorNombre);
+    setOrderSearch("");
+    setOrderStatusFilter("");
     setLoadingOrders(true);
     try {
       const activeStatuses: WorkOrderStatus[] = [
@@ -61,6 +101,18 @@ export function ProgramacionPage() {
       setLoadingOrders(false);
     }
   }
+
+  const availableOrderStatuses = Array.from(new Set(gestorOrders.map((order) => order.status)))
+    .sort((a, b) => statusLabels[a].localeCompare(statusLabels[b]));
+
+  const filteredGestorOrders = gestorOrders.filter((order) => {
+    const matchesSearch =
+      !orderSearch.trim() ||
+      order.code.toLowerCase().includes(orderSearch.trim().toLowerCase()) ||
+      order.title.toLowerCase().includes(orderSearch.trim().toLowerCase());
+    const matchesStatus = !orderStatusFilter || order.status === orderStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   if (loading) return <div className="programacion-page">Cargando...</div>;
   if (error) return <div className="programacion-page error">{error}</div>;
@@ -91,12 +143,13 @@ export function ProgramacionPage() {
               <div className="stat-badge total">
                 <span>📊</span> {g.total} Total
               </div>
-              <div className="stat-badge en-curso">
-                <span>⚡</span> {g.enCurso} En curso
-              </div>
-              <div className="stat-badge pausadas">
-                <span>⏸</span> {g.pausadas} Pausadas
-              </div>
+              {cardStatusOrder
+                .filter((status) => (g.statusCounts?.[status] ?? 0) > 0)
+                .map((status) => (
+                  <div key={status} className={`stat-badge status-${statusClassName(status)}`}>
+                    <span>{g.statusCounts?.[status] ?? 0}</span> {statusLabels[status]}
+                  </div>
+                ))}
             </div>
           </div>
         ))}
@@ -115,6 +168,36 @@ export function ProgramacionPage() {
             <p>No hay órdenes asignadas.</p>
           ) : (
             <div className="table-container">
+              <div className="drawer-filters">
+                <input
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder="Buscar por OT o título..."
+                  className="drawer-search"
+                />
+                <div className="drawer-statuses">
+                  <button
+                    type="button"
+                    className={`drawer-filter-chip ${orderStatusFilter === "" ? "active" : ""}`}
+                    onClick={() => setOrderStatusFilter("")}
+                  >
+                    Todas ({gestorOrders.length})
+                  </button>
+                  {availableOrderStatuses.map((status) => {
+                    const count = gestorOrders.filter((order) => order.status === status).length;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        className={`drawer-filter-chip ${orderStatusFilter === status ? "active" : ""}`}
+                        onClick={() => setOrderStatusFilter(status)}
+                      >
+                        {statusLabels[status]} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <table className="table">
                 <thead>
                   <tr>
@@ -124,17 +207,25 @@ export function ProgramacionPage() {
                     <th>Asignación</th>
                     <th>Días Gestión</th>
                     <th>Cumplimiento</th>
-                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {gestorOrders.map((o) => (
-                    <tr key={o.id}>
-                      <td><strong>{o.code}</strong></td>
+                  {filteredGestorOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="empty-orders-message">No hay órdenes con ese filtro.</td>
+                    </tr>
+                  ) : filteredGestorOrders.map((o) => (
+                    <tr
+                      key={o.id}
+                      className="order-row"
+                      onClick={() => navigate(`/orders/${o.id}`)}
+                      title="Ver detalle de la orden"
+                    >
+                      <td><strong className="order-code">{o.code}</strong></td>
                       <td>{o.title}</td>
                       <td>
-                        <span className={`badge-status-box ${o.status.toLowerCase().replace("_", "-")}`}>
-                          {o.status}
+                        <span className={`badge-status-box ${statusClassName(o.status)}`}>
+                          {statusLabels[o.status]}
                         </span>
                       </td>
                       <td>{o.assignedAt ? new Date(o.assignedAt).toLocaleDateString() : "—"}</td>
@@ -149,9 +240,6 @@ export function ProgramacionPage() {
                             {o.cumplimiento}
                           </span>
                         ) : "—"}
-                      </td>
-                      <td>
-                        <Link to={`/orders/${o.id}`} className="btn-small">Ver detalle</Link>
                       </td>
                     </tr>
                   ))}

@@ -442,7 +442,12 @@ export function OrderDetailsPage() {
               ) : (
                 order.backlog.map((b) => (
                   <tr key={b.id}>
-                    <td>{b.estado || "—"}</td>
+                    <td>
+                      <div>{b.estado || "—"}</div>
+                      <div style={{ fontSize: "0.8rem", color: b.fechaFin ? "#666" : "#f57c00", fontWeight: 600 }}>
+                        {b.fechaFin ? `Fin: ${fmtDate(b.fechaFin)}` : "En curso"}
+                      </div>
+                    </td>
                     <td>{b.subestado || "—"}</td>
                     <td>{b.nombreIncrementoSait || "—"}</td>
                     <td>{b.estadoInc || "—"}</td>

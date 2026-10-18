@@ -489,6 +489,7 @@ export type GestorSummary = {
   enCurso: number;
   pausadas: number;
   total: number;
+  statusCounts: Partial<Record<WorkOrderStatus, number>>;
 };
 
 export async function getGestoresSummary(token: string) {

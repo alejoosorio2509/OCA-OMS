@@ -97,6 +97,41 @@
   color: #d84315;
 }
 
+.stat-badge.status-asignada,
+.stat-badge.status-assigned {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.stat-badge.status-en-ejecucion,
+.stat-badge.status-in-progress {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.stat-badge.status-on-hold {
+  background: #fbe9e7;
+  color: #d84315;
+}
+
+.stat-badge.status-devuelta {
+  background: #fce4ec;
+  color: #c2185b;
+}
+
+.stat-badge.status-excluded {
+  background: #eceff1;
+  color: #455a64;
+}
+
+.stat-badge.status-created,
+.stat-badge.status-draft,
+.stat-badge.status-completed,
+.stat-badge.status-cancelled {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
 .orders-drawer {
   margin-top: 20px;
   border-top: 1px solid #eee;
@@ -120,6 +155,48 @@
 
 .btn-close:hover {
   background: #e0e0e0;
+}
+
+.drawer-filters {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.drawer-search {
+  width: 100%;
+  max-width: 340px;
+  padding: 10px 12px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+}
+
+.drawer-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drawer-filter-chip {
+  border: 1px solid #d7dde7;
+  background: #fff;
+  color: #31455a;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.drawer-filter-chip.active {
+  background: #0f3558;
+  color: #fff;
+  border-color: #0f3558;
+}
+
+.empty-orders-message {
+  text-align: center;
+  color: #6b7280;
+  padding: 18px;
 }
 
 /* Status Badges Box Style */
@@ -199,4 +276,18 @@
 .days-count {
   font-weight: 600;
   color: #333;
+}
+
+.orders-drawer .order-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.orders-drawer .order-row:hover {
+  background: #eef4fb;
+}
+
+.orders-drawer .order-code {
+  color: #1565c0;
+  text-decoration: underline;
 }
