@@ -85,6 +85,7 @@ model WorkOrder {
   ansOportunidad     Int?                 // Valor numérico según el código de oportunidad
   estadoSecundario   String?              // Devuelta u otros estados secundarios
   diasDescuento      Int                  @default(0) // Días a restar por devoluciones
+  categoria          String?              // Categoría proveniente del cargue Backlog
 
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
@@ -379,4 +380,33 @@ model SolCdsNuevo {
 
   @@index([createdById])
   @@index([createdAt])
+}
+
+model Backlog {
+  id                   String    @id @default(cuid())
+  orderCode            String    // OT (número de orden) con el que se cruza
+  nivel                String?
+  fechaSolicitud       DateTime?
+  origen               String?
+  gestor               String?
+  estado               String?
+  subestado            String?
+  nombreIncrementoSait String?
+  estadoInc            String?
+  categoria            String?
+  etInc2               String?
+  catg2                String?
+  error1               String?
+  error22              String?
+  ticket               String?
+  etTicket             String?
+  dependencia          String?
+  etDepe               String?
+  responsable          String?
+  nota                 String?
+  fechaReporte         DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([orderCode])
 }

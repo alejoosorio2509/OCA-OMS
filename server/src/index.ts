@@ -156,6 +156,38 @@ async function ensureCarguesCatalogTables() {
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "SolCdsNuevo_registro_key" ON "SolCdsNuevo"("registro")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SolCdsNuevo_createdById_idx" ON "SolCdsNuevo"("createdById")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SolCdsNuevo_createdAt_idx" ON "SolCdsNuevo"("createdAt")`);
+
+    await prisma.$executeRawUnsafe('ALTER TABLE "WorkOrder" ADD COLUMN IF NOT EXISTS "categoria" TEXT');
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Backlog" (
+        "id" TEXT PRIMARY KEY,
+        "orderCode" TEXT NOT NULL,
+        "nivel" TEXT,
+        "fechaSolicitud" TIMESTAMP(3),
+        "origen" TEXT,
+        "gestor" TEXT,
+        "estado" TEXT,
+        "subestado" TEXT,
+        "nombreIncrementoSait" TEXT,
+        "estadoInc" TEXT,
+        "categoria" TEXT,
+        "etInc2" TEXT,
+        "catg2" TEXT,
+        "error1" TEXT,
+        "error22" TEXT,
+        "ticket" TEXT,
+        "etTicket" TEXT,
+        "dependencia" TEXT,
+        "etDepe" TEXT,
+        "responsable" TEXT,
+        "nota" TEXT,
+        "fechaReporte" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Backlog_orderCode_idx" ON "Backlog"("orderCode")`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`WARN: No se pudo asegurar tablas de catálogos de cargues: ${msg}`);

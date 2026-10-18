@@ -18,7 +18,8 @@ type UploadType =
   | "MODELO_CATEGORIA_MB"
   | "CIRCUITOS_SUBESTACIONES"
   | "UNIDADES_TERRITORIALES"
-  | "COMPONENTES_AT";
+  | "COMPONENTES_AT"
+  | "BACKLOG";
 
 export function CarguesPage() {
   const { token, user } = useAuth();
@@ -172,6 +173,7 @@ export function CarguesPage() {
             <option value="CIRCUITOS_SUBESTACIONES">Circuitos/Subestaciones</option>
             <option value="UNIDADES_TERRITORIALES">Unidades territoriales</option>
             <option value="COMPONENTES_AT">Cargue componentes AT</option>
+            <option value="BACKLOG">Backlog</option>
           </select>
         </div>
 

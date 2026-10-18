@@ -258,6 +258,8 @@ export function OrderDetailsPage() {
             </div>
             <div style={{ color: "#bdbdbd", marginTop: 8 }}>Oportunidad / ANS</div>
             <div>{order.oportunidad || "—"} / {order.ansOportunidad || "—"} días</div>
+            <div style={{ color: "#bdbdbd", marginTop: 8 }}>Categoría</div>
+            <div>{order.categoria || "—"}</div>
           </div>
         </div>
 
@@ -398,6 +400,76 @@ export function OrderDetailsPage() {
                     </td>
                     <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>{h.noteDetail || "—"}</td>
                     <td>{h.changedBy?.name || "Sistema"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Historial backlog</h3>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>OT</th>
+                <th>Nivel</th>
+                <th>Fecha Solicitud</th>
+                <th>Origen</th>
+                <th>Gestor</th>
+                <th>Estado</th>
+                <th>Subestado</th>
+                <th>Nombre incremento_SAIT</th>
+                <th>ESTADO_INC</th>
+                <th>CATEGORIA</th>
+                <th>ET_INC_2</th>
+                <th>CATG_2</th>
+                <th>ERROR 1</th>
+                <th>ERROR 22</th>
+                <th>TICKET</th>
+                <th>ET_TICKET</th>
+                <th>DEPENDENCIA</th>
+                <th>ET_DEPE</th>
+                <th>RESPONSABLE</th>
+                <th>NOTA</th>
+                <th>FECHA REPORTE</th>
+                <th>Registrado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!order.backlog || order.backlog.length === 0 ? (
+                <tr>
+                  <td colSpan={22} style={{ color: "#bdbdbd", textAlign: "center" }}>
+                    Sin registros de backlog.
+                  </td>
+                </tr>
+              ) : (
+                order.backlog.map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.orderCode}</td>
+                    <td>{b.nivel || "—"}</td>
+                    <td>{fmtDate(b.fechaSolicitud)}</td>
+                    <td>{b.origen || "—"}</td>
+                    <td>{b.gestor || "—"}</td>
+                    <td>{b.estado || "—"}</td>
+                    <td>{b.subestado || "—"}</td>
+                    <td>{b.nombreIncrementoSait || "—"}</td>
+                    <td>{b.estadoInc || "—"}</td>
+                    <td>{b.categoria || "—"}</td>
+                    <td>{b.etInc2 || "—"}</td>
+                    <td>{b.catg2 || "—"}</td>
+                    <td>{b.error1 || "—"}</td>
+                    <td>{b.error22 || "—"}</td>
+                    <td>{b.ticket || "—"}</td>
+                    <td>{b.etTicket || "—"}</td>
+                    <td>{b.dependencia || "—"}</td>
+                    <td>{b.etDepe || "—"}</td>
+                    <td>{b.responsable || "—"}</td>
+                    <td style={{ maxWidth: 250, whiteSpace: "normal", fontSize: "0.9rem" }}>{b.nota || "—"}</td>
+                    <td>{fmtDate(b.fechaReporte)}</td>
+                    <td>{fmtDate(b.createdAt)}</td>
                   </tr>
                 ))
               )}

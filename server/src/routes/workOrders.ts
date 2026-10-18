@@ -1643,6 +1643,10 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
   const levantamiento = await prisma.levantamiento.findUnique({
     where: { orderCode: dto.code }
   });
+  const backlog = await prisma.backlog.findMany({
+    where: { orderCode: dto.code },
+    orderBy: { createdAt: "desc" }
+  });
   const baremo = await prisma.actividadBaremo.findUnique({
     where: { codigo: dto.code },
     select: { totalBarSum: true, ansRef: true, ansCalc: true }
@@ -1682,6 +1686,7 @@ workOrdersRouter.get("/:id", requireAuth, requirePermission("ORDERS"), async (re
   res.json({
     ...dto,
     levantamiento,
+    backlog,
     baremoTotal: baremo?.totalBarSum ?? null,
     baremoAnsRef: baremo?.ansRef ?? null,
     baremoAnsCalc: baremo?.ansCalc ?? null,

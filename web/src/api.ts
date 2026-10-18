@@ -61,6 +61,7 @@ export type WorkOrderListItem = {
   oportunidad?: string | null;
   ansOportunidad?: number | null;
   estadoSecundario?: string | null;
+  categoria?: string | null;
   gestionAt?: string | null;
   fechaTentativaGestion?: string | null;
   cumplimiento?: "Cumple" | "No cumple" | null;
@@ -131,6 +132,31 @@ export type WorkOrderDetails = WorkOrderListItem & {
     createdAt: string;
     updatedAt: string;
   } | null;
+  backlog?: {
+    id: string;
+    orderCode: string;
+    nivel: string | null;
+    fechaSolicitud: string | null;
+    origen: string | null;
+    gestor: string | null;
+    estado: string | null;
+    subestado: string | null;
+    nombreIncrementoSait: string | null;
+    estadoInc: string | null;
+    categoria: string | null;
+    etInc2: string | null;
+    catg2: string | null;
+    error1: string | null;
+    error22: string | null;
+    ticket: string | null;
+    etTicket: string | null;
+    dependencia: string | null;
+    etDepe: string | null;
+    responsable: string | null;
+    nota: string | null;
+    fechaReporte: string | null;
+    createdAt: string;
+  }[];
 };
 
 export type LevantamientoListItem = {

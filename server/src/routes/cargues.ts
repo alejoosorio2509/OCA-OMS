@@ -433,7 +433,8 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
       input.type === "ACTUALIZACION" ||
       input.type === "ACTIVIDADES_BAREMO" ||
       input.type === "RECORRIDO_INCREMENTOS" ||
-      input.type === "LEVANTAMIENTO"
+      input.type === "LEVANTAMIENTO" ||
+      input.type === "BACKLOG"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
@@ -557,7 +558,8 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       input.type === "MODELO_CATEGORIA_MB" ||
       input.type === "CIRCUITOS_SUBESTACIONES" ||
       input.type === "UNIDADES_TERRITORIALES" ||
-      input.type === "COMPONENTES_AT"
+      input.type === "COMPONENTES_AT" ||
+      input.type === "BACKLOG"
         ? ";"
         : ",";
     const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
@@ -3515,6 +3517,177 @@ async function processComponentesAtJob(input: {
   };
 }
 
+async function processBacklogJob(input: {
+  data: Record<string, unknown>[];
+  onProgress?: (progress: { rows: number; success: number; errors: number }) => Promise<void>;
+}) {
+  let errorCount = 0;
+  const rowErrors: string[] = [];
+
+  const normalizeHeader = (value: string) =>
+    value
+      .split("\u0000")
+      .join("")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const getValAny = (row: Record<string, unknown>, names: string[]) => {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const target = normalizeHeader(name);
+      const key = keys.find((k) => normalizeHeader(k) === target);
+      if (key) return row[key];
+    }
+    return undefined;
+  };
+
+  const parseText = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    const s = String(val).split("\u0000").join("").trim();
+    return s ? s : null;
+  };
+
+  const parseDate = (val: unknown) => {
+    if (val === null || val === undefined) return null;
+    if (val instanceof Date) return Number.isNaN(val.getTime()) ? null : val;
+    if (typeof val === "number" && Number.isFinite(val)) {
+      const ms = Math.round((val - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(val).split("\u0000").join("").trim();
+    if (!s) return null;
+    const m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
+    if (m) {
+      const dd = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      let yy = parseInt(m[3], 10);
+      if (yy < 100) yy = yy + 2000;
+      const hh = m[4] ? parseInt(m[4], 10) : 0;
+      const mi = m[5] ? parseInt(m[5], 10) : 0;
+      const ss = m[6] ? parseInt(m[6], 10) : 0;
+      const d = new Date(yy, mm - 1, dd, hh, mi, ss, 0);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const first = input.data[0] ?? {};
+  const firstKeys = Object.keys(first).map(normalizeHeader);
+  const hasOt = firstKeys.some((k) => k === "ot" || k === "orden de trabajo" || k === "orden");
+  if (!hasOt) {
+    return {
+      message: "Backlog: no se encontró la columna OT.",
+      count: 0,
+      created: 0,
+      omitted: 0,
+      errors: 1,
+      errorDetails: ["Falta la columna OT (requerida)."]
+    };
+  }
+
+  const parsedRows = input.data
+    .map((r) => ({
+      orderCode: (parseText(getValAny(r, ["OT", "Orden de trabajo", "Orden"])) ?? "").trim(),
+      nivel: parseText(getValAny(r, ["Nivel"])),
+      fechaSolicitud: parseDate(getValAny(r, ["Fecha Solicitud"])),
+      origen: parseText(getValAny(r, ["Origen"])),
+      gestor: parseText(getValAny(r, ["Gestor"])),
+      estado: parseText(getValAny(r, ["Estado"])),
+      subestado: parseText(getValAny(r, ["Subestado"])),
+      nombreIncrementoSait: parseText(getValAny(r, ["Nombre incremento_SAIT", "Nombre incremento SAIT"])),
+      estadoInc: parseText(getValAny(r, ["ESTADO_INC", "Estado INC"])),
+      categoria: parseText(getValAny(r, ["CATEGORIA", "Categoría"])),
+      etInc2: parseText(getValAny(r, ["ET_INC_2", "ET INC 2"])),
+      catg2: parseText(getValAny(r, ["CATG_2", "CATG 2"])),
+      error1: parseText(getValAny(r, ["ERROR 1"])),
+      error22: parseText(getValAny(r, ["ERROR 22"])),
+      ticket: parseText(getValAny(r, ["TICKET"])),
+      etTicket: parseText(getValAny(r, ["ET_TICKET", "ET TICKET"])),
+      dependencia: parseText(getValAny(r, ["DEPENDENCIA"])),
+      etDepe: parseText(getValAny(r, ["ET_DEPE", "ET DEPE"])),
+      responsable: parseText(getValAny(r, ["RESPONSABLE"])),
+      nota: parseText(getValAny(r, ["NOTA"])),
+      fechaReporte: parseDate(getValAny(r, ["FECHA REPORTE", "Fecha Reporte"]))
+    }))
+    .filter((r) => r.orderCode);
+
+  if (parsedRows.length === 0) {
+    return {
+      message: "Backlog: no se encontraron filas válidas (OT vacío).",
+      count: 0,
+      created: 0,
+      omitted: 0,
+      errors: 1,
+      errorDetails: ["No se encontró ningún valor en la columna OT."]
+    };
+  }
+
+  // Cruzar con las órdenes existentes por número de orden (OT -> WorkOrder.code)
+  const codes = Array.from(new Set(parsedRows.map((r) => r.orderCode)));
+  const existingCodes = new Set<string>();
+  for (let i = 0; i < codes.length; i += 1000) {
+    const slice = codes.slice(i, i + 1000);
+    const found = await prisma.workOrder.findMany({ where: { code: { in: slice } }, select: { code: true } });
+    for (const f of found) existingCodes.add(f.code);
+  }
+
+  const matched = parsedRows.filter((r) => existingCodes.has(r.orderCode));
+  const omitted = parsedRows.length - matched.length;
+
+  const chunk = <T,>(arr: T[], size: number) => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  let created = 0;
+  try {
+    for (const group of chunk(matched, 1000)) {
+      if (group.length === 0) continue;
+      await prisma.backlog.createMany({ data: group });
+      created += group.length;
+      if (input.onProgress) {
+        await input.onProgress({ rows: created, success: created, errors: errorCount });
+      }
+    }
+  } catch (err) {
+    errorCount++;
+    const msg = err instanceof Error ? err.message : "UNKNOWN";
+    rowErrors.push(`Error guardando registros de backlog: ${msg}`);
+  }
+
+  // Guardar la categoría dentro de la orden (último valor no vacío por OT)
+  const categoriaByCode = new Map<string, string>();
+  for (const r of matched) {
+    if (r.categoria) categoriaByCode.set(r.orderCode, r.categoria);
+  }
+  for (const [code, categoria] of categoriaByCode) {
+    try {
+      await prisma.workOrder.updateMany({ where: { code }, data: { categoria } });
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      rowErrors.push(`Error actualizando categoría de la orden ${code}: ${msg}`);
+    }
+  }
+
+  return {
+    message: `Backlog: ${created} registros guardados.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}`,
+    count: created,
+    created,
+    omitted,
+    updatedOrders: categoriaByCode.size,
+    errors: errorCount,
+    errorDetails: rowErrors
+  };
+}
+
 async function runJob(jobId: string) {
   const claimed = await claimJob(jobId);
   if (!claimed) return;
@@ -3584,6 +3757,8 @@ async function runJob(jobId: string) {
                 ? await processUnidadesTerritorialesJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : job.type === "COMPONENTES_AT"
                 ? await processComponentesAtJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
+              : job.type === "BACKLOG"
+                ? await processBacklogJob({ data, onProgress: (p) => updateJobProgress(jobId, p) })
               : (() => {
                   throw new Error("UNSUPPORTED_JOB_TYPE");
                 })();
@@ -3690,7 +3865,8 @@ carguesRouter.post(
       "MODELO_CATEGORIA_MB",
       "CIRCUITOS_SUBESTACIONES",
       "UNIDADES_TERRITORIALES",
-      "COMPONENTES_AT"
+      "COMPONENTES_AT",
+      "BACKLOG"
     ]);
     if (asyncTypes.has(type) && isTruthy((req.body as Record<string, unknown>)?.async, true)) {
       const bytes = fs.readFileSync(filePath);
