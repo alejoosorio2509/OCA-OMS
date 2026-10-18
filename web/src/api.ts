@@ -155,6 +155,8 @@ export type WorkOrderDetails = WorkOrderListItem & {
     responsable: string | null;
     nota: string | null;
     fechaReporte: string | null;
+    fechaInicio: string;
+    fechaFin: string | null;
     createdAt: string;
   }[];
 };

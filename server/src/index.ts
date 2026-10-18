@@ -183,11 +183,16 @@ async function ensureCarguesCatalogTables() {
         "responsable" TEXT,
         "nota" TEXT,
         "fechaReporte" TIMESTAMP(3),
+        "fechaInicio" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "fechaFin" TIMESTAMP(3),
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Backlog" ADD COLUMN IF NOT EXISTS "fechaInicio" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Backlog" ADD COLUMN IF NOT EXISTS "fechaFin" TIMESTAMP(3)`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Backlog_orderCode_idx" ON "Backlog"("orderCode")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Backlog_orderCode_nombreIncrementoSait_idx" ON "Backlog"("orderCode","nombreIncrementoSait")`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`WARN: No se pudo asegurar tablas de catálogos de cargues: ${msg}`);

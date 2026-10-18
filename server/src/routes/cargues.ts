@@ -3651,11 +3651,128 @@ async function processBacklogJob(input: {
     return out;
   };
 
+  // Clave de la "novedad" (OT + Nombre incremento_SAIT) y firma de valores para detectar cambios
+  const keyOf = (r: { orderCode: string; nombreIncrementoSait: string | null }) =>
+    `${r.orderCode}\u0000${r.nombreIncrementoSait ?? ""}`;
+  const signatureOf = (r: {
+    nivel: string | null;
+    fechaSolicitud: Date | null;
+    origen: string | null;
+    gestor: string | null;
+    estado: string | null;
+    subestado: string | null;
+    nombreIncrementoSait: string | null;
+    estadoInc: string | null;
+    categoria: string | null;
+    etInc2: string | null;
+    catg2: string | null;
+    error1: string | null;
+    error22: string | null;
+    ticket: string | null;
+    etTicket: string | null;
+    dependencia: string | null;
+    etDepe: string | null;
+    responsable: string | null;
+    nota: string | null;
+    fechaReporte: Date | null;
+  }) =>
+    JSON.stringify([
+      r.nivel,
+      r.fechaSolicitud ? r.fechaSolicitud.toISOString() : null,
+      r.origen,
+      r.gestor,
+      r.estado,
+      r.subestado,
+      r.nombreIncrementoSait,
+      r.estadoInc,
+      r.categoria,
+      r.etInc2,
+      r.catg2,
+      r.error1,
+      r.error22,
+      r.ticket,
+      r.etTicket,
+      r.dependencia,
+      r.etDepe,
+      r.responsable,
+      r.nota,
+      r.fechaReporte ? r.fechaReporte.toISOString() : null
+    ]);
+
+  // Un solo registro por novedad dentro del mismo archivo
+  const incoming = new Map<string, (typeof matched)[number]>();
+  for (const r of matched) incoming.set(keyOf(r), r);
+
+  // Registros abiertos (sin fecha fin) de las órdenes incluidas en el cargue
+  const openByKey = new Map<string, { id: string; signature: string }>();
+  for (const group of chunk(codes, 500)) {
+    const open = await prisma.backlog.findMany({
+      where: { orderCode: { in: group }, fechaFin: null },
+      select: {
+        id: true,
+        orderCode: true,
+        nivel: true,
+        fechaSolicitud: true,
+        origen: true,
+        gestor: true,
+        estado: true,
+        subestado: true,
+        nombreIncrementoSait: true,
+        estadoInc: true,
+        categoria: true,
+        etInc2: true,
+        catg2: true,
+        error1: true,
+        error22: true,
+        ticket: true,
+        etTicket: true,
+        dependencia: true,
+        etDepe: true,
+        responsable: true,
+        nota: true,
+        fechaReporte: true
+      }
+    });
+    for (const o of open) openByKey.set(keyOf(o), { id: o.id, signature: signatureOf(o) });
+  }
+
+  const now = new Date();
+  const toCreate: (typeof matched)[number][] = [];
+  const toClose: string[] = [];
+  let closedOnChange = 0;
+
+  for (const [key, row] of incoming) {
+    const current = openByKey.get(key);
+    if (!current) {
+      toCreate.push(row);
+      continue;
+    }
+    if (current.signature === signatureOf(row)) continue; // fila igual -> no duplicar
+    toClose.push(current.id); // cambió -> cerrar el anterior y abrir uno nuevo
+    toCreate.push(row);
+    closedOnChange++;
+  }
+
+  // Novedades que ya no vienen en el archivo -> cerrarlas
+  let closedMissing = 0;
+  for (const [key, current] of openByKey) {
+    if (incoming.has(key)) continue;
+    toClose.push(current.id);
+    closedMissing++;
+  }
+
+  const closed = closedOnChange + closedMissing;
   let created = 0;
   try {
-    for (const group of chunk(matched, 1000)) {
+    for (const group of chunk(toClose, 1000)) {
       if (group.length === 0) continue;
-      await prisma.backlog.createMany({ data: group });
+      await prisma.backlog.updateMany({ where: { id: { in: group } }, data: { fechaFin: now } });
+    }
+    for (const group of chunk(toCreate, 1000)) {
+      if (group.length === 0) continue;
+      await prisma.backlog.createMany({
+        data: group.map((r) => ({ ...r, fechaInicio: now }))
+      });
       created += group.length;
       if (input.onProgress) {
         await input.onProgress({ rows: created, success: created, errors: errorCount });
@@ -3752,9 +3869,10 @@ async function processBacklogJob(input: {
   }
 
   return {
-    message: `Backlog: ${created} registros guardados.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
+    message: `Backlog: ${created} novedades registradas${closed > 0 ? `, ${closed} cerradas` : ""}.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
     count: created,
     created,
+    closed,
     omitted,
     updatedOrders: categoriaByCode.size,
     pausedOrders,

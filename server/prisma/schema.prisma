@@ -405,8 +405,11 @@ model Backlog {
   responsable          String?
   nota                 String?
   fechaReporte         DateTime?
+  fechaInicio          DateTime  @default(now())
+  fechaFin             DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   @@index([orderCode])
+  @@index([orderCode, nombreIncrementoSait])
 }
