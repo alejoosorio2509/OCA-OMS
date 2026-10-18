@@ -889,9 +889,15 @@ async function processActualizacionCsvFile(input: {
         select: { id: true, status: true }
       });
 
+      // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
+      // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
+      // incluso si la orden tiene novedades abiertas.
+      const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
       let lockStatus = false;
       if (existing) {
-        if (existing.status === "ON_HOLD") {
+        if (existing.status === "DEVUELTA" && finalStatuses.includes(status)) {
+          lockStatus = false;
+        } else if (existing.status === "ON_HOLD") {
           lockStatus = true;
         } else {
           const openNovedades = await prisma.novedad.count({
@@ -1181,9 +1187,15 @@ async function processActualizacion(input: {
         select: { id: true, status: true }
       });
 
+      // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
+      // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
+      // incluso si la orden tiene novedades abiertas.
+      const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
       let lockStatus = false;
       if (existing) {
-        if (existing.status === "ON_HOLD") {
+        if (existing.status === "DEVUELTA" && finalStatuses.includes(status)) {
+          lockStatus = false;
+        } else if (existing.status === "ON_HOLD") {
           lockStatus = true;
         } else {
           const openNovedades = await prisma.novedad.count({
@@ -1316,41 +1328,52 @@ async function processDevolucionesJob(input: {
       if (isNaN(orderNum) || orderNum <= 3000000) continue;
 
       if (estadoSecundario === "DEVUELTA") {
-        const now = new Date();
-        const order = await prisma.workOrder.upsert({
+        // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
+        const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
+        const existingOrder = await prisma.workOrder.findUnique({
           where: { code },
-          update: {
-            status: "DEVUELTA",
-            estadoSecundario: "DEVUELTA",
-            updatedAt: now
-          },
-          create: {
-            code,
-            title: `Orden ${code}`,
-            description: "",
-            status: "DEVUELTA",
-            estadoSecundario: "DEVUELTA",
-            createdById: input.userId,
-            lastStatusChangeAt: now
-          }
+          select: { status: true }
         });
-
-        const lastHistory = await prisma.workOrderHistory.findFirst({
-          where: { workOrderId: order.id },
-          orderBy: { changedAt: "desc" }
-        });
-
-        if (!lastHistory || lastHistory.toStatus !== "DEVUELTA") {
-          await prisma.workOrderHistory.create({
-            data: {
-              workOrderId: order.id,
-              toStatus: "DEVUELTA",
-              note: "Orden marcada como DEVUELTA desde el cargue de devoluciones",
-              changedById: input.userId
+        if (existingOrder && finalStatuses.includes(existingOrder.status)) {
+          writeLog(`INFO: Orden ${code} no se marca DEVUELTA porque está en estado ${existingOrder.status}`);
+          ignoredCount++;
+        } else {
+          const now = new Date();
+          const order = await prisma.workOrder.upsert({
+            where: { code },
+            update: {
+              status: "DEVUELTA",
+              estadoSecundario: "DEVUELTA",
+              updatedAt: now
+            },
+            create: {
+              code,
+              title: `Orden ${code}`,
+              description: "",
+              status: "DEVUELTA",
+              estadoSecundario: "DEVUELTA",
+              createdById: input.userId,
+              lastStatusChangeAt: now
             }
           });
+
+          const lastHistory = await prisma.workOrderHistory.findFirst({
+            where: { workOrderId: order.id },
+            orderBy: { changedAt: "desc" }
+          });
+
+          if (!lastHistory || lastHistory.toStatus !== "DEVUELTA") {
+            await prisma.workOrderHistory.create({
+              data: {
+                workOrderId: order.id,
+                toStatus: "DEVUELTA",
+                note: "Orden marcada como DEVUELTA desde el cargue de devoluciones",
+                changedById: input.userId
+              }
+            });
+          }
+          deletedCount++;
         }
-        deletedCount++;
       }
 
       const fechaDevolucionVal = getVal("Fecha Devolución") || getVal("Fecha Devolucion");
@@ -4155,46 +4178,57 @@ carguesRouter.post(
 
           // Marcar como "DEVUELTA" si el archivo lo indica
           if (estadoSecundario === "DEVUELTA") {
-            const now = new Date();
-            const order = await prisma.workOrder.upsert({
+            // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
+            const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
+            const existingOrder = await prisma.workOrder.findUnique({
               where: { code },
-              update: {
-                status: "DEVUELTA",
-                estadoSecundario: "DEVUELTA",
-                updatedAt: now
-              },
-              create: {
-                code,
-                title: `Orden ${code}`,
-                description: "",
-                status: "DEVUELTA",
-                estadoSecundario: "DEVUELTA",
-                createdById: userId,
-                lastStatusChangeAt: now
-              }
+              select: { status: true }
             });
-
-            // Solo crear historial si no estaba ya en estado DEVUELTA
-            const lastHistory = await prisma.workOrderHistory.findFirst({
-              where: { workOrderId: order.id },
-              orderBy: { changedAt: "desc" }
-            });
-
-            if (!lastHistory || lastHistory.toStatus !== "DEVUELTA") {
-              await prisma.workOrderHistory.create({
-                data: {
-                  workOrderId: order.id,
-                  toStatus: "DEVUELTA",
-                  note: "Orden marcada como DEVUELTA desde el cargue de devoluciones",
-                  changedById: userId
+            if (existingOrder && finalStatuses.includes(existingOrder.status)) {
+              writeLog(`INFO: Orden ${code} no se marca DEVUELTA porque está en estado ${existingOrder.status}`);
+              ignoredCount++;
+            } else {
+              const now = new Date();
+              const order = await prisma.workOrder.upsert({
+                where: { code },
+                update: {
+                  status: "DEVUELTA",
+                  estadoSecundario: "DEVUELTA",
+                  updatedAt: now
+                },
+                create: {
+                  code,
+                  title: `Orden ${code}`,
+                  description: "",
+                  status: "DEVUELTA",
+                  estadoSecundario: "DEVUELTA",
+                  createdById: userId,
+                  lastStatusChangeAt: now
                 }
               });
-              writeLog(`INFO: Orden ${code} marcada como DEVUELTA (nuevo registro de historial)`);
-            } else {
-              writeLog(`INFO: Orden ${code} ya estaba marcada como DEVUELTA, omitiendo duplicado en historial`);
+
+              // Solo crear historial si no estaba ya en estado DEVUELTA
+              const lastHistory = await prisma.workOrderHistory.findFirst({
+                where: { workOrderId: order.id },
+                orderBy: { changedAt: "desc" }
+              });
+
+              if (!lastHistory || lastHistory.toStatus !== "DEVUELTA") {
+                await prisma.workOrderHistory.create({
+                  data: {
+                    workOrderId: order.id,
+                    toStatus: "DEVUELTA",
+                    note: "Orden marcada como DEVUELTA desde el cargue de devoluciones",
+                    changedById: userId
+                  }
+                });
+                writeLog(`INFO: Orden ${code} marcada como DEVUELTA (nuevo registro de historial)`);
+              } else {
+                writeLog(`INFO: Orden ${code} ya estaba marcada como DEVUELTA, omitiendo duplicado en historial`);
+              }
+
+              deletedCount++;
             }
-            
-            deletedCount++;
           }
 
           // Continuar con el análisis de fechas para el descuento (incluso si está devuelta)
