@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth";
-import { getGestoresSummary, listWorkOrders, type GestorSummary, type WorkOrderListItem } from "../api";
+import { getGestoresSummary, listWorkOrders, type GestorSummary, type WorkOrderListItem, type WorkOrderStatus } from "../api";
 import "./ProgramacionPage.css";
 import { Link } from "react-router-dom";
 
@@ -41,7 +41,15 @@ export function ProgramacionPage() {
     setSelectedGestor(gestorNombre);
     setLoadingOrders(true);
     try {
-      const data = await listWorkOrders(token!, { gestor: gestorNombre, pageSize: 100 });
+      const activeStatuses: WorkOrderStatus[] = [
+        "DRAFT", "CREATED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD", 
+        "COMPLETED", "CANCELLED", "EXCLUDED", "ASIGNADA", "EN_EJECUCION", "DEVUELTA"
+      ];
+      const data = await listWorkOrders(token!, { 
+        gestor: gestorNombre, 
+        pageSize: 100,
+        status: activeStatuses
+      });
       setGestorOrders(data.items);
     } catch (e) {
       console.error(e);

@@ -452,9 +452,14 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
 }
 
 workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+  const excludedStatuses: WorkOrderStatus[] = ["CERRADA", "FACTURADA", "GESTIONADA"];
+  
   const gestores = await prisma.workOrder.groupBy({
     by: ["gestorNombre", "gestorCc"],
-    where: { gestorNombre: { not: null } },
+    where: { 
+      gestorNombre: { not: null },
+      status: { notIn: excludedStatuses }
+    },
     _count: { _all: true }
   });
 
