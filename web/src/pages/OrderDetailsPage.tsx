@@ -227,12 +227,9 @@ export function OrderDetailsPage() {
     }
   }
 
-  if (loading) return <div className="card">Cargando...</div>;
-  if (error) return <div className="card error">{error}</div>;
-  if (!order) return <div className="card">No se encontró la orden.</div>;
-  const canExclude = user?.role === "ADMIN";
-
   const historyRows = useMemo(() => {
+    if (!order) return [];
+
     const recorridoItems = order.history.filter(isRecorridoHistoryItem);
     const nonRecorridoItems = order.history.filter((h) => !isRecorridoHistoryItem(h));
 
@@ -261,6 +258,11 @@ export function OrderDetailsPage() {
       ...after
     ];
   }, [order]);
+
+  if (loading) return <div className="card">Cargando...</div>;
+  if (error) return <div className="card error">{error}</div>;
+  if (!order) return <div className="card">No se encontró la orden.</div>;
+  const canExclude = user?.role === "ADMIN";
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
