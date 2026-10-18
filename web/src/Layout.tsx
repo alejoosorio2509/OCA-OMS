@@ -5,6 +5,7 @@ import "./layout.css";
 export function Layout() {
   const { user, logout } = useAuth();
   const canOrders = user?.role === "ADMIN" || !!user?.canOrders;
+  const canProgramacion = user?.role === "ADMIN" || !!user?.canProgramacion;
   const canLevantamiento = user?.role === "ADMIN" || !!user?.canLevantamiento;
   const canSolCdsNuevos = user?.role === "ADMIN" || !!user?.canSolCdsNuevos;
   const canCargues = user?.role === "ADMIN" || !!user?.canCargues;
@@ -34,7 +35,7 @@ export function Layout() {
           {canSolCdsNuevos ? <NavLink to="/sol-cds-nuevos">Sol. CDS Nuevos</NavLink> : null}
           {canCargues ? <NavLink to="/componentes-at">Componentes AT</NavLink> : null}
           {canCargues ? <NavLink to="/cargues">Cargues</NavLink> : null}
-          {canOrders ? <NavLink to="/programacion">Programación</NavLink> : null}
+          {canProgramacion ? <NavLink to="/programacion">Programación</NavLink> : null}
           {canExportes ? <NavLink to="/exportes">Exportes</NavLink> : null}
           {canUsers ? <NavLink to="/users">Usuarios</NavLink> : null}
         </nav>

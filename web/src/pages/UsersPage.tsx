@@ -37,6 +37,7 @@ export function UsersPage() {
       name: string;
       role: UserRole;
       canOrders?: boolean;
+      canProgramacion?: boolean;
       canLevantamiento?: boolean;
       canSolCdsNuevos?: boolean;
       canCargues?: boolean;
@@ -54,6 +55,7 @@ export function UsersPage() {
   const [role, setRole] = useState<UserRole>("USER");
   const [showPassword, setShowPassword] = useState(false);
   const [canOrders, setCanOrders] = useState(true);
+  const [canProgramacion, setCanProgramacion] = useState(true);
   const [canLevantamiento, setCanLevantamiento] = useState(true);
   const [canSolCdsNuevos, setCanSolCdsNuevos] = useState(true);
   const [canCargues, setCanCargues] = useState(true);
@@ -65,6 +67,7 @@ export function UsersPage() {
   const modulesLabel = (u: {
     role: UserRole;
     canOrders?: boolean;
+    canProgramacion?: boolean;
     canLevantamiento?: boolean;
     canSolCdsNuevos?: boolean;
     canCargues?: boolean;
@@ -74,6 +77,7 @@ export function UsersPage() {
     if (u.role === "ADMIN") return "Admin (todos)";
     const parts: string[] = [];
     if (u.canOrders) parts.push("Actualización");
+    if (u.canProgramacion) parts.push("Programación");
     if (u.canLevantamiento) parts.push("Levantamiento");
     if (u.canSolCdsNuevos) parts.push("Sol. CDS Nuevos");
     if (u.canCargues) parts.push("Cargues");
@@ -89,6 +93,7 @@ export function UsersPage() {
       name: string;
       role: UserRole;
       canOrders: boolean;
+      canProgramacion: boolean;
       canLevantamiento: boolean;
       canSolCdsNuevos: boolean;
       canCargues: boolean;
@@ -134,6 +139,7 @@ export function UsersPage() {
         password,
         role,
         canOrders,
+        canProgramacion,
         canLevantamiento,
         canSolCdsNuevos,
         canCargues,
@@ -146,6 +152,7 @@ export function UsersPage() {
       setRole("USER");
       setShowPassword(false);
       setCanOrders(true);
+      setCanProgramacion(true);
       setCanLevantamiento(true);
       setCanSolCdsNuevos(true);
       setCanCargues(true);
@@ -215,6 +222,10 @@ export function UsersPage() {
                   Actualización
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input type="checkbox" checked={canProgramacion} onChange={(e) => setCanProgramacion(e.target.checked)} />
+                  Programación
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
                     checked={canLevantamiento}
@@ -262,6 +273,7 @@ export function UsersPage() {
                 <th>Email</th>
                 <th>Rol</th>
                 <th>Actualización</th>
+                <th>Programación</th>
                 <th>Levantamiento</th>
                 <th>Sol. CDS Nuevos</th>
                 <th>Cargues</th>
@@ -362,6 +374,26 @@ export function UsersPage() {
                         } catch (err) {
                           const data = getApiErrorData(err);
                           const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Órdenes.";
+                          setError(msg);
+                          await refresh();
+                        }
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={u.canProgramacion ?? false}
+                      onChange={async (e) => {
+                        const next = e.target.checked;
+                        setError(null);
+                        patchItem(u.id, { canProgramacion: next });
+                        try {
+                          await updateUser(token!, u.id, { canProgramacion: next });
+                          await refresh();
+                        } catch (err) {
+                          const data = getApiErrorData(err);
+                          const msg = typeof data?.error === "string" ? data.error : "No se pudo actualizar el permiso de Programación.";
                           setError(msg);
                           await refresh();
                         }

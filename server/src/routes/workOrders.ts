@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { env } from "../env.js";
-import { requireAdmin, requireAuth, requirePermission } from "../auth.js";
+import { requireAdmin, requireAnyPermission, requireAuth, requirePermission } from "../auth.js";
 import type { Prisma, WorkOrderStatus } from "@prisma/client";
 import { canTransition } from "../workOrderStateMachine.js";
 import { createClient } from "@supabase/supabase-js";
@@ -451,7 +451,7 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
   return "green";
 }
 
-workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("PROGRAMACION"), async (req, res) => {
   const excludedStatuses: WorkOrderStatus[] = ["CERRADA", "FACTURADA", "GESTIONADA"];
   const grouped = await prisma.workOrder.groupBy({
     by: ["gestorNombre", "gestorCc", "status"],
@@ -873,7 +873,7 @@ workOrdersRouter.post("/purge-statuses", requireAuth, requireAdmin, async (req, 
   res.json({ statuses, matched: total, deleted: deleted.count, sample: matches });
 });
 
-workOrdersRouter.get("/", requireAuth, requirePermission("ORDERS"), async (req, res) => {
+workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMACION"), async (req, res) => {
   const sortKeySchema = z.enum([
     "code",
     "status",

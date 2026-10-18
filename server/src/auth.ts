@@ -23,6 +23,7 @@ declare module "express-serve-static-core" {
     access?: {
       role: "ADMIN" | "USER";
       canOrders: boolean;
+      canProgramacion: boolean;
       canLevantamiento: boolean;
       canSolCdsNuevos: boolean;
       canCargues: boolean;
@@ -58,6 +59,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 export type PermissionKey =
   | "ORDERS"
+  | "PROGRAMACION"
   | "LEVANTAMIENTO"
   | "SOL_CDS_NUEVOS"
   | "CARGUES"
@@ -72,6 +74,7 @@ async function loadAccess(req: Request) {
     select: {
       role: true,
       canOrders: true,
+      canProgramacion: true,
       canLevantamiento: true,
       canSolCdsNuevos: true,
       canCargues: true,
@@ -102,6 +105,7 @@ export function requirePermission(permission: PermissionKey) {
 
     const ok =
       (permission === "ORDERS" && access.canOrders) ||
+      (permission === "PROGRAMACION" && access.canProgramacion) ||
       (permission === "LEVANTAMIENTO" && access.canLevantamiento) ||
       (permission === "SOL_CDS_NUEVOS" && access.canSolCdsNuevos) ||
       (permission === "CARGUES" && access.canCargues) ||
@@ -112,6 +116,44 @@ export function requirePermission(permission: PermissionKey) {
       res.status(403).json({ error: "FORBIDDEN" });
       return;
     }
+    next();
+  };
+}
+
+export function requireAnyPermission(...permissions: PermissionKey[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.auth) {
+      res.status(401).json({ error: "NO_AUTH" });
+      return;
+    }
+    if (req.auth.role === "ADMIN") {
+      next();
+      return;
+    }
+
+    const access = await loadAccess(req);
+    if (!access) {
+      res.status(401).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    const hasPermission = permissions.some((permission) => {
+      return (
+        (permission === "ORDERS" && access.canOrders) ||
+        (permission === "PROGRAMACION" && access.canProgramacion) ||
+        (permission === "LEVANTAMIENTO" && access.canLevantamiento) ||
+        (permission === "SOL_CDS_NUEVOS" && access.canSolCdsNuevos) ||
+        (permission === "CARGUES" && access.canCargues) ||
+        (permission === "EXPORTES" && access.canExportes) ||
+        (permission === "USERS" && access.canUsers)
+      );
+    });
+
+    if (!hasPermission) {
+      res.status(403).json({ error: "FORBIDDEN" });
+      return;
+    }
+
     next();
   };
 }

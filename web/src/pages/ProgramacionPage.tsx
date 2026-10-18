@@ -49,8 +49,10 @@ function activeLoadCount(summary: GestorSummary) {
 }
 
 export function ProgramacionPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
+  const canProgramacion = user?.role === "ADMIN" || !!user?.canProgramacion;
+  const canOrders = user?.role === "ADMIN" || !!user?.canOrders;
   const [summaries, setSummaries] = useState<GestorSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +195,7 @@ export function ProgramacionPage() {
     return filtered;
   }, [gestorOrders, orderSearch, orderStatusFilter, orderSortKey, orderSortDir]);
 
+  if (!canProgramacion) return <div className="card">No autorizado.</div>;
   if (loading) return <div className="programacion-page">Cargando...</div>;
   if (error) return <div className="programacion-page error">{error}</div>;
 
@@ -325,14 +328,18 @@ export function ProgramacionPage() {
                     ) : filteredGestorOrders.map((o) => (
                       <tr key={o.id} className="order-row">
                         <td>
-                          <button
-                            type="button"
-                            className="order-link-button"
-                            onClick={() => navigate(`/orders/${o.id}`)}
-                            title="Ver detalle de la orden"
-                          >
+                          {canOrders ? (
+                            <button
+                              type="button"
+                              className="order-link-button"
+                              onClick={() => navigate(`/orders/${o.id}`)}
+                              title="Ver detalle de la orden"
+                            >
+                              <strong className="order-code">{o.code}</strong>
+                            </button>
+                          ) : (
                             <strong className="order-code">{o.code}</strong>
-                          </button>
+                          )}
                         </td>
                         <td>{o.title}</td>
                         <td>

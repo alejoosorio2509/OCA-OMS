@@ -28,6 +28,7 @@ async function ensureLevantamientoEntregaColumns() {
 
 async function ensureUserPermissionColumns() {
   try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canProgramacion" BOOLEAN NOT NULL DEFAULT true');
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canLevantamiento" BOOLEAN NOT NULL DEFAULT true');
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canSolCdsNuevos" BOOLEAN NOT NULL DEFAULT true');
   } catch (err) {
