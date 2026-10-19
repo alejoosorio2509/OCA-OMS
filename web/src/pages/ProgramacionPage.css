@@ -368,3 +368,62 @@
   padding: 0;
   cursor: pointer;
 }
+
+/* Consolidated orders table */
+.consolidated-section {
+  margin-top: 28px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.consolidated-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 12px;
+}
+
+.consolidated-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.consolidated-header p {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.consolidated-section .table-container {
+  overflow-x: auto;
+}
+
+.consolidated-section .table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.consolidated-section .table th,
+.consolidated-section .table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eef1f5;
+  white-space: nowrap;
+}
+
+.consolidated-section .table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.consolidated-section .order-code {
+  color: #1565c0;
+  text-decoration: underline;
+}
+

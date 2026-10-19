@@ -48,6 +48,43 @@ function activeLoadCount(summary: GestorSummary) {
   );
 }
 
+const ACTIVE_STATUSES: WorkOrderStatus[] = ["ASIGNADA", "ASSIGNED", "EN_EJECUCION", "IN_PROGRESS"];
+
+type OrderSortKey = "code" | "title" | "status" | "gestor" | "assignedAt" | "diasGestion" | "cumplimiento";
+
+const cumplimientoRank = (value: WorkOrderListItem["cumplimiento"]) => {
+  if (value === "Cumple") return 1;
+  if (value === "No cumple") return 2;
+  return 3;
+};
+
+function compareOrders(a: WorkOrderListItem, b: WorkOrderListItem, key: OrderSortKey): number {
+  switch (key) {
+    case "code":
+      return a.code.localeCompare(b.code, undefined, { numeric: true });
+    case "title":
+      return a.title.localeCompare(b.title);
+    case "status":
+      return statusLabels[a.status].localeCompare(statusLabels[b.status]);
+    case "gestor":
+      return (a.gestorNombre ?? "").localeCompare(b.gestorNombre ?? "");
+    case "assignedAt":
+      return (a.assignedAt ? new Date(a.assignedAt).getTime() : 0) - (b.assignedAt ? new Date(b.assignedAt).getTime() : 0);
+    case "diasGestion":
+      return (a.diasGestion ?? -999999) - (b.diasGestion ?? -999999);
+    case "cumplimiento":
+      return cumplimientoRank(a.cumplimiento) - cumplimientoRank(b.cumplimiento);
+  }
+}
+
+function sortOrders(orders: WorkOrderListItem[], key: OrderSortKey, dir: "asc" | "desc") {
+  return [...orders].sort((a, b) => {
+    let result = compareOrders(a, b, key);
+    if (result === 0) result = a.code.localeCompare(b.code, undefined, { numeric: true });
+    return dir === "asc" ? result : -result;
+  });
+}
+
 export function ProgramacionPage() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -64,12 +101,31 @@ export function ProgramacionPage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState<"" | WorkOrderStatus>("");
   const [gestorSortMode, setGestorSortMode] = useState<"alpha" | "activeLoad">("alpha");
   const [gestorSortDir, setGestorSortDir] = useState<"asc" | "desc">("asc");
-  const [orderSortKey, setOrderSortKey] = useState<"code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento">("assignedAt");
+  const [orderSortKey, setOrderSortKey] = useState<OrderSortKey>("assignedAt");
   const [orderSortDir, setOrderSortDir] = useState<"asc" | "desc">("desc");
+
+  const [allOrders, setAllOrders] = useState<WorkOrderListItem[]>([]);
+  const [loadingAllOrders, setLoadingAllOrders] = useState(true);
+  const [allSearch, setAllSearch] = useState("");
+  const [allSortKey, setAllSortKey] = useState<OrderSortKey>("assignedAt");
+  const [allSortDir, setAllSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     loadSummary();
+    loadAllOrders();
   }, [token]);
+
+  async function loadAllOrders() {
+    try {
+      setLoadingAllOrders(true);
+      const data = await listWorkOrders(token!, { status: ACTIVE_STATUSES, pageSize: 500 });
+      setAllOrders(data.items);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingAllOrders(false);
+    }
+  }
 
   async function loadSummary() {
     try {
@@ -131,7 +187,7 @@ export function ProgramacionPage() {
   const availableOrderStatuses = Array.from(new Set(gestorOrders.map((order) => order.status)))
     .sort((a, b) => statusLabels[a].localeCompare(statusLabels[b]));
 
-  const handleOrderSort = (key: "code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento") => {
+  const handleOrderSort = (key: OrderSortKey) => {
     if (orderSortKey === key) {
       setOrderSortDir((current) => (current === "asc" ? "desc" : "asc"));
       return;
@@ -140,9 +196,23 @@ export function ProgramacionPage() {
     setOrderSortDir(key === "assignedAt" || key === "diasGestion" ? "desc" : "asc");
   };
 
-  const sortIndicator = (key: "code" | "title" | "status" | "assignedAt" | "diasGestion" | "cumplimiento") => {
+  const sortIndicator = (key: OrderSortKey) => {
     if (orderSortKey !== key) return "↕";
     return orderSortDir === "asc" ? "↑" : "↓";
+  };
+
+  const handleAllSort = (key: OrderSortKey) => {
+    if (allSortKey === key) {
+      setAllSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setAllSortKey(key);
+    setAllSortDir(key === "assignedAt" || key === "diasGestion" ? "desc" : "asc");
+  };
+
+  const allSortIndicator = (key: OrderSortKey) => {
+    if (allSortKey !== key) return "↕";
+    return allSortDir === "asc" ? "↑" : "↓";
   };
 
   const filteredGestorOrders = useMemo(() => {
@@ -155,45 +225,22 @@ export function ProgramacionPage() {
       return matchesSearch && matchesStatus;
     });
 
-    const cumplimientoRank = (value: WorkOrderListItem["cumplimiento"]) => {
-      if (value === "Cumple") return 1;
-      if (value === "No cumple") return 2;
-      return 3;
-    };
+    return sortOrders(filtered, orderSortKey, orderSortDir);
+  }, [gestorOrders, orderSearch, orderStatusFilter, orderSortKey, orderSortDir]);
 
-    filtered.sort((a, b) => {
-      let result = 0;
-
-      switch (orderSortKey) {
-        case "code":
-          result = a.code.localeCompare(b.code, undefined, { numeric: true });
-          break;
-        case "title":
-          result = a.title.localeCompare(b.title);
-          break;
-        case "status":
-          result = statusLabels[a.status].localeCompare(statusLabels[b.status]);
-          break;
-        case "assignedAt":
-          result = (a.assignedAt ? new Date(a.assignedAt).getTime() : 0) - (b.assignedAt ? new Date(b.assignedAt).getTime() : 0);
-          break;
-        case "diasGestion":
-          result = (a.diasGestion ?? -999999) - (b.diasGestion ?? -999999);
-          break;
-        case "cumplimiento":
-          result = cumplimientoRank(a.cumplimiento) - cumplimientoRank(b.cumplimiento);
-          break;
-      }
-
-      if (result === 0) {
-        result = a.code.localeCompare(b.code, undefined, { numeric: true });
-      }
-
-      return orderSortDir === "asc" ? result : -result;
+  const consolidatedOrders = useMemo(() => {
+    const term = allSearch.trim().toLowerCase();
+    const filtered = allOrders.filter((order) => {
+      if (!term) return true;
+      return (
+        order.code.toLowerCase().includes(term) ||
+        order.title.toLowerCase().includes(term) ||
+        (order.gestorNombre ?? "").toLowerCase().includes(term)
+      );
     });
 
-    return filtered;
-  }, [gestorOrders, orderSearch, orderStatusFilter, orderSortKey, orderSortDir]);
+    return sortOrders(filtered, allSortKey, allSortDir);
+  }, [allOrders, allSearch, allSortKey, allSortDir]);
 
   if (!canProgramacion) return <div className="card">No autorizado.</div>;
   if (loading) return <div className="programacion-page">Cargando...</div>;
@@ -262,6 +309,83 @@ export function ProgramacionPage() {
           </div>
         ))}
       </div>
+
+      <section className="consolidated-section">
+        <div className="consolidated-header">
+          <div>
+            <h2>Órdenes Asignadas + En ejecución</h2>
+            <p>Detalle consolidado de todos los gestores.</p>
+          </div>
+          <input
+            value={allSearch}
+            onChange={(e) => setAllSearch(e.target.value)}
+            placeholder="Buscar por OT, título o gestor..."
+            className="drawer-search"
+          />
+        </div>
+
+        {loadingAllOrders ? (
+          <p>Cargando órdenes...</p>
+        ) : consolidatedOrders.length === 0 ? (
+          <p>No hay órdenes asignadas o en ejecución.</p>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("gestor")}>Gestor <span>{allSortIndicator("gestor")}</span></button></th>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("code")}>OT <span>{allSortIndicator("code")}</span></button></th>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("title")}>Título <span>{allSortIndicator("title")}</span></button></th>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("status")}>Estado <span>{allSortIndicator("status")}</span></button></th>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("assignedAt")}>Asignación <span>{allSortIndicator("assignedAt")}</span></button></th>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("diasGestion")}>Días Gestión <span>{allSortIndicator("diasGestion")}</span></button></th>
+                  <th><button type="button" className="panel-sort-button" onClick={() => handleAllSort("cumplimiento")}>Cumplimiento <span>{allSortIndicator("cumplimiento")}</span></button></th>
+                </tr>
+              </thead>
+              <tbody>
+                {consolidatedOrders.map((o) => (
+                  <tr key={o.id} className="order-row">
+                    <td>{o.gestorNombre ?? "—"}</td>
+                    <td>
+                      {canOrders ? (
+                        <button
+                          type="button"
+                          className="order-link-button"
+                          onClick={() => navigate(`/orders/${o.id}`)}
+                          title="Ver detalle de la orden"
+                        >
+                          <strong className="order-code">{o.code}</strong>
+                        </button>
+                      ) : (
+                        <strong className="order-code">{o.code}</strong>
+                      )}
+                    </td>
+                    <td>{o.title}</td>
+                    <td>
+                      <span className={`badge-status-box ${statusClassName(o.status)}`}>
+                        {statusLabels[o.status]}
+                      </span>
+                    </td>
+                    <td>{o.assignedAt ? new Date(o.assignedAt).toLocaleDateString() : "—"}</td>
+                    <td>
+                      <span className="days-count">
+                        {o.diasGestion ?? 0} {Math.abs(o.diasGestion ?? 0) === 1 ? "día" : "días"}
+                      </span>
+                    </td>
+                    <td>
+                      {o.cumplimiento ? (
+                        <span className={`compliance-tag ${o.cumplimiento.toLowerCase().replace(" ", "-")}`}>
+                          {o.cumplimiento}
+                        </span>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {selectedGestor && (
         <div className="orders-panel-overlay" onClick={() => setSelectedGestor(null)}>
