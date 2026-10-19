@@ -50,6 +50,8 @@ function activeLoadCount(summary: GestorSummary) {
 
 const ACTIVE_STATUSES: WorkOrderStatus[] = ["ASIGNADA", "ASSIGNED", "EN_EJECUCION", "IN_PROGRESS"];
 
+const ALL_PAGE_SIZE = 20;
+
 type OrderSortKey = "code" | "title" | "status" | "gestor" | "assignedAt" | "diasGestion" | "cumplimiento";
 
 const cumplimientoRank = (value: WorkOrderListItem["cumplimiento"]) => {
@@ -107,19 +109,38 @@ export function ProgramacionPage() {
   const [allOrders, setAllOrders] = useState<WorkOrderListItem[]>([]);
   const [loadingAllOrders, setLoadingAllOrders] = useState(true);
   const [allSearch, setAllSearch] = useState("");
+  const [allSearchDebounced, setAllSearchDebounced] = useState("");
   const [allSortKey, setAllSortKey] = useState<OrderSortKey>("assignedAt");
   const [allSortDir, setAllSortDir] = useState<"asc" | "desc">("desc");
+  const [allPage, setAllPage] = useState(1);
+  const [allTotal, setAllTotal] = useState(0);
 
   useEffect(() => {
     loadSummary();
-    loadAllOrders();
   }, [token]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAllSearchDebounced(allSearch), 400);
+    return () => clearTimeout(timer);
+  }, [allSearch]);
+
+  useEffect(() => {
+    loadAllOrders();
+  }, [token, allSearchDebounced, allSortKey, allSortDir, allPage]);
 
   async function loadAllOrders() {
     try {
       setLoadingAllOrders(true);
-      const data = await listWorkOrders(token!, { status: ACTIVE_STATUSES, pageSize: 500 });
+      const data = await listWorkOrders(token!, {
+        status: ACTIVE_STATUSES,
+        page: allPage,
+        pageSize: ALL_PAGE_SIZE,
+        search: allSearchDebounced.trim() || undefined,
+        sortKey: allSortKey === "gestor" ? "gestorNombre" : allSortKey,
+        sortDir: allSortDir
+      });
       setAllOrders(data.items);
+      setAllTotal(data.total);
     } catch (e) {
       console.error(e);
     } finally {
@@ -202,6 +223,7 @@ export function ProgramacionPage() {
   };
 
   const handleAllSort = (key: OrderSortKey) => {
+    setAllPage(1);
     if (allSortKey === key) {
       setAllSortDir((current) => (current === "asc" ? "desc" : "asc"));
       return;
@@ -228,19 +250,7 @@ export function ProgramacionPage() {
     return sortOrders(filtered, orderSortKey, orderSortDir);
   }, [gestorOrders, orderSearch, orderStatusFilter, orderSortKey, orderSortDir]);
 
-  const consolidatedOrders = useMemo(() => {
-    const term = allSearch.trim().toLowerCase();
-    const filtered = allOrders.filter((order) => {
-      if (!term) return true;
-      return (
-        order.code.toLowerCase().includes(term) ||
-        order.title.toLowerCase().includes(term) ||
-        (order.gestorNombre ?? "").toLowerCase().includes(term)
-      );
-    });
-
-    return sortOrders(filtered, allSortKey, allSortDir);
-  }, [allOrders, allSearch, allSortKey, allSortDir]);
+  const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PAGE_SIZE));
 
   if (!canProgramacion) return <div className="card">No autorizado.</div>;
   if (loading) return <div className="programacion-page">Cargando...</div>;
@@ -318,7 +328,10 @@ export function ProgramacionPage() {
           </div>
           <input
             value={allSearch}
-            onChange={(e) => setAllSearch(e.target.value)}
+            onChange={(e) => {
+              setAllSearch(e.target.value);
+              setAllPage(1);
+            }}
             placeholder="Buscar por OT, título o gestor..."
             className="drawer-search"
           />
@@ -326,7 +339,7 @@ export function ProgramacionPage() {
 
         {loadingAllOrders ? (
           <p>Cargando órdenes...</p>
-        ) : consolidatedOrders.length === 0 ? (
+        ) : allOrders.length === 0 ? (
           <p>No hay órdenes asignadas o en ejecución.</p>
         ) : (
           <div className="table-container">
@@ -343,7 +356,7 @@ export function ProgramacionPage() {
                 </tr>
               </thead>
               <tbody>
-                {consolidatedOrders.map((o) => (
+                {allOrders.map((o) => (
                   <tr key={o.id} className="order-row">
                     <td>{o.gestorNombre ?? "—"}</td>
                     <td>
@@ -383,6 +396,30 @@ export function ProgramacionPage() {
                 ))}
               </tbody>
             </table>
+
+            <div className="consolidated-pagination">
+              <span>
+                {allTotal} {allTotal === 1 ? "orden" : "órdenes"} · Página {allPage} de {allTotalPages}
+              </span>
+              <div className="pagination-actions">
+                <button
+                  type="button"
+                  className="pagination-button"
+                  disabled={allPage <= 1}
+                  onClick={() => setAllPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  className="pagination-button"
+                  disabled={allPage >= allTotalPages}
+                  onClick={() => setAllPage((p) => Math.min(allTotalPages, p + 1))}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </section>

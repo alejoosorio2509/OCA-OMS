@@ -876,6 +876,7 @@ workOrdersRouter.post("/purge-statuses", requireAuth, requireAdmin, async (req, 
 workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMACION"), async (req, res) => {
   const sortKeySchema = z.enum([
     "code",
+    "title",
     "status",
     "assignedAt",
     "fechaTentativaGestion",
@@ -944,30 +945,37 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     ...(assigneeId ? { assigneeId } : {}),
     ...(gestor ? { gestorNombre: { contains: gestor } } : {}),
     ...(oportunidad ? { oportunidad: { contains: oportunidad } } : {}),
-    ...(search
-      ? {
-          OR: [
-            { code: { contains: search } },
-            { title: { contains: search } },
-            { gestorNombre: { contains: search } },
-            { oportunidad: { contains: search } }
-          ]
-        }
-      : {}),
   };
+
+  const andConditions: Prisma.WorkOrderWhereInput[] = [];
+
+  if (search) {
+    andConditions.push({
+      OR: [
+        { code: { contains: search } },
+        { title: { contains: search } },
+        { gestorNombre: { contains: search } },
+        { oportunidad: { contains: search } }
+      ]
+    });
+  }
 
   if (status) {
     const statusArray: Status[] = Array.isArray(status) ? status : [status];
     const statusConditions: Prisma.WorkOrderWhereInput[] = [
       { status: { in: statusArray as unknown as WorkOrderStatus[] } }
     ];
-    
+
     // Si el filtro incluye "DEVUELTA", buscamos también en estadoSecundario
     if (statusArray.includes("DEVUELTA")) {
       statusConditions.push({ estadoSecundario: "DEVUELTA" });
     }
-    
-    where.OR = statusConditions;
+
+    andConditions.push({ OR: statusConditions });
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
   }
 
   if (dateField && (dateStart || dateEnd)) {
@@ -1235,6 +1243,9 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
   switch (sortKey) {
     case "code":
       pushOrder("code");
+      break;
+    case "title":
+      pushOrder("title");
       break;
     case "status":
       pushOrder("status");
