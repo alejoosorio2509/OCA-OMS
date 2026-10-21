@@ -417,10 +417,19 @@ export type SolCdsNuevoRow = {
   fase: string;
   coordenadasX: string;
   coordenadasY: string;
+  fechaFinNovedad?: string | null;
+  diasDescontados?: number;
   createdAt: string;
   createdById: string;
   createdBy?: { name: string; email: string };
 };
+
+export async function updateSolCdsNuevoFechaFinNovedad(token: string, id: number, fechaFin: string) {
+  return apiFetch<{ id: number; fechaFinNovedad: string | null; diasDescontados: number; dias: number; orderFound: boolean }>(
+    `/sol-cds-nuevos/${id}/fecha-fin-novedad`,
+    { token, method: "PATCH", body: JSON.stringify({ fechaFin }) }
+  );
+}
 
 export async function listSolCdsNuevos(token: string, query: { all?: boolean } = {}) {
   const qs = new URLSearchParams();

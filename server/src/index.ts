@@ -154,6 +154,8 @@ async function ensureCarguesCatalogTables() {
       )
     `);
     await prisma.$executeRawUnsafe(`ALTER TABLE "SolCdsNuevo" ADD COLUMN IF NOT EXISTS "propiedad" TEXT NOT NULL DEFAULT 'ENEL'`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "SolCdsNuevo" ADD COLUMN IF NOT EXISTS "fechaFinNovedad" TIMESTAMP(3)`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "SolCdsNuevo" ADD COLUMN IF NOT EXISTS "diasDescontados" INTEGER NOT NULL DEFAULT 0`);
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "SolCdsNuevo_registro_key" ON "SolCdsNuevo"("registro")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SolCdsNuevo_createdById_idx" ON "SolCdsNuevo"("createdById")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SolCdsNuevo_createdAt_idx" ON "SolCdsNuevo"("createdAt")`);

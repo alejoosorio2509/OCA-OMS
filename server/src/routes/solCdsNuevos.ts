@@ -5,6 +5,55 @@ import { requireAuth, requirePermission } from "../auth.js";
 
 export const solCdsNuevosRouter = Router();
 
+const bogotaDateFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Bogota",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+
+function normalizeDay(date: Date) {
+  return bogotaDateFmt.format(date);
+}
+
+function parseBogotaDateOnly(value: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const d = parseInt(m[3], 10);
+    return new Date(Date.UTC(y, mo - 1, d, 5, 0, 0));
+  }
+  return new Date(value);
+}
+
+async function loadCalendarMaps() {
+  const calendar = await prisma.calendar.findMany({
+    select: { date: true, dayNumber: true, dayNumberFin: true }
+  });
+
+  const inicioMap = new Map<string, number>();
+  const finMap = new Map<string, number>();
+
+  for (const c of calendar) {
+    const key = c.date.toISOString().slice(0, 10);
+    inicioMap.set(key, c.dayNumber);
+    finMap.set(key, c.dayNumberFin ?? c.dayNumber);
+  }
+
+  return { inicioMap, finMap };
+}
+
+function diffDiasCalendario(inicio: Date, fin: Date, inicioMap: Map<string, number>, finMap: Map<string, number>) {
+  const inicioNum = inicioMap.get(normalizeDay(inicio));
+  const finNum = finMap.get(normalizeDay(fin));
+  if (inicioNum !== undefined && finNum !== undefined) {
+    return finNum - inicioNum;
+  }
+  const ms = parseBogotaDateOnly(normalizeDay(fin)).getTime() - parseBogotaDateOnly(normalizeDay(inicio)).getTime();
+  return Math.round(ms / 86400000);
+}
+
 function cleanText(value: string) {
   return value.trim();
 }
@@ -205,10 +254,81 @@ solCdsNuevosRouter.get("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), as
       fase: true,
       coordenadasX: true,
       coordenadasY: true,
+      fechaFinNovedad: true,
+      diasDescontados: true,
       createdAt: true,
       createdById: true,
       createdBy: { select: { name: true, email: true } }
     }
   });
   res.json(rows);
+});
+
+solCdsNuevosRouter.patch("/:id/fecha-fin-novedad", requireAuth, requirePermission("SOL_CDS_NUEVOS"), async (req, res) => {
+  try {
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
+    const { fechaFin } = z.object({ fechaFin: z.string().min(1) }).parse(req.body);
+
+    const solicitud = await prisma.solCdsNuevo.findUnique({ where: { id } });
+    if (!solicitud) {
+      res.status(404).json({ error: "SOLICITUD_NOT_FOUND" });
+      return;
+    }
+
+    const dFin = parseBogotaDateOnly(fechaFin);
+    if (isNaN(dFin.getTime())) {
+      res.status(400).json({ error: "INVALID_DATE" });
+      return;
+    }
+
+    // Fecha inicio novedad = fecha de registro de la solicitud
+    const fechaInicio = solicitud.createdAt;
+    if (dFin.getTime() < parseBogotaDateOnly(normalizeDay(fechaInicio)).getTime()) {
+      res.status(400).json({ error: "FECHA_FIN_MENOR_INICIO" });
+      return;
+    }
+
+    const { inicioMap, finMap } = await loadCalendarMaps();
+    const dias = diffDiasCalendario(fechaInicio, dFin, inicioMap, finMap);
+    const delta = dias - solicitud.diasDescontados;
+
+    const order = await prisma.workOrder.findUnique({ where: { code: solicitud.ot } });
+    if (order && delta !== 0) {
+      await prisma.workOrder.update({
+        where: { id: order.id },
+        data: { diasDescuento: { increment: delta } }
+      });
+    }
+
+    const updated = await prisma.solCdsNuevo.update({
+      where: { id },
+      data: { fechaFinNovedad: dFin, diasDescontados: dias },
+      select: { id: true, fechaFinNovedad: true, diasDescontados: true }
+    });
+
+    if (order) {
+      const user = await prisma.user.findUnique({
+        where: { id: req.auth!.sub },
+        select: { name: true, email: true }
+      });
+      await prisma.workOrderHistory.create({
+        data: {
+          workOrderId: order.id,
+          toStatus: order.status,
+          note: `Novedad ${solicitud.registro} - OT ${solicitud.ot}`,
+          noteDetail: `Fecha inicio: ${normalizeDay(fechaInicio)} | Fecha fin: ${normalizeDay(dFin)} | Días descontados: ${dias} | Usuario: ${
+            user?.name || user?.email || req.auth!.sub
+          }`,
+          fechaInicio: normalizeDay(fechaInicio),
+          fechaFin: normalizeDay(dFin),
+          changedById: req.auth!.sub
+        }
+      });
+    }
+
+    res.json({ ...updated, dias, orderFound: !!order });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "UNKNOWN";
+    res.status(500).json({ error: "INTERNAL_ERROR", details: msg });
+  }
 });

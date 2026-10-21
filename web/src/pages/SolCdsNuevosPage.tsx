@@ -3,6 +3,7 @@ import {
   createSolCdsNuevo,
   getSolCdsNuevoOptions,
   listSolCdsNuevos,
+  updateSolCdsNuevoFechaFinNovedad,
   type SolCdsNuevoCreateInput,
   type SolCdsNuevoOptions,
   type SolCdsNuevoRow
@@ -20,6 +21,9 @@ export function SolCdsNuevosPage() {
   const [error, setError] = useState<string | null>(null);
   const [successRegistro, setSuccessRegistro] = useState<string | null>(null);
   const [recent, setRecent] = useState<SolCdsNuevoRow[]>([]);
+  const [pendingFin, setPendingFin] = useState<Record<number, string>>({});
+  const [savingFin, setSavingFin] = useState<Record<number, boolean>>({});
+  const [errorFin, setErrorFin] = useState<Record<number, string>>({});
 
   const [form, setForm] = useState<SolCdsNuevoCreateInput>(() => ({
     ot: "",
@@ -158,6 +162,45 @@ export function SolCdsNuevosPage() {
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleString();
   };
+
+  const finNovedadFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+
+  const toDateOnly = (value: string) => {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return finNovedadFmt.format(d);
+  };
+
+  async function saveFechaFin(row: SolCdsNuevoRow, value: string) {
+    if (!token || !value) return;
+    const inicio = toDateOnly(row.createdAt);
+    if (inicio && value < inicio) {
+      setErrorFin((prev) => ({ ...prev, [row.id]: "La fecha fin no puede ser menor a la fecha inicio de la novedad." }));
+      return;
+    }
+    setErrorFin((prev) => ({ ...prev, [row.id]: "" }));
+    setSavingFin((prev) => ({ ...prev, [row.id]: true }));
+    try {
+      const res = await updateSolCdsNuevoFechaFinNovedad(token, row.id, value);
+      setRecent((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, fechaFinNovedad: res.fechaFinNovedad, diasDescontados: res.diasDescontados } : r))
+      );
+      setPendingFin((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+    } catch {
+      setErrorFin((prev) => ({ ...prev, [row.id]: "No se pudo guardar la fecha fin." }));
+    } finally {
+      setSavingFin((prev) => ({ ...prev, [row.id]: false }));
+    }
+  }
 
   return (
     <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(520px, 1fr) 1040px", alignItems: "start" }}>
@@ -403,6 +446,7 @@ export function SolCdsNuevosPage() {
                   <th>Subestación</th>
                   <th>Usuario</th>
                   <th>Creado</th>
+                  <th>Fecha fin novedad</th>
                 </tr>
               </thead>
               <tbody>
@@ -416,11 +460,30 @@ export function SolCdsNuevosPage() {
                       <td>{r.subestacionSbItm}</td>
                       <td>{r.createdBy?.name || r.createdBy?.email || r.createdById}</td>
                       <td>{formatDate(r.createdAt)}</td>
+                      <td>
+                        {r.fechaFinNovedad ? (
+                          <span>{toDateOnly(r.fechaFinNovedad)}</span>
+                        ) : (
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <input
+                              type="date"
+                              value={pendingFin[r.id] ?? ""}
+                              min={toDateOnly(r.createdAt)}
+                              disabled={!!savingFin[r.id]}
+                              onChange={(e) => setPendingFin((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                              onBlur={(e) => saveFechaFin(r, e.target.value)}
+                            />
+                            {errorFin[r.id] ? (
+                              <span style={{ color: "#b91c1c", fontSize: 11 }}>{errorFin[r.id]}</span>
+                            ) : null}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} style={{ opacity: 0.75 }}>
+                    <td colSpan={8} style={{ opacity: 0.75 }}>
                       Sin registros.
                     </td>
                   </tr>
