@@ -451,13 +451,19 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
   return "green";
 }
 
+// Excluye de Programación y Actualización las órdenes cuya Oportunidad / ANS empiece por "AT"
+const EXCLUDE_AT_OPORTUNIDAD: Prisma.WorkOrderWhereInput = {
+  OR: [{ oportunidad: null }, { NOT: { oportunidad: { startsWith: "AT", mode: "insensitive" } } }]
+};
+
 workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("PROGRAMACION"), async (req, res) => {
   const excludedStatuses: WorkOrderStatus[] = ["CERRADA", "FACTURADA", "GESTIONADA"];
   const grouped = await prisma.workOrder.groupBy({
     by: ["gestorNombre", "gestorCc", "status"],
     where: {
       gestorNombre: { not: null },
-      status: { notIn: excludedStatuses }
+      status: { notIn: excludedStatuses },
+      AND: [EXCLUDE_AT_OPORTUNIDAD]
     },
     _count: { _all: true }
   });
@@ -507,7 +513,7 @@ workOrdersRouter.get("/gestores/summary", requireAuth, requirePermission("PROGRA
 
 workOrdersRouter.get("/gestores", requireAuth, requirePermission("ORDERS"), async (req, res) => {
   const rows = await prisma.workOrder.findMany({
-    where: { gestorNombre: { not: null } },
+    where: { gestorNombre: { not: null }, AND: [EXCLUDE_AT_OPORTUNIDAD] },
     select: { gestorNombre: true },
     distinct: ["gestorNombre"],
     orderBy: { gestorNombre: "asc" }
@@ -517,7 +523,7 @@ workOrdersRouter.get("/gestores", requireAuth, requirePermission("ORDERS"), asyn
 
 workOrdersRouter.get("/oportunidades", requireAuth, requirePermission("ORDERS"), async (_req, res) => {
   const rows = await prisma.workOrder.findMany({
-    where: { oportunidad: { not: null } },
+    where: { oportunidad: { not: null }, AND: [EXCLUDE_AT_OPORTUNIDAD] },
     select: { oportunidad: true },
     distinct: ["oportunidad"],
     orderBy: { oportunidad: "asc" }
@@ -569,6 +575,7 @@ workOrdersRouter.get("/metrics", requireAuth, requirePermission("ORDERS"), async
     ...(assigneeId ? { assigneeId } : {}),
     ...(gestor ? { gestorNombre: { contains: gestor } } : {}),
     ...(oportunidad ? { oportunidad: { contains: oportunidad } } : {}),
+    AND: [EXCLUDE_AT_OPORTUNIDAD],
     ...(search
       ? {
           OR: [
@@ -948,7 +955,7 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     ...(oportunidad ? { oportunidad: { contains: oportunidad } } : {}),
   };
 
-  const andConditions: Prisma.WorkOrderWhereInput[] = [];
+  const andConditions: Prisma.WorkOrderWhereInput[] = [EXCLUDE_AT_OPORTUNIDAD];
 
   if (search) {
     andConditions.push({
@@ -1349,7 +1356,7 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
     ...(gestor ? { gestorNombre: { contains: gestor } } : {})
   };
 
-  const andConditions: Prisma.WorkOrderWhereInput[] = [];
+  const andConditions: Prisma.WorkOrderWhereInput[] = [EXCLUDE_AT_OPORTUNIDAD];
 
   if (search) {
     andConditions.push({
