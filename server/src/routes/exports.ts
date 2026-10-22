@@ -1394,7 +1394,6 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
       changedAt: true,
       fromStatus: true,
       toStatus: true,
-      previousCategoria: true,
       changedBy: { select: { name: true, email: true } },
       workOrder: { select: { code: true, gestorNombre: true, categoria: true } }
     }
@@ -1406,7 +1405,13 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
     ? await prisma.backlog.findMany({
         where: { orderCode: { in: codes } },
         orderBy: { updatedAt: "desc" },
-        select: { orderCode: true, nombreIncrementoSait: true }
+        select: {
+          orderCode: true,
+          nombreIncrementoSait: true,
+          fechaInicio: true,
+          fechaFin: true,
+          categoria: true
+        }
       })
     : [];
 
@@ -1415,6 +1420,23 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
     if (!incrementoByCode.has(b.orderCode) && b.nombreIncrementoSait) {
       incrementoByCode.set(b.orderCode, b.nombreIncrementoSait);
     }
+  }
+
+  // Categoría de la fila de historial inmediatamente anterior (última cerrada antes de la fila en curso)
+  const backlogByCode = new Map<string, typeof backlogs>();
+  for (const b of backlogs) {
+    const list = backlogByCode.get(b.orderCode);
+    if (list) list.push(b);
+    else backlogByCode.set(b.orderCode, [b]);
+  }
+
+  const prevCategoriaByCode = new Map<string, string>();
+  for (const [code, rows] of backlogByCode) {
+    const sorted = [...rows].sort((a, b) => b.fechaInicio.getTime() - a.fechaInicio.getTime());
+    const current = sorted.find((r) => !r.fechaFin) ?? sorted[0];
+    if (!current) continue;
+    const prev = sorted.find((r) => r.fechaFin && r.fechaInicio.getTime() < current.fechaInicio.getTime());
+    if (prev?.categoria) prevCategoriaByCode.set(code, prev.categoria);
   }
 
   const cargaDate = job ? job.finishedAt ?? job.createdAt : null;
@@ -1433,7 +1455,7 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
     h.workOrder.code,
     incrementoByCode.get(h.workOrder.code) ?? "",
     h.workOrder.gestorNombre ?? "",
-    h.previousCategoria ?? "",
+    prevCategoriaByCode.get(h.workOrder.code) ?? "",
     h.workOrder.categoria ?? "",
     (cargaDate ?? h.changedAt).toISOString(),
     h.changedBy?.name || h.changedBy?.email || ""

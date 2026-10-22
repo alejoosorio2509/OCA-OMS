@@ -3654,14 +3654,14 @@ async function processBacklogJob(input: {
 
   // Cruzar con las órdenes existentes por número de orden (OT -> WorkOrder.code)
   const codes = Array.from(new Set(parsedRows.map((r) => r.orderCode)));
-  const orderByCode = new Map<string, { id: string; status: WorkOrderStatus; categoria: string | null }>();
+  const orderByCode = new Map<string, { id: string; status: WorkOrderStatus }>();
   for (let i = 0; i < codes.length; i += 1000) {
     const slice = codes.slice(i, i + 1000);
     const found = await prisma.workOrder.findMany({
       where: { code: { in: slice } },
-      select: { id: true, code: true, status: true, categoria: true }
+      select: { id: true, code: true, status: true }
     });
-    for (const f of found) orderByCode.set(f.code, { id: f.id, status: f.status, categoria: f.categoria });
+    for (const f of found) orderByCode.set(f.code, { id: f.id, status: f.status });
   }
   const existingCodes = new Set(orderByCode.keys());
 
@@ -3872,7 +3872,6 @@ async function processBacklogJob(input: {
                   fromStatus: "ON_HOLD",
                   toStatus: restore,
                   note: BACKLOG_RESUME_NOTE,
-                  previousCategoria: order.categoria,
                   changedById: input.userId
                 }
               });
