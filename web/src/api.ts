@@ -470,7 +470,7 @@ export async function listWorkOrders(
     dateStart?: string;
     dateEnd?: string;
     colorFilter?: "red" | "yellow" | "green";
-    minAssignedDays?: number;
+    minDiasGestion?: number;
     page?: number;
     pageSize?: number;
     sortKey?: string;
@@ -493,7 +493,7 @@ export async function listWorkOrders(
   if (query.dateStart) qs.set("dateStart", query.dateStart);
   if (query.dateEnd) qs.set("dateEnd", query.dateEnd);
   if (query.colorFilter) qs.set("colorFilter", query.colorFilter);
-  if (query.minAssignedDays) qs.set("minAssignedDays", String(query.minAssignedDays));
+  if (query.minDiasGestion) qs.set("minDiasGestion", String(query.minDiasGestion));
   if (query.page) qs.set("page", String(query.page));
   if (query.pageSize) qs.set("pageSize", String(query.pageSize));
   if (query.sortKey) qs.set("sortKey", query.sortKey);

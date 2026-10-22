@@ -140,7 +140,7 @@ export function ProgramacionPage() {
         page: allPage,
         pageSize: ALL_PAGE_SIZE,
         search: allSearchDebounced.trim() || undefined,
-        minAssignedDays: assignedOver15 ? 15 : undefined,
+        minDiasGestion: assignedOver15 ? 15 : undefined,
         sortKey: allSortKey === "gestor" ? "gestorNombre" : allSortKey,
         sortDir: allSortDir
       });
@@ -161,7 +161,7 @@ export function ProgramacionPage() {
       const qs = new URLSearchParams();
       ACTIVE_STATUSES.forEach((s) => qs.append("status", s));
       if (allSearchDebounced.trim()) qs.set("search", allSearchDebounced.trim());
-      if (assignedOver15) qs.set("minAssignedDays", "15");
+      if (assignedOver15) qs.set("minDiasGestion", "15");
       const res = await fetch(`${API_URL}/work-orders/export.csv?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });

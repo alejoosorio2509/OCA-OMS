@@ -915,7 +915,7 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     dateStart: z.string().optional(),
     dateEnd: z.string().optional(),
     colorFilter: z.enum(["red", "yellow", "green"]).optional(),
-    minAssignedDays: z.coerce.number().int().min(1).optional(),
+    minDiasGestion: z.coerce.number().int().min(1).optional(),
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(500).optional(),
     sortKey: sortKeySchema.optional(),
@@ -928,7 +928,7 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     return;
   }
 
-  const { status, assigneeId, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter, minAssignedDays } = parsed.data;
+  const { status, assigneeId, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter, minDiasGestion } = parsed.data;
   const page = parsed.data.page ?? 1;
   const pageSize = parsed.data.pageSize ?? 100;
   const sortKey = parsed.data.sortKey ?? "fechaTentativaGestion";
@@ -975,12 +975,6 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     andConditions.push({ OR: statusConditions });
   }
 
-  if (minAssignedDays) {
-    const cutoff = new Date(Date.now() - minAssignedDays * 24 * 60 * 60 * 1000);
-    andConditions.push({ status: { in: ["ASIGNADA", "ASSIGNED"] as WorkOrderStatus[] } });
-    andConditions.push({ assignedAt: { lte: cutoff } });
-  }
-
   if (andConditions.length > 0) {
     where.AND = andConditions;
   }
@@ -1015,7 +1009,7 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     "diasPasados",
     "cumplimiento"
   ]);
-  const requiresFull = !!colorFilter || computedSortKeys.has(sortKey);
+  const requiresFull = !!colorFilter || !!minDiasGestion || computedSortKeys.has(sortKey);
 
   const enrich = async (baseItems: WorkOrderListWithUsers[]): Promise<SortableListItem[]> => {
     const mapped = baseItems.map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber));
@@ -1234,6 +1228,12 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
       });
     }
 
+    if (minDiasGestion) {
+      mapped = mapped.filter(
+        (it) => (it.status === "ASIGNADA" || it.status === "ASSIGNED") && (it.diasGestion ?? 0) > minDiasGestion
+      );
+    }
+
     mapped.sort(compare);
     const total = mapped.length;
     const paged = mapped.slice((page - 1) * pageSize, page * pageSize);
@@ -1333,7 +1333,7 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
       status: z.union([statusSchema, z.array(statusSchema)]).optional(),
       search: z.string().min(1).optional(),
       gestor: z.string().min(1).optional(),
-      minAssignedDays: z.coerce.number().int().min(1).optional(),
+      minDiasGestion: z.coerce.number().int().min(1).optional(),
       sortKey: z.string().optional(),
       sortDir: z.enum(["asc", "desc"]).optional()
     })
@@ -1344,7 +1344,7 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
     return;
   }
 
-  const { status, search, gestor, minAssignedDays } = parsed.data;
+  const { status, search, gestor, minDiasGestion } = parsed.data;
 
   const where: Prisma.WorkOrderWhereInput = {
     ...(gestor ? { gestorNombre: { contains: gestor } } : {})
@@ -1368,12 +1368,6 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
     andConditions.push({ status: { in: statusArray as unknown as WorkOrderStatus[] } });
   }
 
-  if (minAssignedDays) {
-    const cutoff = new Date(Date.now() - minAssignedDays * 24 * 60 * 60 * 1000);
-    andConditions.push({ status: { in: ["ASIGNADA", "ASSIGNED"] as WorkOrderStatus[] } });
-    andConditions.push({ assignedAt: { lte: cutoff } });
-  }
-
   if (andConditions.length > 0) {
     where.AND = andConditions;
   }
@@ -1388,26 +1382,25 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
     }
   });
 
-  const now = Date.now();
   const items = baseItems
     .map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber))
+    .filter((it) => {
+      if (!minDiasGestion) return true;
+      return (it.status === "ASIGNADA" || it.status === "ASSIGNED") && (it.diasGestion ?? 0) > minDiasGestion;
+    })
     .sort((a, b) => (a.code > b.code ? 1 : a.code < b.code ? -1 : 0));
 
-  const headers = ["Gestor", "OT", "Título", "Estado", "Asignación", "Días Gestión", "Cumplimiento", "Días asignada"];
+  const headers = ["Gestor", "OT", "Título", "Estado", "Asignación", "Días Gestión", "Cumplimiento"];
 
-  const rows = items.map((o) => {
-    const diasAsignada = o.assignedAt ? Math.floor((now - o.assignedAt.getTime()) / (24 * 60 * 60 * 1000)) : "";
-    return [
-      o.gestorNombre ?? "",
-      o.code,
-      o.title,
-      statusLabelEs(o.status),
-      o.assignedAt ? normalizeDay(o.assignedAt) : "",
-      o.diasGestion ?? "",
-      o.cumplimiento ?? "",
-      diasAsignada
-    ];
-  });
+  const rows = items.map((o) => [
+    o.gestorNombre ?? "",
+    o.code,
+    o.title,
+    statusLabelEs(o.status),
+    o.assignedAt ? normalizeDay(o.assignedAt) : "",
+    o.diasGestion ?? "",
+    o.cumplimiento ?? ""
+  ]);
 
   const csv = toCsv(headers, rows);
   res.setHeader("content-type", "text/csv; charset=utf-8");
