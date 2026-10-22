@@ -1394,6 +1394,7 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
       changedAt: true,
       fromStatus: true,
       toStatus: true,
+      previousCategoria: true,
       changedBy: { select: { name: true, email: true } },
       workOrder: { select: { code: true, gestorNombre: true, categoria: true } }
     }
@@ -1432,8 +1433,8 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
     h.workOrder.code,
     incrementoByCode.get(h.workOrder.code) ?? "",
     h.workOrder.gestorNombre ?? "",
+    h.previousCategoria ?? "",
     h.workOrder.categoria ?? "",
-    statusLabel(h.toStatus),
     (cargaDate ?? h.changedAt).toISOString(),
     h.changedBy?.name || h.changedBy?.email || ""
   ]);

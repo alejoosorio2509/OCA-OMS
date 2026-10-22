@@ -26,6 +26,15 @@ async function ensureLevantamientoEntregaColumns() {
   }
 }
 
+async function ensureWorkOrderHistoryColumns() {
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE "WorkOrderHistory" ADD COLUMN IF NOT EXISTS "previousCategoria" TEXT');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`WARN: No se pudo asegurar columnas de historial de orden: ${msg}`);
+  }
+}
+
 async function ensureUserPermissionColumns() {
   try {
     await prisma.$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "canProgramacion" BOOLEAN NOT NULL DEFAULT true');
@@ -351,7 +360,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "INTERNAL_ERROR" });
 });
 
-Promise.all([ensureLevantamientoEntregaColumns(), ensureUserPermissionColumns(), ensureCarguesCatalogTables()]).finally(() => {
+Promise.all([ensureLevantamientoEntregaColumns(), ensureUserPermissionColumns(), ensureCarguesCatalogTables(), ensureWorkOrderHistoryColumns()]).finally(() => {
   app.listen(env.PORT, "0.0.0.0", () => {
     console.log(`API listening on port ${env.PORT} (0.0.0.0)`);
   });

@@ -153,6 +153,7 @@ model WorkOrderHistory {
   noteDetail  String?         // Detalle de la novedad
   fechaInicio String?         // Fecha Inicio Novedad
   fechaFin    String?         // Fecha Fin Novedad
+  previousCategoria String?   // Categoría previa de la orden antes del cargue
   changedAt   DateTime        @default(now())
 
   changedById String
