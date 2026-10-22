@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth";
 import { API_URL } from "../apiUrl";
+import { listBacklogJobs, type BacklogJobOption } from "../api";
 
 function buildQuery(params: Record<string, string | undefined>) {
   const qs = new URLSearchParams();
@@ -34,8 +35,10 @@ export function ExportesPage() {
 
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
+  const [backlogJobs, setBacklogJobs] = useState<BacklogJobOption[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState("");
   const [loading, setLoading] = useState<
-    "" | "general" | "devoluciones" | "historial" | "levantamiento" | "novedadesEnel" | "solCdsNuevos"
+    "" | "general" | "devoluciones" | "historial" | "levantamiento" | "novedadesEnel" | "solCdsNuevos" | "pausadoEjecucion"
   >("");
   const [error, setError] = useState<string | null>(null);
 
@@ -48,10 +51,20 @@ export function ExportesPage() {
     [dateStart, dateEnd]
   );
 
+  useEffect(() => {
+    if (!token || !canFullExportes) return;
+    listBacklogJobs(token)
+      .then((jobs) => {
+        setBacklogJobs(jobs);
+        setSelectedJobId((current) => current || jobs[0]?.id || "");
+      })
+      .catch(() => setBacklogJobs([]));
+  }, [token, canFullExportes]);
+
   if (!canSolExport) return <div className="card">No autorizado.</div>;
 
   const handle = async (
-    kind: "general" | "devoluciones" | "historial" | "levantamiento" | "novedadesEnel" | "solCdsNuevos"
+    kind: "general" | "devoluciones" | "historial" | "levantamiento" | "novedadesEnel" | "solCdsNuevos" | "pausadoEjecucion"
   ) => {
     if (!token) return;
     setError(null);
@@ -72,6 +85,12 @@ export function ExportesPage() {
       }
       if (kind === "novedadesEnel" && canFullExportes) {
         await downloadCsv(token, "/exports/novedades-enel.csv", "novedades_enel.csv");
+      }
+      if (kind === "pausadoEjecucion" && canFullExportes) {
+        const q = selectedJobId
+          ? `?jobId=${encodeURIComponent(selectedJobId)}`
+          : query;
+        await downloadCsv(token, `/exports/pausado-a-ejecucion.csv${q}`, "pausado_a_ejecucion_backlog.csv");
       }
       if (kind === "solCdsNuevos") {
         await downloadCsv(token, `/exports/sol-cds-nuevos.txt${query}`, `sol_cds_nuevos_${range}.txt`);
@@ -96,6 +115,19 @@ export function ExportesPage() {
             <label>Asignación (fin)</label>
             <input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} />
           </div>
+          {canFullExportes ? (
+            <div className="field" style={{ width: 320 }}>
+              <label>Cargue de backlog</label>
+              <select value={selectedJobId} onChange={(e) => setSelectedJobId(e.target.value)}>
+                <option value="">Usar rango de fechas</option>
+                {backlogJobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -119,6 +151,11 @@ export function ExportesPage() {
               </button>
               <button className="btn" onClick={() => handle("novedadesEnel")} disabled={!!loading}>
                 {loading === "novedadesEnel" ? "Generando..." : "Exportar novedades ENEL"}
+              </button>
+              <button className="btn" onClick={() => handle("pausadoEjecucion")} disabled={!!loading}>
+                {loading === "pausadoEjecucion"
+                  ? "Generando..."
+                  : "Exportar Órdenes Pausado → En ejecución post-backlog"}
               </button>
             </>
           ) : null}

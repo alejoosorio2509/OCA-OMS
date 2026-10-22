@@ -431,6 +431,18 @@ export async function updateSolCdsNuevoFechaFinNovedad(token: string, id: number
   );
 }
 
+export type BacklogJobOption = {
+  id: string;
+  fileName: string;
+  user: string;
+  date: string;
+  label: string;
+};
+
+export async function listBacklogJobs(token: string) {
+  return apiFetch<BacklogJobOption[]>("/exports/backlog-jobs", { token });
+}
+
 export async function listSolCdsNuevos(token: string, query: { all?: boolean } = {}) {
   const qs = new URLSearchParams();
   if (query.all) qs.set("all", "1");
@@ -458,6 +470,7 @@ export async function listWorkOrders(
     dateStart?: string;
     dateEnd?: string;
     colorFilter?: "red" | "yellow" | "green";
+    minAssignedDays?: number;
     page?: number;
     pageSize?: number;
     sortKey?: string;
@@ -480,6 +493,7 @@ export async function listWorkOrders(
   if (query.dateStart) qs.set("dateStart", query.dateStart);
   if (query.dateEnd) qs.set("dateEnd", query.dateEnd);
   if (query.colorFilter) qs.set("colorFilter", query.colorFilter);
+  if (query.minAssignedDays) qs.set("minAssignedDays", String(query.minAssignedDays));
   if (query.page) qs.set("page", String(query.page));
   if (query.pageSize) qs.set("pageSize", String(query.pageSize));
   if (query.sortKey) qs.set("sortKey", query.sortKey);

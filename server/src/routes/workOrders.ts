@@ -915,6 +915,7 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     dateStart: z.string().optional(),
     dateEnd: z.string().optional(),
     colorFilter: z.enum(["red", "yellow", "green"]).optional(),
+    minAssignedDays: z.coerce.number().int().min(1).optional(),
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(500).optional(),
     sortKey: sortKeySchema.optional(),
@@ -927,7 +928,7 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     return;
   }
 
-  const { status, assigneeId, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter } = parsed.data;
+  const { status, assigneeId, search, gestor, oportunidad, dateField, dateStart, dateEnd, colorFilter, minAssignedDays } = parsed.data;
   const page = parsed.data.page ?? 1;
   const pageSize = parsed.data.pageSize ?? 100;
   const sortKey = parsed.data.sortKey ?? "fechaTentativaGestion";
@@ -972,6 +973,12 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     }
 
     andConditions.push({ OR: statusConditions });
+  }
+
+  if (minAssignedDays) {
+    const cutoff = new Date(Date.now() - minAssignedDays * 24 * 60 * 60 * 1000);
+    andConditions.push({ status: { in: ["ASIGNADA", "ASSIGNED"] as WorkOrderStatus[] } });
+    andConditions.push({ assignedAt: { lte: cutoff } });
   }
 
   if (andConditions.length > 0) {
@@ -1283,6 +1290,129 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
 
   const mapped = await enrich(pageItems);
   res.json({ items: mapped, total, page, pageSize });
+});
+
+function csvEscape(value: unknown) {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  if (s.includes('"') || s.includes(",") || s.includes("\n") || s.includes("\r")) {
+    return `"${s.replaceAll('"', '""')}"`;
+  }
+  return s;
+}
+
+function toCsv(headers: string[], rows: unknown[][]) {
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const row of rows) lines.push(row.map(csvEscape).join(","));
+  return lines.join("\r\n");
+}
+
+function statusLabelEs(status: WorkOrderStatus) {
+  const map: Record<WorkOrderStatus, string> = {
+    DRAFT: "Borrador",
+    CREATED: "Creada",
+    ASSIGNED: "Asignada",
+    IN_PROGRESS: "En curso",
+    ON_HOLD: "Pausada",
+    COMPLETED: "Completada",
+    CANCELLED: "Cancelada",
+    EXCLUDED: "Excluida",
+    FACTURADA: "Facturada",
+    GESTIONADA: "Gestionada",
+    CERRADA: "Cerrada",
+    ASIGNADA: "Asignada",
+    EN_EJECUCION: "En ejecución",
+    DEVUELTA: "Devuelta"
+  };
+  return map[status] ?? status;
+}
+
+workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", "PROGRAMACION"), async (req, res) => {
+  const parsed = z
+    .object({
+      status: z.union([statusSchema, z.array(statusSchema)]).optional(),
+      search: z.string().min(1).optional(),
+      gestor: z.string().min(1).optional(),
+      minAssignedDays: z.coerce.number().int().min(1).optional(),
+      sortKey: z.string().optional(),
+      sortDir: z.enum(["asc", "desc"]).optional()
+    })
+    .safeParse(req.query);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "INVALID_QUERY" });
+    return;
+  }
+
+  const { status, search, gestor, minAssignedDays } = parsed.data;
+
+  const where: Prisma.WorkOrderWhereInput = {
+    ...(gestor ? { gestorNombre: { contains: gestor } } : {})
+  };
+
+  const andConditions: Prisma.WorkOrderWhereInput[] = [];
+
+  if (search) {
+    andConditions.push({
+      OR: [
+        { code: { contains: search } },
+        { title: { contains: search } },
+        { gestorNombre: { contains: search } },
+        { oportunidad: { contains: search } }
+      ]
+    });
+  }
+
+  if (status) {
+    const statusArray: Status[] = Array.isArray(status) ? status : [status];
+    andConditions.push({ status: { in: statusArray as unknown as WorkOrderStatus[] } });
+  }
+
+  if (minAssignedDays) {
+    const cutoff = new Date(Date.now() - minAssignedDays * 24 * 60 * 60 * 1000);
+    andConditions.push({ status: { in: ["ASIGNADA", "ASSIGNED"] as WorkOrderStatus[] } });
+    andConditions.push({ assignedAt: { lte: cutoff } });
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
+  }
+
+  const { inicioMap, finMap, finNumberToDate, maxFinNumber } = await loadCalendarMaps();
+
+  const baseItems = await prisma.workOrder.findMany({
+    where,
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      assignee: { select: { id: true, name: true, email: true } }
+    }
+  });
+
+  const now = Date.now();
+  const items = baseItems
+    .map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber))
+    .sort((a, b) => (a.code > b.code ? 1 : a.code < b.code ? -1 : 0));
+
+  const headers = ["Gestor", "OT", "Título", "Estado", "Asignación", "Días Gestión", "Cumplimiento", "Días asignada"];
+
+  const rows = items.map((o) => {
+    const diasAsignada = o.assignedAt ? Math.floor((now - o.assignedAt.getTime()) / (24 * 60 * 60 * 1000)) : "";
+    return [
+      o.gestorNombre ?? "",
+      o.code,
+      o.title,
+      statusLabelEs(o.status),
+      o.assignedAt ? normalizeDay(o.assignedAt) : "",
+      o.diasGestion ?? "",
+      o.cumplimiento ?? "",
+      diasAsignada
+    ];
+  });
+
+  const csv = toCsv(headers, rows);
+  res.setHeader("content-type", "text/csv; charset=utf-8");
+  res.setHeader("content-disposition", `attachment; filename="programacion_ordenes.csv"`);
+  res.send(csv);
 });
 
 workOrdersRouter.post("/:id/novedades", requireAuth, requirePermission("ORDERS"), upload.single("soporte"), async (req, res) => {

@@ -401,6 +401,19 @@
   color: #666;
 }
 
+.consolidated-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-error {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #b91c1c;
+}
+
 .consolidated-section .table-container {
   overflow-x: auto;
 }

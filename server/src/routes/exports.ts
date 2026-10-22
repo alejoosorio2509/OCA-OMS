@@ -1310,6 +1310,158 @@ exportsRouter.get("/novedades-enel.csv", requireAuth, requirePermission("EXPORTE
   res.send(csv);
 });
 
+exportsRouter.get("/backlog-jobs", requireAuth, requirePermission("EXPORTES"), async (_req, res) => {
+  const jobs = await prisma.cargueJob.findMany({
+    where: { type: "BACKLOG", status: "DONE" },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      fileName: true,
+      createdAt: true,
+      startedAt: true,
+      finishedAt: true,
+      createdBy: { select: { name: true, email: true } }
+    }
+  });
+
+  res.json(
+    jobs.map((j) => {
+      const date = j.finishedAt ?? j.createdAt;
+      return {
+        id: j.id,
+        fileName: j.fileName,
+        user: j.createdBy?.name || j.createdBy?.email || "",
+        date: date.toISOString(),
+        label: `${date.toISOString().slice(0, 16).replace("T", " ")} · ${j.fileName}`
+      };
+    })
+  );
+});
+
+exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EXPORTES"), async (req, res) => {
+  const parsed = z
+    .object({
+      jobId: z.string().optional(),
+      dateStart: z.string().optional(),
+      dateEnd: z.string().optional()
+    })
+    .safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "INVALID_QUERY" });
+    return;
+  }
+
+  const { jobId, dateStart, dateEnd } = parsed.data;
+
+  const andConditions: Prisma.WorkOrderHistoryWhereInput[] = [
+    { fromStatus: "ON_HOLD" },
+    { toStatus: "EN_EJECUCION" }
+  ];
+
+  let job: { createdAt: Date; startedAt: Date | null; finishedAt: Date | null; createdById: string } | null = null;
+
+  if (jobId) {
+    job = await prisma.cargueJob.findUnique({
+      where: { id: jobId },
+      select: { createdAt: true, startedAt: true, finishedAt: true, createdById: true }
+    });
+    if (!job) {
+      res.status(404).json({ error: "JOB_NOT_FOUND" });
+      return;
+    }
+    andConditions.push({ changedById: job.createdById });
+    andConditions.push({
+      changedAt: {
+        gte: job.startedAt ?? job.createdAt,
+        lte: job.finishedAt ?? new Date()
+      }
+    });
+  } else {
+    const start = dateStart ? toDateStart(dateStart) : null;
+    const end = dateEnd ? toDateEnd(dateEnd) : null;
+    if (start || end) {
+      andConditions.push({
+        changedAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) }
+      });
+    }
+  }
+
+  const histories = await prisma.workOrderHistory.findMany({
+    where: { AND: andConditions },
+    orderBy: { changedAt: "desc" },
+    select: {
+      changedAt: true,
+      fromStatus: true,
+      toStatus: true,
+      changedBy: { select: { name: true, email: true } },
+      workOrder: { select: { code: true } }
+    }
+  });
+
+  const codes = Array.from(new Set(histories.map((h) => h.workOrder.code)));
+
+  const [backlogs, levantamientos] = await Promise.all([
+    codes.length
+      ? prisma.backlog.findMany({
+          where: { orderCode: { in: codes } },
+          orderBy: { updatedAt: "desc" },
+          select: { orderCode: true, nombreIncrementoSait: true }
+        })
+      : Promise.resolve([]),
+    codes.length
+      ? prisma.levantamiento.findMany({
+          where: { orderCode: { in: codes } },
+          select: { orderCode: true, noCd: true, subestacion: true }
+        })
+      : Promise.resolve([])
+  ]);
+
+  const incrementoByCode = new Map<string, string>();
+  for (const b of backlogs) {
+    if (!incrementoByCode.has(b.orderCode) && b.nombreIncrementoSait) {
+      incrementoByCode.set(b.orderCode, b.nombreIncrementoSait);
+    }
+  }
+
+  const levantamientoByCode = new Map<string, (typeof levantamientos)[number]>();
+  for (const l of levantamientos) {
+    if (!levantamientoByCode.has(l.orderCode)) levantamientoByCode.set(l.orderCode, l);
+  }
+
+  const cargaDate = job ? job.finishedAt ?? job.createdAt : null;
+
+  const headers = [
+    "OT",
+    "Incremento",
+    "CD",
+    "Subestación",
+    "Estado anterior",
+    "Estado nuevo",
+    "Fecha del cargue",
+    "Usuario que cargó"
+  ];
+
+  const rows = histories.map((h) => {
+    const lev = levantamientoByCode.get(h.workOrder.code);
+    return [
+      h.workOrder.code,
+      incrementoByCode.get(h.workOrder.code) ?? "",
+      lev?.noCd ?? "",
+      lev?.subestacion ?? "",
+      statusLabel((h.fromStatus ?? "ON_HOLD") as WorkOrderStatus),
+      statusLabel(h.toStatus),
+      (cargaDate ?? h.changedAt).toISOString(),
+      h.changedBy?.name || h.changedBy?.email || ""
+    ];
+  });
+
+  const csv = toCsv(headers, rows);
+  res.setHeader("content-type", "text/csv; charset=utf-8");
+  res.setHeader("content-disposition", `attachment; filename="pausado_a_ejecucion_backlog.csv"`);
+  res.send(csv);
+});
+
 exportsRouter.get("/sol-cds-nuevos.txt", requireAuth, async (req, res) => {
   const parsed = dateRangeSchema.safeParse(req.query);
   if (!parsed.success) {

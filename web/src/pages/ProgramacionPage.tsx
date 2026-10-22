@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth";
 import { getGestoresSummary, listWorkOrders, type GestorSummary, type WorkOrderListItem, type WorkOrderStatus } from "../api";
+import { API_URL } from "../apiUrl";
 import "./ProgramacionPage.css";
 import { useNavigate } from "react-router-dom";
 
@@ -114,6 +115,9 @@ export function ProgramacionPage() {
   const [allSortDir, setAllSortDir] = useState<"asc" | "desc">("desc");
   const [allPage, setAllPage] = useState(1);
   const [allTotal, setAllTotal] = useState(0);
+  const [assignedOver15, setAssignedOver15] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     loadSummary();
@@ -126,7 +130,7 @@ export function ProgramacionPage() {
 
   useEffect(() => {
     loadAllOrders();
-  }, [token, allSearchDebounced, allSortKey, allSortDir, allPage]);
+  }, [token, allSearchDebounced, allSortKey, allSortDir, allPage, assignedOver15]);
 
   async function loadAllOrders() {
     try {
@@ -136,6 +140,7 @@ export function ProgramacionPage() {
         page: allPage,
         pageSize: ALL_PAGE_SIZE,
         search: allSearchDebounced.trim() || undefined,
+        minAssignedDays: assignedOver15 ? 15 : undefined,
         sortKey: allSortKey === "gestor" ? "gestorNombre" : allSortKey,
         sortDir: allSortDir
       });
@@ -145,6 +150,35 @@ export function ProgramacionPage() {
       console.error(e);
     } finally {
       setLoadingAllOrders(false);
+    }
+  }
+
+  async function handleExport() {
+    if (!token) return;
+    setExportError(null);
+    setExporting(true);
+    try {
+      const qs = new URLSearchParams();
+      ACTIVE_STATUSES.forEach((s) => qs.append("status", s));
+      if (allSearchDebounced.trim()) qs.set("search", allSearchDebounced.trim());
+      if (assignedOver15) qs.set("minAssignedDays", "15");
+      const res = await fetch(`${API_URL}/work-orders/export.csv?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("EXPORT_FAILED");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "programacion_ordenes.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("No se pudo exportar el listado.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -326,16 +360,33 @@ export function ProgramacionPage() {
             <h2>Órdenes Asignadas + En ejecución</h2>
             <p>Detalle consolidado de todos los gestores.</p>
           </div>
-          <input
-            value={allSearch}
-            onChange={(e) => {
-              setAllSearch(e.target.value);
-              setAllPage(1);
-            }}
-            placeholder="Buscar por OT, título o gestor..."
-            className="drawer-search"
-          />
+          <div className="consolidated-controls">
+            <input
+              value={allSearch}
+              onChange={(e) => {
+                setAllSearch(e.target.value);
+                setAllPage(1);
+              }}
+              placeholder="Buscar por OT, título o gestor..."
+              className="drawer-search"
+            />
+            <button
+              type="button"
+              className={`drawer-filter-chip ${assignedOver15 ? "active" : ""}`}
+              onClick={() => {
+                setAssignedOver15((current) => !current);
+                setAllPage(1);
+              }}
+            >
+              Asignadas &gt; 15 días
+            </button>
+            <button type="button" className="btn" onClick={handleExport} disabled={exporting}>
+              {exporting ? "Exportando..." : "Exportar"}
+            </button>
+          </div>
         </div>
+
+        {exportError ? <p className="export-error">{exportError}</p> : null}
 
         {loadingAllOrders ? (
           <p>Cargando órdenes...</p>
