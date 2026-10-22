@@ -1395,27 +1395,19 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
       fromStatus: true,
       toStatus: true,
       changedBy: { select: { name: true, email: true } },
-      workOrder: { select: { code: true } }
+      workOrder: { select: { code: true, gestorNombre: true, categoria: true } }
     }
   });
 
   const codes = Array.from(new Set(histories.map((h) => h.workOrder.code)));
 
-  const [backlogs, levantamientos] = await Promise.all([
-    codes.length
-      ? prisma.backlog.findMany({
-          where: { orderCode: { in: codes } },
-          orderBy: { updatedAt: "desc" },
-          select: { orderCode: true, nombreIncrementoSait: true }
-        })
-      : Promise.resolve([]),
-    codes.length
-      ? prisma.levantamiento.findMany({
-          where: { orderCode: { in: codes } },
-          select: { orderCode: true, noCd: true, subestacion: true }
-        })
-      : Promise.resolve([])
-  ]);
+  const backlogs = codes.length
+    ? await prisma.backlog.findMany({
+        where: { orderCode: { in: codes } },
+        orderBy: { updatedAt: "desc" },
+        select: { orderCode: true, nombreIncrementoSait: true }
+      })
+    : [];
 
   const incrementoByCode = new Map<string, string>();
   for (const b of backlogs) {
@@ -1424,37 +1416,27 @@ exportsRouter.get("/pausado-a-ejecucion.csv", requireAuth, requirePermission("EX
     }
   }
 
-  const levantamientoByCode = new Map<string, (typeof levantamientos)[number]>();
-  for (const l of levantamientos) {
-    if (!levantamientoByCode.has(l.orderCode)) levantamientoByCode.set(l.orderCode, l);
-  }
-
   const cargaDate = job ? job.finishedAt ?? job.createdAt : null;
 
   const headers = [
     "OT",
     "Incremento",
-    "CD",
-    "Subestación",
+    "Gestor",
     "Estado anterior",
     "Estado nuevo",
     "Fecha del cargue",
     "Usuario que cargó"
   ];
 
-  const rows = histories.map((h) => {
-    const lev = levantamientoByCode.get(h.workOrder.code);
-    return [
-      h.workOrder.code,
-      incrementoByCode.get(h.workOrder.code) ?? "",
-      lev?.noCd ?? "",
-      lev?.subestacion ?? "",
-      statusLabel((h.fromStatus ?? "ON_HOLD") as WorkOrderStatus),
-      statusLabel(h.toStatus),
-      (cargaDate ?? h.changedAt).toISOString(),
-      h.changedBy?.name || h.changedBy?.email || ""
-    ];
-  });
+  const rows = histories.map((h) => [
+    h.workOrder.code,
+    incrementoByCode.get(h.workOrder.code) ?? "",
+    h.workOrder.gestorNombre ?? "",
+    h.workOrder.categoria ?? "",
+    statusLabel(h.toStatus),
+    (cargaDate ?? h.changedAt).toISOString(),
+    h.changedBy?.name || h.changedBy?.email || ""
+  ]);
 
   const csv = toCsv(headers, rows);
   res.setHeader("content-type", "text/csv; charset=utf-8");
