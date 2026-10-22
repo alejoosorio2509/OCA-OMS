@@ -378,7 +378,7 @@ export function ProgramacionPage() {
                 setAllPage(1);
               }}
             >
-              Asignadas &gt; 15 días
+              Gestión &gt; 15 días
             </button>
             <button type="button" className="btn" onClick={handleExport} disabled={exporting}>
               {exporting ? "Exportando..." : "Exportar"}

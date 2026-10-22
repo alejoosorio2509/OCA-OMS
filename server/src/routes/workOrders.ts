@@ -1229,9 +1229,8 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
     }
 
     if (minDiasGestion) {
-      mapped = mapped.filter(
-        (it) => (it.status === "ASIGNADA" || it.status === "ASSIGNED") && (it.diasGestion ?? 0) > minDiasGestion
-      );
+      const gestionStatuses = new Set(["ASIGNADA", "ASSIGNED", "EN_EJECUCION", "IN_PROGRESS"]);
+      mapped = mapped.filter((it) => gestionStatuses.has(it.status) && (it.diasGestion ?? 0) > minDiasGestion);
     }
 
     mapped.sort(compare);
@@ -1386,7 +1385,8 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
     .map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber))
     .filter((it) => {
       if (!minDiasGestion) return true;
-      return (it.status === "ASIGNADA" || it.status === "ASSIGNED") && (it.diasGestion ?? 0) > minDiasGestion;
+      const gestionStatuses = new Set(["ASIGNADA", "ASSIGNED", "EN_EJECUCION", "IN_PROGRESS"]);
+      return gestionStatuses.has(it.status) && (it.diasGestion ?? 0) > minDiasGestion;
     })
     .sort((a, b) => (a.code > b.code ? 1 : a.code < b.code ? -1 : 0));
 
