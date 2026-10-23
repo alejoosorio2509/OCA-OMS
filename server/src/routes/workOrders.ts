@@ -451,6 +451,161 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
   return "green";
 }
 
+// Cálculo compartido de "Días Gestión" y campos derivados.
+// Es el mismo cálculo que usa el módulo de Actualización; se reutiliza tal cual
+// en el listado y en la exportación de Programación para que los valores coincidan.
+async function enrichWorkOrders(
+  baseItems: WorkOrderListWithUsers[],
+  inicioMap: Map<string, number>,
+  finMap: Map<string, number>,
+  finNumberToDate: Map<number, string>,
+  maxFinNumber: number | undefined
+): Promise<Array<SortableListItem & WorkOrderListWithUsers>> {
+  const mapped = baseItems.map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber));
+
+  const novedadDaysByOrderId = new Map<string, number>();
+  const devolucionDaysByOrderId = new Map<string, number>();
+  if (mapped.length > 0) {
+    const orderIds = mapped.map((m) => m.id);
+    const chunk = <T,>(arr: T[], size: number) => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
+    const idChunks = chunk(orderIds, 500);
+
+    for (const group of idChunks) {
+      const novedades = await prisma.novedad.findMany({
+        where: { workOrderId: { in: group }, fechaFin: { not: null } },
+        select: { workOrderId: true, fechaInicio: true, fechaFin: true }
+      });
+
+      for (const n of novedades) {
+        const inicioNum = inicioMap.get(normalizeDay(n.fechaInicio));
+        const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
+        if (inicioNum === undefined || finNum === undefined) continue;
+        const diff = finNum - inicioNum;
+        if (diff <= 0) continue;
+        novedadDaysByOrderId.set(n.workOrderId, (novedadDaysByOrderId.get(n.workOrderId) ?? 0) + diff);
+      }
+    }
+
+    for (const group of idChunks) {
+      const devoluciones = await prisma.workOrderHistory.findMany({
+        where: {
+          workOrderId: { in: group },
+          note: { contains: "Descuento por devolución" },
+          fechaInicio: { not: null },
+          fechaFin: { not: null }
+        },
+        select: { workOrderId: true, fechaInicio: true, fechaFin: true }
+      });
+
+      for (const d of devoluciones) {
+        const inicioDate = d.fechaInicio ? new Date(d.fechaInicio) : null;
+        const finDate = d.fechaFin ? new Date(d.fechaFin) : null;
+        if (!inicioDate || !finDate) continue;
+        if (Number.isNaN(inicioDate.getTime()) || Number.isNaN(finDate.getTime())) continue;
+        const inicioNum = inicioMap.get(normalizeDay(inicioDate));
+        const finNum = finMap.get(normalizeDay(finDate));
+        if (inicioNum === undefined || finNum === undefined) continue;
+        const diff = finNum - inicioNum;
+        if (diff <= 0) continue;
+        devolucionDaysByOrderId.set(d.workOrderId, (devolucionDaysByOrderId.get(d.workOrderId) ?? 0) + diff);
+      }
+    }
+  }
+
+  const codes = mapped.map((m) => m.code).filter(Boolean);
+  if (codes.length === 0) {
+    return mapped.map((m) => ({
+      ...m,
+      diasCumplimiento: novedadDaysByOrderId.get(m.id) ?? 0,
+      diasDevoluciones: devolucionDaysByOrderId.get(m.id) ?? 0,
+      baremoTotal: null,
+      baremoAnsRef: null,
+      baremoAnsCalc: null,
+      diasEnel: 0
+    }));
+  }
+
+  const chunkCodes = (arr: string[], size: number) => {
+    const out: string[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
+  const baremos: Array<{ codigo: string; totalBarSum: number | null; ansRef: number | null; ansCalc: number | null }> = [];
+  const enelSumMap = new Map<string, number>();
+  const codeChunks = chunkCodes(codes, 500);
+
+  for (const group of codeChunks) {
+    const [b, g] = await Promise.all([
+      prisma.actividadBaremo.findMany({
+        where: { codigo: { in: group } },
+        select: { codigo: true, totalBarSum: true, ansRef: true, ansCalc: true }
+      }),
+      prisma.recorridoIncremento.findMany({
+        where: { orderCode: { in: group }, responsable: "ENEL", diasEnel: { not: null } },
+        select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
+      })
+    ]);
+    baremos.push(...b);
+    const groupMap = buildEnelUnionSumMap(g, inicioMap);
+    for (const [code, sum] of groupMap.entries()) {
+      enelSumMap.set(code, (enelSumMap.get(code) ?? 0) + sum);
+    }
+  }
+
+  const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
+
+  return mapped.map((m) => {
+    const b = baremoMap.get(m.code);
+    const baremoInt = typeof b?.ansCalc === "number" ? Math.round(b.ansCalc) : 0;
+    const diasEnel = enelSumMap.get(m.code) ?? 0;
+    const extraDescuento = baremoInt + diasEnel;
+    const totalDiasDescuento = (m.totalDiasDescuento ?? 0) + extraDescuento;
+    const rawDiasGestion = m.diasGestion == null ? null : m.diasGestion - extraDescuento;
+    const diasGestion = rawDiasGestion == null ? null : Math.max(0, rawDiasGestion);
+    const diasPasados = m.diasPasados == null ? null : m.diasPasados + extraDescuento;
+
+    const assignedAt = m.assignedAt ? new Date(m.assignedAt as unknown as string | Date) : null;
+    const assignedIso = assignedAt
+      ? new Date(assignedAt.getFullYear(), assignedAt.getMonth(), assignedAt.getDate()).toISOString()
+      : null;
+    const assignedNum = assignedIso ? inicioMap.get(assignedIso) : undefined;
+
+    const fechaTentativaGestion =
+      !m.gestionAt && assignedNum !== undefined && m.ansOportunidad != null
+        ? finNumberToDate.get(assignedNum + m.ansOportunidad + totalDiasDescuento) ?? m.fechaTentativaGestion
+        : m.fechaTentativaGestion;
+
+    const cumplimiento =
+      m.status === "EXCLUDED"
+        ? "Cumple"
+        : diasPasados == null
+          ? m.cumplimiento
+          : diasPasados >= 0
+            ? "Cumple"
+            : "No cumple";
+
+    return {
+      ...m,
+      diasCumplimiento: novedadDaysByOrderId.get(m.id) ?? 0,
+      diasDevoluciones: devolucionDaysByOrderId.get(m.id) ?? 0,
+      baremoTotal: b?.totalBarSum ?? null,
+      baremoAnsRef: b?.ansRef ?? null,
+      baremoAnsCalc: b?.ansCalc ?? null,
+      diasEnel,
+      totalDiasDescuento,
+      diasGestion,
+      diasPasados,
+      fechaTentativaGestion,
+      cumplimiento
+    };
+  });
+}
+
 // Excluye de Programación y Actualización las órdenes cuya Oportunidad / ANS empiece por "AT"
 const EXCLUDE_AT_OPORTUNIDAD: Prisma.WorkOrderWhereInput = {
   OR: [{ oportunidad: null }, { NOT: { oportunidad: { startsWith: "AT", mode: "insensitive" } } }]
@@ -1018,151 +1173,8 @@ workOrdersRouter.get("/", requireAuth, requireAnyPermission("ORDERS", "PROGRAMAC
   ]);
   const requiresFull = !!colorFilter || !!minDiasGestion || computedSortKeys.has(sortKey);
 
-  const enrich = async (baseItems: WorkOrderListWithUsers[]): Promise<SortableListItem[]> => {
-    const mapped = baseItems.map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber));
-
-    const novedadDaysByOrderId = new Map<string, number>();
-    const devolucionDaysByOrderId = new Map<string, number>();
-    if (mapped.length > 0) {
-      const orderIds = mapped.map((m) => m.id);
-      const chunk = <T,>(arr: T[], size: number) => {
-        const out: T[][] = [];
-        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-        return out;
-      };
-      const idChunks = chunk(orderIds, 500);
-
-      for (const group of idChunks) {
-        const novedades = await prisma.novedad.findMany({
-          where: { workOrderId: { in: group }, fechaFin: { not: null } },
-          select: { workOrderId: true, fechaInicio: true, fechaFin: true }
-        });
-
-        for (const n of novedades) {
-          const inicioNum = inicioMap.get(normalizeDay(n.fechaInicio));
-          const finNum = n.fechaFin ? finMap.get(normalizeDay(n.fechaFin)) : undefined;
-          if (inicioNum === undefined || finNum === undefined) continue;
-          const diff = finNum - inicioNum;
-          if (diff <= 0) continue;
-          novedadDaysByOrderId.set(n.workOrderId, (novedadDaysByOrderId.get(n.workOrderId) ?? 0) + diff);
-        }
-      }
-
-      for (const group of idChunks) {
-        const devoluciones = await prisma.workOrderHistory.findMany({
-          where: {
-            workOrderId: { in: group },
-            note: { contains: "Descuento por devolución" },
-            fechaInicio: { not: null },
-            fechaFin: { not: null }
-          },
-          select: { workOrderId: true, fechaInicio: true, fechaFin: true }
-        });
-
-        for (const d of devoluciones) {
-          const inicioDate = d.fechaInicio ? new Date(d.fechaInicio) : null;
-          const finDate = d.fechaFin ? new Date(d.fechaFin) : null;
-          if (!inicioDate || !finDate) continue;
-          if (Number.isNaN(inicioDate.getTime()) || Number.isNaN(finDate.getTime())) continue;
-          const inicioNum = inicioMap.get(normalizeDay(inicioDate));
-          const finNum = finMap.get(normalizeDay(finDate));
-          if (inicioNum === undefined || finNum === undefined) continue;
-          const diff = finNum - inicioNum;
-          if (diff <= 0) continue;
-          devolucionDaysByOrderId.set(d.workOrderId, (devolucionDaysByOrderId.get(d.workOrderId) ?? 0) + diff);
-        }
-      }
-    }
-
-    const codes = mapped.map((m) => m.code).filter(Boolean);
-    if (codes.length === 0) {
-      return mapped.map((m) => ({
-        ...m,
-        diasCumplimiento: novedadDaysByOrderId.get(m.id) ?? 0,
-        diasDevoluciones: devolucionDaysByOrderId.get(m.id) ?? 0,
-        baremoTotal: null,
-        baremoAnsRef: null,
-        baremoAnsCalc: null,
-        diasEnel: 0
-      }));
-    }
-
-    const chunkCodes = (arr: string[], size: number) => {
-      const out: string[][] = [];
-      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-      return out;
-    };
-
-    const baremos: Array<{ codigo: string; totalBarSum: number | null; ansRef: number | null; ansCalc: number | null }> = [];
-    const enelSumMap = new Map<string, number>();
-    const codeChunks = chunkCodes(codes, 500);
-
-    for (const group of codeChunks) {
-      const [b, g] = await Promise.all([
-        prisma.actividadBaremo.findMany({
-          where: { codigo: { in: group } },
-          select: { codigo: true, totalBarSum: true, ansRef: true, ansCalc: true }
-        }),
-        prisma.recorridoIncremento.findMany({
-          where: { orderCode: { in: group }, responsable: "ENEL", diasEnel: { not: null } },
-          select: { orderCode: true, nombreIncremento: true, fechaInicio: true, diasEnel: true }
-        })
-      ]);
-      baremos.push(...b);
-      const groupMap = buildEnelUnionSumMap(g, inicioMap);
-      for (const [code, sum] of groupMap.entries()) {
-        enelSumMap.set(code, (enelSumMap.get(code) ?? 0) + sum);
-      }
-    }
-
-    const baremoMap = new Map(baremos.map((b) => [b.codigo, b]));
-
-    return mapped.map((m) => {
-      const b = baremoMap.get(m.code);
-      const baremoInt = typeof b?.ansCalc === "number" ? Math.round(b.ansCalc) : 0;
-      const diasEnel = enelSumMap.get(m.code) ?? 0;
-      const extraDescuento = baremoInt + diasEnel;
-      const totalDiasDescuento = (m.totalDiasDescuento ?? 0) + extraDescuento;
-      const rawDiasGestion = m.diasGestion == null ? null : m.diasGestion - extraDescuento;
-      const diasGestion = rawDiasGestion == null ? null : Math.max(0, rawDiasGestion);
-      const diasPasados = m.diasPasados == null ? null : m.diasPasados + extraDescuento;
-
-      const assignedAt = m.assignedAt ? new Date(m.assignedAt as unknown as string | Date) : null;
-      const assignedIso = assignedAt
-        ? new Date(assignedAt.getFullYear(), assignedAt.getMonth(), assignedAt.getDate()).toISOString()
-        : null;
-      const assignedNum = assignedIso ? inicioMap.get(assignedIso) : undefined;
-
-      const fechaTentativaGestion =
-        !m.gestionAt && assignedNum !== undefined && m.ansOportunidad != null
-          ? finNumberToDate.get(assignedNum + m.ansOportunidad + totalDiasDescuento) ?? m.fechaTentativaGestion
-          : m.fechaTentativaGestion;
-
-      const cumplimiento =
-        m.status === "EXCLUDED"
-          ? "Cumple"
-          : diasPasados == null
-            ? m.cumplimiento
-            : diasPasados >= 0
-              ? "Cumple"
-              : "No cumple";
-
-      return {
-        ...m,
-        diasCumplimiento: novedadDaysByOrderId.get(m.id) ?? 0,
-        diasDevoluciones: devolucionDaysByOrderId.get(m.id) ?? 0,
-        baremoTotal: b?.totalBarSum ?? null,
-        baremoAnsRef: b?.ansRef ?? null,
-        baremoAnsCalc: b?.ansCalc ?? null,
-        diasEnel,
-        totalDiasDescuento,
-        diasGestion,
-        diasPasados,
-        fechaTentativaGestion,
-        cumplimiento
-      };
-    });
-  };
+  const enrich = (baseItems: WorkOrderListWithUsers[]) =>
+    enrichWorkOrders(baseItems, inicioMap, finMap, finNumberToDate, maxFinNumber);
 
   const getSortValue = (it: SortableListItem) => {
     const parseDate = (v: string | Date | null | undefined) => {
@@ -1388,8 +1400,11 @@ workOrdersRouter.get("/export.csv", requireAuth, requireAnyPermission("ORDERS", 
     }
   });
 
-  const items = baseItems
-    .map((it) => toListDto(it, inicioMap, finMap, finNumberToDate, maxFinNumber))
+  // Reutiliza el mismo cálculo de "Días Gestión" del listado (módulo Actualización),
+  // para que la exportación muestre los mismos valores que la tabla.
+  const enriched = await enrichWorkOrders(baseItems, inicioMap, finMap, finNumberToDate, maxFinNumber);
+
+  const items = enriched
     .filter((it) => {
       if (!minDiasGestion) return true;
       const gestionStatuses = new Set(["ASIGNADA", "ASSIGNED", "EN_EJECUCION", "IN_PROGRESS"]);
