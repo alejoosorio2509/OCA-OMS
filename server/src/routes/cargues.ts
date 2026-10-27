@@ -3665,8 +3665,21 @@ async function processBacklogJob(input: {
   }
   const existingCodes = new Set(orderByCode.keys());
 
-  const matched = parsedRows.filter((r) => existingCodes.has(r.orderCode));
-  const omitted = parsedRows.length - matched.length;
+  // Órdenes Cerradas, Facturadas o Gestionadas: el cargue de backlog las ignora por completo
+  // (no cambia su estado, ni la categoría, ni registra historial ni novedades de backlog).
+  const TERMINAL_STATUSES: WorkOrderStatus[] = ["GESTIONADA", "FACTURADA", "CERRADA"];
+  const isTerminalStatus = (status: string) =>
+    TERMINAL_STATUSES.some((t) => t === String(status).trim().toUpperCase().replace(/\s+/g, ""));
+  const isSkippedTerminal = (row: { orderCode: string }) => {
+    const current = orderByCode.get(row.orderCode);
+    return !!current && isTerminalStatus(current.status);
+  };
+
+  const matchedByCode = parsedRows.filter((r) => existingCodes.has(r.orderCode));
+  const skippedTerminal = matchedByCode.filter((r) => isSkippedTerminal(r)).length;
+  const matched = matchedByCode.filter((r) => !isSkippedTerminal(r));
+  const omitted = parsedRows.length - matchedByCode.length;
+  const activeCodes = Array.from(new Set(matched.map((r) => r.orderCode)));
 
   const chunk = <T,>(arr: T[], size: number) => {
     const out: T[][] = [];
@@ -3728,7 +3741,7 @@ async function processBacklogJob(input: {
 
   // Registros abiertos (sin fecha fin) de las órdenes incluidas en el cargue
   const openByKey = new Map<string, { id: string; signature: string }>();
-  for (const group of chunk(codes, 500)) {
+  for (const group of chunk(activeCodes, 500)) {
     const open = await prisma.backlog.findMany({
       where: { orderCode: { in: group }, fechaFin: null },
       select: {
@@ -3825,7 +3838,6 @@ async function processBacklogJob(input: {
   // Pausa/Reanudación automática según el responsable (ENEL / OCA)
   const BACKLOG_PAUSE_NOTE = "Pausa automática: responsable ENEL (cargue Backlog)";
   const BACKLOG_RESUME_NOTE = "Reanudación automática: responsable OCA (cargue Backlog)";
-  const TERMINAL_STATUSES: WorkOrderStatus[] = ["GESTIONADA", "FACTURADA", "CERRADA"];
 
   const responsableByCode = new Map<string, string>();
   for (const r of matched) {
@@ -3892,11 +3904,12 @@ async function processBacklogJob(input: {
   }
 
   return {
-    message: `Backlog: ${created} novedades registradas${closed > 0 ? `, ${closed} cerradas` : ""}.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
+    message: `Backlog: ${created} novedades registradas${closed > 0 ? `, ${closed} cerradas` : ""}.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${skippedTerminal > 0 ? ` ${skippedTerminal} omitidas (Cerrada/Facturada/Gestionada).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
     count: created,
     created,
     closed,
     omitted,
+    skippedTerminal,
     updatedOrders: categoriaByCode.size,
     pausedOrders,
     resumedOrders,
