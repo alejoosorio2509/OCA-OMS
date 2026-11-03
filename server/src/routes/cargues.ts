@@ -75,6 +75,16 @@ function mapStatus(status: string | undefined): WorkOrderStatus {
   return mapping[s] || "ASIGNADA";
 }
 
+// Normaliza el texto de estado del archivo: mayúsculas, sin tildes y sin espacios duplicados.
+function normalizeStatusText(value: string | undefined) {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
 function isTruthy(value: unknown, defaultValue = false) {
   if (value === undefined || value === null) return defaultValue;
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
@@ -670,6 +680,222 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
   return data;
 }
 
+// Fila del cargue de actualización ya normalizada, lista para escribir.
+type ActualizacionParsedRow = {
+  rowLabel: number;
+  code: string;
+  status: WorkOrderStatus;
+  gestorCc: string | null;
+  gestorNombre: string | null;
+  tipoIncremento: string;
+  oportunidad: string | null;
+  ansOportunidad: number | null;
+  assignedAtUpdate: Date | undefined;
+  gestionAtUpdate: Date | null | undefined;
+};
+
+// Estados finales: si el archivo los reporta, la orden debe quedar con ese estado (no en Pausada).
+const ACTUALIZACION_FINAL_STATUSES: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
+
+// Filas por bloque para cargar las órdenes actuales en bloque y comparar en memoria.
+const ACTUALIZACION_CHUNK = 1000;
+
+// Escribe un bloque de filas del cargue de actualización: carga las órdenes actuales
+// en bloque (una consulta por bloque), compara en memoria, omite las filas sin cambios
+// (sin escritura ni historial) y agrupa las escrituras de las filas que sí cambiaron.
+async function writeActualizacionRows(input: {
+  rows: ActualizacionParsedRow[];
+  userId: string;
+  now: Date;
+}): Promise<{ updated: number; skipped: number; historyCreated: number; errorDetails: string[] }> {
+  const errorDetails: string[] = [];
+  if (input.rows.length === 0) return { updated: 0, skipped: 0, historyCreated: 0, errorDetails };
+
+  const codes = Array.from(new Set(input.rows.map((r) => r.code)));
+  const existingByCode = new Map<
+    string,
+    {
+      id: string;
+      code: string;
+      status: WorkOrderStatus;
+      gestorCc: string | null;
+      gestorNombre: string | null;
+      tipoIncremento: string | null;
+      oportunidad: string | null;
+      ansOportunidad: number | null;
+      assignedAt: Date | null;
+      gestionAt: Date | null;
+      estadoSecundario: string | null;
+    }
+  >();
+  for (let i = 0; i < codes.length; i += 4000) {
+    const found = await prisma.workOrder.findMany({
+      where: { code: { in: codes.slice(i, i + 4000) } },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        gestorCc: true,
+        gestorNombre: true,
+        tipoIncremento: true,
+        oportunidad: true,
+        ansOportunidad: true,
+        assignedAt: true,
+        gestionAt: true,
+        estadoSecundario: true
+      }
+    });
+    for (const f of found) existingByCode.set(f.code, f);
+  }
+
+  const openNovedadesByOrderId = new Map<string, number>();
+  const existingIds = Array.from(existingByCode.values()).map((o) => o.id);
+  for (let i = 0; i < existingIds.length; i += 4000) {
+    const grouped = await prisma.novedad.groupBy({
+      by: ["workOrderId"],
+      where: { workOrderId: { in: existingIds.slice(i, i + 4000) }, fechaFin: null },
+      _count: { _all: true }
+    });
+    for (const g of grouped) openNovedadesByOrderId.set(g.workOrderId, g._count._all);
+  }
+
+  const sameDate = (a: Date | null, b: Date | null) => {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return a.getTime() === b.getTime();
+  };
+
+  const creates: Prisma.WorkOrderCreateManyInput[] = [];
+  const updateGroups = new Map<string, { data: Prisma.WorkOrderUpdateManyMutationInput; codes: string[] }>();
+  const historyRows: Prisma.WorkOrderHistoryCreateManyInput[] = [];
+  let skipped = 0;
+
+  for (const row of input.rows) {
+    try {
+      const existing = existingByCode.get(row.code);
+
+      // Un estado final reportado por el archivo prevalece sobre DEVUELTA y sobre la pausa.
+      // En el resto de casos se conserva la regla previa: no cambiar el estado si la orden
+      // está pausada (ON_HOLD) o tiene novedades abiertas.
+      let lockStatus = false;
+      if (existing) {
+        if (ACTUALIZACION_FINAL_STATUSES.includes(row.status)) {
+          lockStatus = false;
+        } else if (existing.status === "ON_HOLD") {
+          lockStatus = true;
+        } else {
+          lockStatus = (openNovedadesByOrderId.get(existing.id) ?? 0) > 0;
+        }
+      }
+
+      const finalStatus = lockStatus ? existing!.status : row.status;
+      const finalGestionAt = lockStatus ? undefined : row.gestionAtUpdate;
+
+      if (!existing) {
+        creates.push({
+          code: row.code,
+          title: `Orden ${row.code}`,
+          description: "",
+          gestorCc: row.gestorCc,
+          gestorNombre: row.gestorNombre,
+          tipoIncremento: row.tipoIncremento,
+          oportunidad: row.oportunidad,
+          ansOportunidad: row.ansOportunidad,
+          status: row.status,
+          estadoSecundario: null,
+          assignedAt: row.assignedAtUpdate ?? null,
+          gestionAt: ACTUALIZACION_FINAL_STATUSES.includes(row.status) ? row.gestionAtUpdate ?? null : null,
+          createdById: input.userId,
+          lastStatusChangeAt: input.now
+        });
+        continue;
+      }
+
+      const statusChanged = existing.status !== finalStatus;
+      const data: Prisma.WorkOrderUpdateManyMutationInput = {};
+      let changed = false;
+
+      if (existing.gestorCc !== row.gestorCc) {
+        data.gestorCc = row.gestorCc;
+        changed = true;
+      }
+      if (existing.gestorNombre !== row.gestorNombre) {
+        data.gestorNombre = row.gestorNombre;
+        changed = true;
+      }
+      if (existing.tipoIncremento !== row.tipoIncremento) {
+        data.tipoIncremento = row.tipoIncremento;
+        changed = true;
+      }
+      if (existing.oportunidad !== row.oportunidad) {
+        data.oportunidad = row.oportunidad;
+        changed = true;
+      }
+      if (existing.ansOportunidad !== row.ansOportunidad) {
+        data.ansOportunidad = row.ansOportunidad;
+        changed = true;
+      }
+      if (statusChanged) {
+        data.status = finalStatus;
+        changed = true;
+      }
+      if (!lockStatus && existing.estadoSecundario !== null) {
+        data.estadoSecundario = null;
+        changed = true;
+      }
+      if (row.assignedAtUpdate !== undefined && !sameDate(existing.assignedAt, row.assignedAtUpdate)) {
+        data.assignedAt = row.assignedAtUpdate;
+        changed = true;
+      }
+      if (finalGestionAt !== undefined && !sameDate(existing.gestionAt, finalGestionAt)) {
+        data.gestionAt = finalGestionAt;
+        changed = true;
+      }
+
+      if (!changed) {
+        skipped++;
+        continue;
+      }
+
+      data.updatedAt = input.now;
+      if (statusChanged && !lockStatus) data.lastStatusChangeAt = input.now;
+
+      if (statusChanged && ACTUALIZACION_FINAL_STATUSES.includes(finalStatus)) {
+        historyRows.push({
+          workOrderId: existing.id,
+          fromStatus: existing.status,
+          toStatus: finalStatus,
+          note: "Actualización: estado final reportado en el archivo",
+          changedById: input.userId
+        });
+      }
+
+      const key = JSON.stringify(data);
+      const group = updateGroups.get(key);
+      if (group) group.codes.push(row.code);
+      else updateGroups.set(key, { data, codes: [row.code] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      errorDetails.push(`Error en fila ${row.rowLabel}: ${msg}`);
+    }
+  }
+
+  let updated = 0;
+  if (creates.length > 0) {
+    await prisma.workOrder.createMany({ data: creates, skipDuplicates: true });
+    updated += creates.length;
+  }
+  for (const group of updateGroups.values()) {
+    await prisma.workOrder.updateMany({ where: { code: { in: group.codes } }, data: group.data });
+    updated += group.codes.length;
+  }
+  if (historyRows.length > 0) {
+    await prisma.workOrderHistory.createMany({ data: historyRows });
+  }
+
+  return { updated, skipped, historyCreated: historyRows.length, errorDetails };
+}
+
 async function processActualizacionCsvFile(input: {
   fileBytes: Buffer;
   userId: string;
@@ -727,6 +953,18 @@ async function processActualizacionCsvFile(input: {
   const stream = fileStream.pipe(parser);
 
   let i = 0;
+  let skippedCount = 0;
+  let pending: ActualizacionParsedRow[] = [];
+  const flush = async () => {
+    if (pending.length === 0) return;
+    const res = await writeActualizacionRows({ rows: pending, userId: input.userId, now });
+    successCount += res.updated;
+    skippedCount += res.skipped;
+    errorCount += res.errorDetails.length;
+    rowErrors.push(...res.errorDetails);
+    pending = [];
+  };
+
   for await (const row of stream as unknown as AsyncIterable<Record<string, unknown>>) {
     i++;
     try {
@@ -741,7 +979,7 @@ async function processActualizacionCsvFile(input: {
 
       if (codigosEnArchivo) codigosEnArchivo.add(code);
 
-      const rawStatus = getVal("Estado")?.toString().trim().toUpperCase() || "";
+      const rawStatus = normalizeStatusText(getVal("Estado")?.toString());
       const orderNum = parseInt(code.replace(/\D/g, ""));
       const validStatuses = [
         "FACTURADA",
@@ -767,7 +1005,7 @@ async function processActualizacionCsvFile(input: {
 
       if (!validStatuses.includes(rawStatus)) continue;
 
-      const status = mapStatus(getVal("Estado")?.toString());
+      const status = mapStatus(rawStatus);
       const gestorCc = getVal("Cedula Gestor")?.toString().trim();
       const gestorNombre = getVal("Gestor")?.toString().trim();
       const rawTipoIncremento = getVal("Tipo Incremento")?.toString().trim().toUpperCase();
@@ -881,70 +1119,27 @@ async function processActualizacionCsvFile(input: {
       const statusAllowsGestionAt = status === "GESTIONADA" || status === "FACTURADA" || status === "CERRADA";
       const gestionAtUpdate =
         statusAllowsGestionAt && gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : statusAllowsGestionAt ? undefined : null;
-      const assignedAtCreate = assignedAtUpdate ?? null;
-      const gestionAtCreate = statusAllowsGestionAt ? gestionAtUpdate ?? null : null;
 
-      const existing = await prisma.workOrder.findUnique({
-        where: { code },
-        select: { id: true, status: true }
+      pending.push({
+        rowLabel: i,
+        code,
+        status,
+        gestorCc: gestorCc || null,
+        gestorNombre: gestorNombre || null,
+        tipoIncremento,
+        oportunidad,
+        ansOportunidad,
+        assignedAtUpdate,
+        gestionAtUpdate
       });
-
-      // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
-      // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
-      // incluso si la orden tiene novedades abiertas.
-      const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
-      let lockStatus = false;
-      if (existing) {
-        if (existing.status === "DEVUELTA" && finalStatuses.includes(status)) {
-          lockStatus = false;
-        } else if (existing.status === "ON_HOLD") {
-          lockStatus = true;
-        } else {
-          const openNovedades = await prisma.novedad.count({
-            where: { workOrderId: existing.id, fechaFin: null }
-          });
-          lockStatus = openNovedades > 0;
-        }
-      }
-
-      await prisma.workOrder.upsert({
-        where: { code },
-        update: {
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status: lockStatus ? existing!.status : status,
-          estadoSecundario: lockStatus ? undefined : null,
-          assignedAt: assignedAtUpdate,
-          gestionAt: lockStatus ? undefined : gestionAtUpdate,
-          updatedAt: now,
-          lastStatusChangeAt: lockStatus ? undefined : now
-        },
-        create: {
-          code,
-          title: `Orden ${code}`,
-          description: "",
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status,
-          estadoSecundario: null,
-          assignedAt: assignedAtCreate,
-          gestionAt: gestionAtCreate,
-          createdById: input.userId,
-          lastStatusChangeAt: now
-        }
-      });
-
-      successCount++;
     } catch (err) {
       errorCount++;
       const msg = err instanceof Error ? err.message : "UNKNOWN";
       rowErrors.push(`Error en fila ${i}: ${msg}`);
+    }
+
+    if (pending.length >= ACTUALIZACION_CHUNK) {
+      await flush();
     }
 
     if (i % 2000 === 0) {
@@ -954,6 +1149,8 @@ async function processActualizacionCsvFile(input: {
       }
     }
   }
+
+  await flush();
 
   if (input.cleanupMissing) {
     const result = await prisma.workOrder.deleteMany({
@@ -965,13 +1162,14 @@ async function processActualizacionCsvFile(input: {
     writeLog(`INFO: Eliminadas ${result.count} órdenes que no estaban en el archivo de actualización`);
   }
 
-  writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  writeLog(`INFO: Finalizado. Actualizadas: ${successCount}, Sin cambios: ${skippedCount}, Errores: ${errorCount}`);
   if (input.onProgress) {
     await input.onProgress({ rows: i, success: successCount, errors: errorCount });
   }
   return {
-    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    message: `Procesados: ${successCount} actualizados, ${skippedCount} sin cambios, ${errorCount} errores`,
     count: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors
   };
@@ -1002,6 +1200,18 @@ async function processActualizacion(input: {
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
 
+  let skippedCount = 0;
+  let pending: ActualizacionParsedRow[] = [];
+  const flush = async () => {
+    if (pending.length === 0) return;
+    const res = await writeActualizacionRows({ rows: pending, userId: input.userId, now });
+    successCount += res.updated;
+    skippedCount += res.skipped;
+    errorCount += res.errorDetails.length;
+    rowErrors.push(...res.errorDetails);
+    pending = [];
+  };
+
   for (let i = 0; i < input.data.length; i++) {
     const row = input.data[i];
     try {
@@ -1020,7 +1230,7 @@ async function processActualizacion(input: {
 
       codigosEnArchivo.add(code);
 
-      const rawStatus = getVal("Estado")?.toString().trim().toUpperCase() || "";
+      const rawStatus = normalizeStatusText(getVal("Estado")?.toString());
 
       const orderNum = parseInt(code.replace(/\D/g, ""));
       const validStatuses = [
@@ -1054,7 +1264,7 @@ async function processActualizacion(input: {
         continue;
       }
 
-      const status = mapStatus(getVal("Estado")?.toString());
+      const status = mapStatus(rawStatus);
       const gestorCc = getVal("Cedula Gestor")?.toString().trim();
       const gestorNombre = getVal("Gestor")?.toString().trim();
       const rawTipoIncremento = getVal("Tipo Incremento")?.toString().trim().toUpperCase();
@@ -1179,71 +1389,31 @@ async function processActualizacion(input: {
       const statusAllowsGestionAt = status === "GESTIONADA" || status === "FACTURADA" || status === "CERRADA";
       const gestionAtUpdate =
         statusAllowsGestionAt && gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : statusAllowsGestionAt ? undefined : null;
-      const assignedAtCreate = assignedAtUpdate ?? null;
-      const gestionAtCreate = statusAllowsGestionAt ? gestionAtUpdate ?? null : null;
 
-      const existing = await prisma.workOrder.findUnique({
-        where: { code },
-        select: { id: true, status: true }
+      pending.push({
+        rowLabel: i + 1,
+        code,
+        status,
+        gestorCc: gestorCc || null,
+        gestorNombre: gestorNombre || null,
+        tipoIncremento,
+        oportunidad,
+        ansOportunidad,
+        assignedAtUpdate,
+        gestionAtUpdate
       });
-
-      // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
-      // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
-      // incluso si la orden tiene novedades abiertas.
-      const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
-      let lockStatus = false;
-      if (existing) {
-        if (existing.status === "DEVUELTA" && finalStatuses.includes(status)) {
-          lockStatus = false;
-        } else if (existing.status === "ON_HOLD") {
-          lockStatus = true;
-        } else {
-          const openNovedades = await prisma.novedad.count({
-            where: { workOrderId: existing.id, fechaFin: null }
-          });
-          lockStatus = openNovedades > 0;
-        }
-      }
-
-      await prisma.workOrder.upsert({
-        where: { code },
-        update: {
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status: lockStatus ? existing!.status : status,
-          estadoSecundario: lockStatus ? undefined : null,
-          assignedAt: assignedAtUpdate,
-          gestionAt: lockStatus ? undefined : gestionAtUpdate,
-          updatedAt: now,
-          lastStatusChangeAt: lockStatus ? undefined : now
-        },
-        create: {
-          code,
-          title: `Orden ${code}`,
-          description: "",
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status,
-          estadoSecundario: null,
-          assignedAt: assignedAtCreate,
-          gestionAt: gestionAtCreate,
-          createdById: input.userId,
-          lastStatusChangeAt: now
-        }
-      });
-      successCount++;
     } catch (err) {
       errorCount++;
       const msg = err instanceof Error ? err.message : "UNKNOWN";
       rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
     }
+
+    if (pending.length >= ACTUALIZACION_CHUNK) {
+      await flush();
+    }
   }
+
+  await flush();
 
   if (input.cleanupMissing) {
     try {
@@ -1260,10 +1430,11 @@ async function processActualizacion(input: {
     }
   }
 
-  writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  writeLog(`INFO: Finalizado. Actualizadas: ${successCount}, Sin cambios: ${skippedCount}, Errores: ${errorCount}`);
   return {
-    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    message: `Procesados: ${successCount} actualizados, ${skippedCount} sin cambios, ${errorCount} errores`,
     count: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors,
     columns: input.data.length > 0 ? Object.keys(input.data[0]) : []
