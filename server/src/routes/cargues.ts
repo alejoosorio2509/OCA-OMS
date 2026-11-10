@@ -425,19 +425,32 @@ async function finishJob(jobId: string, input: { ok: true; result: unknown } | {
   });
 }
 
+const CSV_DELIMITER_CANDIDATES = [";", ",", "\t", "|"];
+
+// Detecta el delimitador real del CSV (soporta TSV y el prefijo "sep=;" que agrega Excel).
+function splitCsvContent(content: string): { content: string; delimiter: string } {
+  const body = content.replace(/^\uFEFF/, "");
+  const sepMatch = body.match(/^sep=(.)\r?\n/i);
+  if (sepMatch) {
+    return { content: body.slice(sepMatch[0].length), delimiter: sepMatch[1]! };
+  }
+  const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
+  let delimiter = ";";
+  let bestCount = 0;
+  for (const candidate of CSV_DELIMITER_CANDIDATES) {
+    const count = firstLine.split(candidate).length - 1;
+    if (count > bestCount) {
+      bestCount = count;
+      delimiter = candidate;
+    }
+  }
+  return { content: body, delimiter };
+}
+
 async function loadRowsFromFile(input: { filePath: string; fileName: string; type: string }) {
   let data: Record<string, unknown>[] = [];
   const lowerName = String(input.fileName ?? "").trim().toLowerCase();
   if (lowerName.endsWith(".csv")) {
-    const primaryDelimiter =
-      input.type === "ACTUALIZACION" ||
-      input.type === "ACTIVIDADES_BAREMO" ||
-      input.type === "RECORRIDO_INCREMENTOS" ||
-      input.type === "LEVANTAMIENTO" ||
-      input.type === "BACKLOG"
-        ? ";"
-        : ",";
-    const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
     const normalizeKey = (value: string) =>
       value
         .split("\u0000")
@@ -466,14 +479,6 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
         bom: true,
         relax_column_count: true
       }) as Record<string, unknown>[];
-    const parseWithFallback = (content: string) => {
-      const first = parseContent(content, primaryDelimiter);
-      const firstKeys = Object.keys(first[0] ?? {});
-      if (firstKeys.length === 1 && firstKeys[0]?.includes(fallbackDelimiter)) {
-        return parseContent(content, fallbackDelimiter);
-      }
-      return first;
-    };
     const bytes = fs.readFileSync(input.filePath);
     const looksUtf16 =
       (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) ||
@@ -486,24 +491,38 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
       })();
     const encodings: BufferEncoding[] = looksUtf16 ? ["utf16le", "utf8", "latin1"] : ["utf8", "utf16le", "latin1"];
     let lastErr: unknown;
+    let parsedOk = false;
     for (const enc of encodings) {
       try {
-        const content = bytes.toString(enc);
-        const parsed = sanitizeRows(parseWithFallback(content));
+        const { content, delimiter } = splitCsvContent(bytes.toString(enc));
+        const parsed = sanitizeRows(parseContent(content, delimiter));
+        if (parsed.length === 0) {
+          data = [];
+          lastErr = null;
+          parsedOk = true;
+          break;
+        }
         if (input.type === "ACTIVIDADES_BAREMO" && !hasCodigoColumn(parsed)) {
+          lastErr = new Error(
+            `No se encontró la columna "Código" (delimitador detectado: ${
+              delimiter === "\t" ? "TAB" : delimiter
+            }). Encabezados detectados: ${Object.keys(parsed[0] ?? {}).join(", ") || "(ninguno)"}`
+          );
           continue;
         }
         data = parsed;
         lastErr = null;
+        parsedOk = true;
         break;
       } catch (e) {
         lastErr = e;
       }
     }
-    if (lastErr) {
-      const msg = lastErr instanceof Error ? lastErr.message : "UNKNOWN";
+    if (!parsedOk) {
+      const err = lastErr ?? new Error("No se pudo leer el CSV");
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
       writeLog(`ERROR: No se pudo leer CSV (${input.fileName}): ${msg}`);
-      throw lastErr;
+      throw err;
     }
   } else {
     const buffer = fs.readFileSync(input.filePath);
@@ -550,19 +569,6 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
   let data: Record<string, unknown>[] = [];
   const lowerName = String(input.fileName ?? "").trim().toLowerCase();
   if (lowerName.endsWith(".csv")) {
-    const primaryDelimiter =
-      input.type === "ACTUALIZACION" ||
-      input.type === "ACTIVIDADES_BAREMO" ||
-      input.type === "RECORRIDO_INCREMENTOS" ||
-      input.type === "LEVANTAMIENTO" ||
-      input.type === "MODELO_CATEGORIA_MB" ||
-      input.type === "CIRCUITOS_SUBESTACIONES" ||
-      input.type === "UNIDADES_TERRITORIALES" ||
-      input.type === "COMPONENTES_AT" ||
-      input.type === "BACKLOG"
-        ? ";"
-        : ",";
-    const fallbackDelimiter = primaryDelimiter === ";" ? "," : ";";
     const normalizeKey = (value: string) =>
       value
         .split("\u0000")
@@ -591,14 +597,6 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
         bom: true,
         relax_column_count: true
       }) as Record<string, unknown>[];
-    const parseWithFallback = (content: string) => {
-      const first = parseContent(content, primaryDelimiter);
-      const firstKeys = Object.keys(first[0] ?? {});
-      if (firstKeys.length === 1 && firstKeys[0]?.includes(fallbackDelimiter)) {
-        return parseContent(content, fallbackDelimiter);
-      }
-      return first;
-    };
     const bytes = input.bytes;
     const looksUtf16 =
       (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) ||
@@ -611,24 +609,38 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
       })();
     const encodings: BufferEncoding[] = looksUtf16 ? ["utf16le", "utf8", "latin1"] : ["utf8", "utf16le", "latin1"];
     let lastErr: unknown;
+    let parsedOk = false;
     for (const enc of encodings) {
       try {
-        const content = bytes.toString(enc);
-        const parsed = sanitizeRows(parseWithFallback(content));
+        const { content, delimiter } = splitCsvContent(bytes.toString(enc));
+        const parsed = sanitizeRows(parseContent(content, delimiter));
+        if (parsed.length === 0) {
+          data = [];
+          lastErr = null;
+          parsedOk = true;
+          break;
+        }
         if (input.type === "ACTIVIDADES_BAREMO" && !hasCodigoColumn(parsed)) {
+          lastErr = new Error(
+            `No se encontró la columna "Código" (delimitador detectado: ${
+              delimiter === "\t" ? "TAB" : delimiter
+            }). Encabezados detectados: ${Object.keys(parsed[0] ?? {}).join(", ") || "(ninguno)"}`
+          );
           continue;
         }
         data = parsed;
         lastErr = null;
+        parsedOk = true;
         break;
       } catch (e) {
         lastErr = e;
       }
     }
-    if (lastErr) {
-      const msg = lastErr instanceof Error ? lastErr.message : "UNKNOWN";
+    if (!parsedOk) {
+      const err = lastErr ?? new Error("No se pudo leer el CSV");
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
       writeLog(`ERROR: No se pudo leer CSV (${input.fileName}): ${msg}`);
-      throw lastErr;
+      throw err;
     }
   } else {
     const workbook = XLSX.read(input.bytes, { type: "buffer", cellDates: true });
@@ -1895,6 +1907,9 @@ async function processActividadesBaremoJob(input: {
         rowErrors.push(`Fila ${i + 1}: Falta Código`);
         continue;
       }
+
+      const orderNum = parseInt(codigo.replace(/\D/g, ""));
+      if (isNaN(orderNum) || orderNum <= 3000000) continue;
 
       const estado = (getVal(row, "Estado") ?? "").toString().trim() || null;
       const tipo = (getVal(row, "Tipo") ?? "").toString().trim() || null;
