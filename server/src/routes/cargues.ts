@@ -670,6 +670,177 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
   return data;
 }
 
+// Fila del cargue de actualización ya normalizada, lista para escribir.
+type ActualizacionParsedRow = {
+  rowLabel: number;
+  code: string;
+  status: WorkOrderStatus;
+  gestorCc: string | null;
+  gestorNombre: string | null;
+  tipoIncremento: string;
+  oportunidad: string | null;
+  ansOportunidad: number | null;
+  assignedAtUpdate: Date | undefined;
+  gestionAtUpdate: Date | null | undefined;
+};
+
+// Filas por bloque para cargar las órdenes actuales y comparar antes de escribir.
+const ACTUALIZACION_BATCH = 1000;
+
+// Escribe un bloque de filas del cargue de actualización:
+// - carga en bloque las órdenes existentes y las novedades abiertas (una consulta por bloque),
+// - compara cada fila contra lo que ya está en la base de datos,
+// - omite (sin escritura ni historial) las filas que no tienen cambios y continúa con la siguiente,
+// - escribe con upsert únicamente las filas que sí cambian.
+async function writeActualizacionRows(input: {
+  rows: ActualizacionParsedRow[];
+  userId: string;
+  now: Date;
+}): Promise<{ written: number; skipped: number; errors: number; errorDetails: string[] }> {
+  const errorDetails: string[] = [];
+  let written = 0;
+  let skipped = 0;
+  if (input.rows.length === 0) return { written, skipped, errors: 0, errorDetails };
+
+  const codes = Array.from(new Set(input.rows.map((r) => r.code)));
+
+  const existingByCode = new Map<
+    string,
+    {
+      id: string;
+      status: WorkOrderStatus;
+      gestorCc: string | null;
+      gestorNombre: string | null;
+      tipoIncremento: string | null;
+      oportunidad: string | null;
+      ansOportunidad: number | null;
+      assignedAt: Date | null;
+      gestionAt: Date | null;
+      estadoSecundario: string | null;
+    }
+  >();
+  for (let i = 0; i < codes.length; i += 2000) {
+    const found = await prisma.workOrder.findMany({
+      where: { code: { in: codes.slice(i, i + 2000) } },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        gestorCc: true,
+        gestorNombre: true,
+        tipoIncremento: true,
+        oportunidad: true,
+        ansOportunidad: true,
+        assignedAt: true,
+        gestionAt: true,
+        estadoSecundario: true
+      }
+    });
+    for (const f of found) existingByCode.set(f.code, f);
+  }
+
+  const openNovedadesByOrderId = new Map<string, number>();
+  const existingIds = Array.from(existingByCode.values()).map((o) => o.id);
+  for (let i = 0; i < existingIds.length; i += 2000) {
+    const grouped = await prisma.novedad.groupBy({
+      by: ["workOrderId"],
+      where: { workOrderId: { in: existingIds.slice(i, i + 2000) }, fechaFin: null },
+      _count: { _all: true }
+    });
+    for (const g of grouped) openNovedadesByOrderId.set(g.workOrderId, g._count._all);
+  }
+
+  // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
+  // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
+  // incluso si la orden tiene novedades abiertas.
+  const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
+  const sameDate = (a: Date | null, b: Date | null | undefined) => {
+    if (a === null && (b === null || b === undefined)) return true;
+    if (a === null || b === null || b === undefined) return false;
+    return a.getTime() === b.getTime();
+  };
+
+  for (const row of input.rows) {
+    try {
+      const existing = existingByCode.get(row.code);
+
+      let lockStatus = false;
+      if (existing) {
+        if (existing.status === "DEVUELTA" && finalStatuses.includes(row.status)) {
+          lockStatus = false;
+        } else if (existing.status === "ON_HOLD") {
+          lockStatus = true;
+        } else {
+          lockStatus = (openNovedadesByOrderId.get(existing.id) ?? 0) > 0;
+        }
+      }
+
+      if (existing) {
+        const finalStatus = lockStatus ? existing.status : row.status;
+        const statusChanged = existing.status !== finalStatus;
+        const estadoSecundarioChange = !lockStatus && existing.estadoSecundario !== null;
+        const assignedAtChange =
+          row.assignedAtUpdate !== undefined && !sameDate(existing.assignedAt, row.assignedAtUpdate);
+        const gestionAtChange =
+          !lockStatus && row.gestionAtUpdate !== undefined && !sameDate(existing.gestionAt, row.gestionAtUpdate);
+        const scalarChanged =
+          existing.gestorCc !== row.gestorCc ||
+          existing.gestorNombre !== row.gestorNombre ||
+          existing.tipoIncremento !== row.tipoIncremento ||
+          existing.oportunidad !== row.oportunidad ||
+          existing.ansOportunidad !== row.ansOportunidad;
+
+        // La fila no tiene cambios: se omite y se continúa con la siguiente.
+        if (!statusChanged && !estadoSecundarioChange && !assignedAtChange && !gestionAtChange && !scalarChanged) {
+          skipped++;
+          continue;
+        }
+      }
+
+      const statusAllowsGestionAt = row.status === "GESTIONADA" || row.status === "FACTURADA" || row.status === "CERRADA";
+
+      await prisma.workOrder.upsert({
+        where: { code: row.code },
+        update: {
+          gestorCc: row.gestorCc || null,
+          gestorNombre: row.gestorNombre || null,
+          tipoIncremento: row.tipoIncremento,
+          oportunidad: row.oportunidad,
+          ansOportunidad: row.ansOportunidad,
+          status: lockStatus ? existing!.status : row.status,
+          estadoSecundario: lockStatus ? undefined : null,
+          assignedAt: row.assignedAtUpdate,
+          gestionAt: lockStatus ? undefined : row.gestionAtUpdate,
+          updatedAt: input.now,
+          lastStatusChangeAt: lockStatus ? undefined : input.now
+        },
+        create: {
+          code: row.code,
+          title: `Orden ${row.code}`,
+          description: "",
+          gestorCc: row.gestorCc || null,
+          gestorNombre: row.gestorNombre || null,
+          tipoIncremento: row.tipoIncremento,
+          oportunidad: row.oportunidad,
+          ansOportunidad: row.ansOportunidad,
+          status: row.status,
+          estadoSecundario: null,
+          assignedAt: row.assignedAtUpdate ?? null,
+          gestionAt: statusAllowsGestionAt ? row.gestionAtUpdate ?? null : null,
+          createdById: input.userId,
+          lastStatusChangeAt: input.now
+        }
+      });
+      written++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "UNKNOWN";
+      errorDetails.push(`Error en fila ${row.rowLabel}: ${msg}`);
+    }
+  }
+
+  return { written, skipped, errors: errorDetails.length, errorDetails };
+}
+
 async function processActualizacionCsvFile(input: {
   fileBytes: Buffer;
   userId: string;
@@ -678,8 +849,19 @@ async function processActualizacionCsvFile(input: {
 }) {
   const now = new Date();
   let successCount = 0;
+  let skippedCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
+  let pending: ActualizacionParsedRow[] = [];
+  const flush = async () => {
+    if (pending.length === 0) return;
+    const res = await writeActualizacionRows({ rows: pending, userId: input.userId, now });
+    successCount += res.written;
+    skippedCount += res.skipped;
+    errorCount += res.errors;
+    rowErrors.push(...res.errorDetails);
+    pending = [];
+  };
   const codigosEnArchivo = input.cleanupMissing ? new Set<string>() : null;
 
   const calendarRows = await prisma.calendar.findMany({ select: { date: true, dayNumber: true, dayNumberFin: true } });
@@ -881,79 +1063,38 @@ async function processActualizacionCsvFile(input: {
       const statusAllowsGestionAt = status === "GESTIONADA" || status === "FACTURADA" || status === "CERRADA";
       const gestionAtUpdate =
         statusAllowsGestionAt && gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : statusAllowsGestionAt ? undefined : null;
-      const assignedAtCreate = assignedAtUpdate ?? null;
-      const gestionAtCreate = statusAllowsGestionAt ? gestionAtUpdate ?? null : null;
 
-      const existing = await prisma.workOrder.findUnique({
-        where: { code },
-        select: { id: true, status: true }
+      pending.push({
+        rowLabel: i,
+        code,
+        status,
+        gestorCc: gestorCc || null,
+        gestorNombre: gestorNombre || null,
+        tipoIncremento,
+        oportunidad,
+        ansOportunidad,
+        assignedAtUpdate,
+        gestionAtUpdate
       });
-
-      // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
-      // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
-      // incluso si la orden tiene novedades abiertas.
-      const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
-      let lockStatus = false;
-      if (existing) {
-        if (existing.status === "DEVUELTA" && finalStatuses.includes(status)) {
-          lockStatus = false;
-        } else if (existing.status === "ON_HOLD") {
-          lockStatus = true;
-        } else {
-          const openNovedades = await prisma.novedad.count({
-            where: { workOrderId: existing.id, fechaFin: null }
-          });
-          lockStatus = openNovedades > 0;
-        }
-      }
-
-      await prisma.workOrder.upsert({
-        where: { code },
-        update: {
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status: lockStatus ? existing!.status : status,
-          estadoSecundario: lockStatus ? undefined : null,
-          assignedAt: assignedAtUpdate,
-          gestionAt: lockStatus ? undefined : gestionAtUpdate,
-          updatedAt: now,
-          lastStatusChangeAt: lockStatus ? undefined : now
-        },
-        create: {
-          code,
-          title: `Orden ${code}`,
-          description: "",
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status,
-          estadoSecundario: null,
-          assignedAt: assignedAtCreate,
-          gestionAt: gestionAtCreate,
-          createdById: input.userId,
-          lastStatusChangeAt: now
-        }
-      });
-
-      successCount++;
     } catch (err) {
       errorCount++;
       const msg = err instanceof Error ? err.message : "UNKNOWN";
       rowErrors.push(`Error en fila ${i}: ${msg}`);
     }
 
+    if (pending.length >= ACTUALIZACION_BATCH) {
+      await flush();
+    }
+
     if (i % 2000 === 0) {
-      writeLog(`INFO: Progreso ACTUALIZACION filas=${i} exitos=${successCount} errores=${errorCount}`);
+      writeLog(`INFO: Progreso ACTUALIZACION filas=${i} exitos=${successCount} omitidas=${skippedCount} errores=${errorCount}`);
       if (input.onProgress) {
         await input.onProgress({ rows: i, success: successCount, errors: errorCount });
       }
     }
   }
+
+  await flush();
 
   if (input.cleanupMissing) {
     const result = await prisma.workOrder.deleteMany({
@@ -965,13 +1106,14 @@ async function processActualizacionCsvFile(input: {
     writeLog(`INFO: Eliminadas ${result.count} órdenes que no estaban en el archivo de actualización`);
   }
 
-  writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  writeLog(`INFO: Finalizado. Actualizadas: ${successCount}, Sin cambios: ${skippedCount}, Errores: ${errorCount}`);
   if (input.onProgress) {
     await input.onProgress({ rows: i, success: successCount, errors: errorCount });
   }
   return {
-    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    message: `Procesados: ${successCount} actualizados, ${skippedCount} sin cambios, ${errorCount} errores`,
     count: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors
   };
@@ -984,8 +1126,19 @@ async function processActualizacion(input: {
 }) {
   const now = new Date();
   let successCount = 0;
+  let skippedCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
+  let pending: ActualizacionParsedRow[] = [];
+  const flush = async () => {
+    if (pending.length === 0) return;
+    const res = await writeActualizacionRows({ rows: pending, userId: input.userId, now });
+    successCount += res.written;
+    skippedCount += res.skipped;
+    errorCount += res.errors;
+    rowErrors.push(...res.errorDetails);
+    pending = [];
+  };
 
   if (input.data.length > 0) {
     writeLog(`INFO: Primera fila de datos (claves): ${Object.keys(input.data[0]).join(", ")}`);
@@ -1179,71 +1332,31 @@ async function processActualizacion(input: {
       const statusAllowsGestionAt = status === "GESTIONADA" || status === "FACTURADA" || status === "CERRADA";
       const gestionAtUpdate =
         statusAllowsGestionAt && gestionAt && isNotFutureDate(gestionAt, now) ? gestionAt : statusAllowsGestionAt ? undefined : null;
-      const assignedAtCreate = assignedAtUpdate ?? null;
-      const gestionAtCreate = statusAllowsGestionAt ? gestionAtUpdate ?? null : null;
 
-      const existing = await prisma.workOrder.findUnique({
-        where: { code },
-        select: { id: true, status: true }
+      pending.push({
+        rowLabel: i + 1,
+        code,
+        status,
+        gestorCc: gestorCc || null,
+        gestorNombre: gestorNombre || null,
+        tipoIncremento,
+        oportunidad,
+        ansOportunidad,
+        assignedAtUpdate,
+        gestionAtUpdate
       });
-
-      // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
-      // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
-      // incluso si la orden tiene novedades abiertas.
-      const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
-      let lockStatus = false;
-      if (existing) {
-        if (existing.status === "DEVUELTA" && finalStatuses.includes(status)) {
-          lockStatus = false;
-        } else if (existing.status === "ON_HOLD") {
-          lockStatus = true;
-        } else {
-          const openNovedades = await prisma.novedad.count({
-            where: { workOrderId: existing.id, fechaFin: null }
-          });
-          lockStatus = openNovedades > 0;
-        }
-      }
-
-      await prisma.workOrder.upsert({
-        where: { code },
-        update: {
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status: lockStatus ? existing!.status : status,
-          estadoSecundario: lockStatus ? undefined : null,
-          assignedAt: assignedAtUpdate,
-          gestionAt: lockStatus ? undefined : gestionAtUpdate,
-          updatedAt: now,
-          lastStatusChangeAt: lockStatus ? undefined : now
-        },
-        create: {
-          code,
-          title: `Orden ${code}`,
-          description: "",
-          gestorCc: gestorCc || null,
-          gestorNombre: gestorNombre || null,
-          tipoIncremento,
-          oportunidad,
-          ansOportunidad,
-          status,
-          estadoSecundario: null,
-          assignedAt: assignedAtCreate,
-          gestionAt: gestionAtCreate,
-          createdById: input.userId,
-          lastStatusChangeAt: now
-        }
-      });
-      successCount++;
     } catch (err) {
       errorCount++;
       const msg = err instanceof Error ? err.message : "UNKNOWN";
       rowErrors.push(`Error en fila ${i + 1}: ${msg}`);
     }
+
+    if (pending.length >= ACTUALIZACION_BATCH) {
+      await flush();
+    }
   }
+
+  await flush();
 
   if (input.cleanupMissing) {
     try {
@@ -1260,10 +1373,11 @@ async function processActualizacion(input: {
     }
   }
 
-  writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
+  writeLog(`INFO: Finalizado. Actualizadas: ${successCount}, Sin cambios: ${skippedCount}, Errores: ${errorCount}`);
   return {
-    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    message: `Procesados: ${successCount} actualizados, ${skippedCount} sin cambios, ${errorCount} errores`,
     count: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors,
     columns: input.data.length > 0 ? Object.keys(input.data[0]) : []
@@ -1462,13 +1576,10 @@ async function processDevolucionesJob(input: {
         continue;
       }
 
-      if (!order.assignedAt) {
-        ignoredCount++;
-        continue;
-      }
-
+      // La orden se alimenta sin importar su estado actual. Si no tiene fecha de asignación,
+      // solo se omite la validación de "devolución anterior a la fecha de asignación".
       const dAsig = order.assignedAt;
-      if (bogotaDateKey(dDev) < bogotaDateKey(dAsig)) {
+      if (dAsig && bogotaDateKey(dDev) < bogotaDateKey(dAsig)) {
         ignoredCount++;
         continue;
       }
@@ -3838,10 +3949,15 @@ async function processBacklogJob(input: {
     for (const [code, responsableRaw] of responsableByCode) {
       const order = orderByCode.get(code);
       if (!order) continue;
+
+      // El cargue de backlog no cambia el estado de las órdenes que ya están
+      // Cerrada, Facturada o Gestionada en la aplicación.
+      if (TERMINAL_STATUSES.includes(order.status)) continue;
+
       const responsable = responsableRaw.trim().toUpperCase();
       try {
         if (responsable === "ENEL") {
-          if (order.status !== "ON_HOLD" && !TERMINAL_STATUSES.includes(order.status)) {
+          if (order.status !== "ON_HOLD") {
             await prisma.workOrderHistory.create({
               data: {
                 workOrderId: order.id,
@@ -4282,21 +4398,18 @@ carguesRouter.post(
                 const order = await prisma.workOrder.findUnique({ where: { code } });
                 
                 if (order) {
-                  // Nueva validación: Fecha Devolución debe ser superior a Fecha Asignación
-                  if (!order.assignedAt) {
-                    writeLog(`INFO: Omitiendo descuento para Orden ${code} porque no tiene Fecha Asignación registrada (Fecha Devolución: ${dDev.toLocaleDateString()})`);
-                    ignoredCount++;
-                    continue;
-                  }
-
+                  // La orden se alimenta sin importar su estado actual. Si no tiene fecha de
+                  // asignación, solo se omite la validación de "devolución posterior a la asignación".
                   const dAsig = order.assignedAt;
-                  const normalizeAsig = new Date(dAsig.getFullYear(), dAsig.getMonth(), dAsig.getDate()).getTime();
-                  const normalizeDev = new Date(dDev.getFullYear(), dDev.getMonth(), dDev.getDate()).getTime();
+                  if (dAsig) {
+                    const normalizeAsig = new Date(dAsig.getFullYear(), dAsig.getMonth(), dAsig.getDate()).getTime();
+                    const normalizeDev = new Date(dDev.getFullYear(), dDev.getMonth(), dDev.getDate()).getTime();
 
-                  if (normalizeDev <= normalizeAsig) {
-                    writeLog(`INFO: Omitiendo descuento para Orden ${code} porque Fecha Devolución (${dDev.toLocaleDateString()}) no es superior a Fecha Asignación (${dAsig.toLocaleDateString()})`);
-                    ignoredCount++;
-                    continue;
+                    if (normalizeDev <= normalizeAsig) {
+                      writeLog(`INFO: Omitiendo descuento para Orden ${code} porque Fecha Devolución (${dDev.toLocaleDateString()}) no es superior a Fecha Asignación (${dAsig.toLocaleDateString()})`);
+                      ignoredCount++;
+                      continue;
+                    }
                   }
 
                   const diff = finRes - inicioDev;
