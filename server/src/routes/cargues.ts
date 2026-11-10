@@ -427,9 +427,18 @@ async function finishJob(jobId: string, input: { ok: true; result: unknown } | {
 
 const CSV_DELIMITER_CANDIDATES = [";", ",", "\t", "|"];
 
+// Repara secuencias de UTF-8 leído como latin1 (mojibake) de 2 bytes: "Ã³" -> "ó", "Ã±" -> "ñ", etc.
+// Muchos exports guardan los bytes UTF-8 como si fueran latin1 y los encabezados quedan corruptos.
+function repairMojibake(text: string): string {
+  return text.replace(/[\u00c2-\u00c3][\u0080-\u00bf]/g, (seq) => {
+    const decoded = Buffer.from(seq, "latin1").toString("utf8");
+    return decoded.includes("\uFFFD") ? seq : decoded;
+  });
+}
+
 // Detecta el delimitador real del CSV (soporta TSV y el prefijo "sep=;" que agrega Excel).
 function splitCsvContent(content: string): { content: string; delimiter: string } {
-  const body = content.replace(/^\uFEFF/, "");
+  const body = repairMojibake(content.replace(/^\uFEFF/, ""));
   const sepMatch = body.match(/^sep=(.)\r?\n/i);
   if (sepMatch) {
     return { content: body.slice(sepMatch[0].length), delimiter: sepMatch[1]! };
