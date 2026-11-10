@@ -678,6 +678,7 @@ async function processActualizacionCsvFile(input: {
 }) {
   const now = new Date();
   let successCount = 0;
+  let skippedCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
   const codigosEnArchivo = input.cleanupMissing ? new Set<string>() : null;
@@ -737,7 +738,10 @@ async function processActualizacionCsvFile(input: {
 
       const rawCode = (getVal("Orden de trabajo") || getVal("Orden"))?.toString().trim();
       const code = rawCode;
-      if (!code) continue;
+      if (!code) {
+        skippedCount++;
+        continue;
+      }
 
       if (codigosEnArchivo) codigosEnArchivo.add(code);
 
@@ -758,14 +762,20 @@ async function processActualizacionCsvFile(input: {
         "ASIGNADO"
       ];
 
-      if (isNaN(orderNum) || orderNum <= 3000000) continue;
+      if (isNaN(orderNum) || orderNum <= 3000000) {
+        skippedCount++;
+        continue;
+      }
 
       if (rawStatus === "CANCELADA" || rawStatus === "CANCELADO" || rawStatus === "SOLICITADA" || rawStatus === "SOLICITADO") {
         await prisma.workOrder.deleteMany({ where: { code } });
         continue;
       }
 
-      if (!validStatuses.includes(rawStatus)) continue;
+      if (!validStatuses.includes(rawStatus)) {
+        skippedCount++;
+        continue;
+      }
 
       const status = mapStatus(getVal("Estado")?.toString());
       const gestorCc = getVal("Cedula Gestor")?.toString().trim();
@@ -970,8 +980,9 @@ async function processActualizacionCsvFile(input: {
     await input.onProgress({ rows: i, success: successCount, errors: errorCount });
   }
   return {
-    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    message: `Procesados: ${successCount} actualizados, ${skippedCount} omitidas, ${errorCount} errores`,
     count: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors
   };
@@ -984,6 +995,7 @@ async function processActualizacion(input: {
 }) {
   const now = new Date();
   let successCount = 0;
+  let skippedCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
 
@@ -1015,6 +1027,7 @@ async function processActualizacion(input: {
 
       if (!code) {
         writeLog(`WARN: Fila ${i + 1} sin 'Orden de trabajo'`);
+        skippedCount++;
         continue;
       }
 
@@ -1040,6 +1053,7 @@ async function processActualizacion(input: {
 
       if (isNaN(orderNum) || orderNum <= 3000000) {
         writeLog(`INFO: Omitiendo fila ${i + 1} (Orden ${code}) por ser <= 3000000`);
+        skippedCount++;
         continue;
       }
 
@@ -1051,6 +1065,7 @@ async function processActualizacion(input: {
 
       if (!validStatuses.includes(rawStatus)) {
         writeLog(`INFO: Omitiendo fila ${i + 1} (Orden ${code}) por estado no permitido: ${rawStatus}`);
+        skippedCount++;
         continue;
       }
 
@@ -1262,8 +1277,9 @@ async function processActualizacion(input: {
 
   writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
   return {
-    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
+    message: `Procesados: ${successCount} actualizados, ${skippedCount} omitidas, ${errorCount} errores`,
     count: successCount,
+    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors,
     columns: input.data.length > 0 ? Object.keys(input.data[0]) : []
@@ -3665,20 +3681,10 @@ async function processBacklogJob(input: {
   }
   const existingCodes = new Set(orderByCode.keys());
 
-  // Órdenes Cerradas, Facturadas o Gestionadas: el cargue de backlog las ignora por completo
-  // (no cambia su estado, ni la categoría, ni registra historial ni novedades de backlog).
   const TERMINAL_STATUSES: WorkOrderStatus[] = ["GESTIONADA", "FACTURADA", "CERRADA"];
-  const isTerminalStatus = (status: string) =>
-    TERMINAL_STATUSES.some((t) => t === String(status).trim().toUpperCase().replace(/\s+/g, ""));
-  const isSkippedTerminal = (row: { orderCode: string }) => {
-    const current = orderByCode.get(row.orderCode);
-    return !!current && isTerminalStatus(current.status);
-  };
 
-  const matchedByCode = parsedRows.filter((r) => existingCodes.has(r.orderCode));
-  const skippedTerminal = matchedByCode.filter((r) => isSkippedTerminal(r)).length;
-  const matched = matchedByCode.filter((r) => !isSkippedTerminal(r));
-  const omitted = parsedRows.length - matchedByCode.length;
+  const matched = parsedRows.filter((r) => existingCodes.has(r.orderCode));
+  const omitted = parsedRows.length - matched.length;
   const activeCodes = Array.from(new Set(matched.map((r) => r.orderCode)));
 
   const chunk = <T,>(arr: T[], size: number) => {
@@ -3904,12 +3910,11 @@ async function processBacklogJob(input: {
   }
 
   return {
-    message: `Backlog: ${created} novedades registradas${closed > 0 ? `, ${closed} cerradas` : ""}.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${skippedTerminal > 0 ? ` ${skippedTerminal} omitidas (Cerrada/Facturada/Gestionada).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
+    message: `Backlog: ${created} novedades registradas${closed > 0 ? `, ${closed} cerradas` : ""}.${omitted > 0 ? ` ${omitted} omitidos (OT sin orden).` : ""}${pausedOrders > 0 ? ` ${pausedOrders} pausadas (ENEL).` : ""}${resumedOrders > 0 ? ` ${resumedOrders} reanudadas (OCA).` : ""}`,
     count: created,
     created,
     closed,
     omitted,
-    skippedTerminal,
     updatedOrders: categoriaByCode.size,
     pausedOrders,
     resumedOrders,
