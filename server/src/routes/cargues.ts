@@ -447,6 +447,32 @@ function splitCsvContent(content: string): { content: string; delimiter: string 
   return { content: body, delimiter };
 }
 
+// Detecta si el contenido parece UTF-16 (BOM o presencia alta de bytes nulos).
+function looksLikeUtf16Bytes(bytes: Buffer): boolean {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return true;
+  const n = Math.min(bytes.length, 2000);
+  if (n === 0) return false;
+  let zeros = 0;
+  for (let i = 0; i < n; i++) if (bytes[i] === 0x00) zeros++;
+  return zeros / n > 0.2;
+}
+
+// Decodifica los bytes de un CSV probando codificaciones y detecta su delimitador real.
+// Se validan los encabezados esperados para elegir la codificación correcta.
+function decodeCsvBytes(bytes: Buffer, expectedHeader?: RegExp): { text: string; delimiter: string } {
+  const candidates: BufferEncoding[] = looksLikeUtf16Bytes(bytes) ? ["utf16le", "utf8", "latin1"] : ["utf8", "utf16le", "latin1"];
+  let first: { content: string; delimiter: string } | null = null;
+  for (const enc of candidates) {
+    const decoded = splitCsvContent(bytes.toString(enc));
+    if (!first) first = decoded;
+    if (!expectedHeader) return { text: decoded.content, delimiter: decoded.delimiter };
+    const headerLine = decoded.content.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
+    if (expectedHeader.test(headerLine)) return { text: decoded.content, delimiter: decoded.delimiter };
+  }
+  const fallback = first ?? splitCsvContent(bytes.toString("utf8"));
+  return { text: fallback.content, delimiter: fallback.delimiter };
+}
+
 async function loadRowsFromFile(input: { filePath: string; fileName: string; type: string }) {
   let data: Record<string, unknown>[] = [];
   const lowerName = String(input.fileName ?? "").trim().toLowerCase();
@@ -513,6 +539,11 @@ async function loadRowsFromFile(input: { filePath: string; fileName: string; typ
         data = parsed;
         lastErr = null;
         parsedOk = true;
+        writeLog(
+          `INFO: CSV ${input.fileName} leído (${parsed.length} filas, delimitador: ${
+            delimiter === "\t" ? "TAB" : delimiter
+          }, encabezados: ${Object.keys(parsed[0] ?? {}).join(", ") || "(ninguno)"})`
+        );
         break;
       } catch (e) {
         lastErr = e;
@@ -631,6 +662,11 @@ async function loadRowsFromBytes(input: { fileName: string; type: string; bytes:
         data = parsed;
         lastErr = null;
         parsedOk = true;
+        writeLog(
+          `INFO: CSV ${input.fileName} leído (${parsed.length} filas, delimitador: ${
+            delimiter === "\t" ? "TAB" : delimiter
+          }, encabezados: ${Object.keys(parsed[0] ?? {}).join(", ") || "(ninguno)"})`
+        );
         break;
       } catch (e) {
         lastErr = e;
@@ -892,19 +928,10 @@ async function processActualizacionCsvFile(input: {
     calendarFinMap.set(key, r.dayNumberFin ?? r.dayNumber);
   }
 
-  const detectDelimiter = (bytes: Buffer) => {
-    const sample = bytes.toString("latin1", 0, Math.min(bytes.length, 8192));
-    const firstLine =
-      sample
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .find((s) => s.length > 0) ?? "";
-    const semi = (firstLine.match(/;/g) ?? []).length;
-    const comma = (firstLine.match(/,/g) ?? []).length;
-    return semi >= comma ? ";" : ",";
-  };
+  const { text: csvText, delimiter } = decodeCsvBytes(input.fileBytes, /orden/i);
+  const headerLine = csvText.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
+  writeLog(`INFO: CSV Actualización - delimitador detectado: ${delimiter === "\t" ? "TAB" : delimiter}. Encabezado: ${headerLine}`);
 
-  const delimiter = detectDelimiter(input.fileBytes);
   const parser = parseStream({
     columns: true,
     skip_empty_lines: true,
@@ -914,13 +941,14 @@ async function processActualizacionCsvFile(input: {
     relax_column_count: true
   });
 
-  const fileStream = Readable.from([input.fileBytes]);
+  const fileStream = Readable.from([csvText]);
   fileStream.on("error", (err) => {
     parser.destroy(err);
   });
   const stream = fileStream.pipe(parser);
 
   let i = 0;
+  let missingCodeCount = 0;
   for await (const row of stream as unknown as AsyncIterable<Record<string, unknown>>) {
     i++;
     try {
@@ -931,7 +959,10 @@ async function processActualizacionCsvFile(input: {
 
       const rawCode = (getVal("Orden de trabajo") || getVal("Orden"))?.toString().trim();
       const code = rawCode;
-      if (!code) continue;
+      if (!code) {
+        missingCodeCount++;
+        continue;
+      }
 
       if (codigosEnArchivo) codigosEnArchivo.add(code);
 
@@ -1118,12 +1149,24 @@ async function processActualizacionCsvFile(input: {
     writeLog(`INFO: Eliminadas ${result.count} órdenes que no estaban en el archivo de actualización`);
   }
 
-  writeLog(`INFO: Finalizado. Actualizadas: ${successCount}, Sin cambios: ${skippedCount}, Errores: ${errorCount}`);
+  writeLog(`INFO: Finalizado. Filas leídas=${i}, Actualizadas=${successCount}, Sin cambios=${skippedCount}, Errores=${errorCount}`);
   if (input.onProgress) {
     await input.onProgress({ rows: i, success: successCount, errors: errorCount });
   }
+
+  // Diagnóstico visible: evita que un CSV mal delimitado/encabezado termine "en éxito" sin procesar nada.
+  const delimiterLabel = delimiter === "\t" ? "TAB" : delimiter;
+  let message = `Procesados: ${successCount} actualizados, ${skippedCount} sin cambios, ${errorCount} errores`;
+  if (i === 0) {
+    message = `No se leyeron filas del CSV. Delimitador detectado: "${delimiterLabel}". Encabezado: ${headerLine || "(vacío)"}`;
+    rowErrors.push(message);
+  } else if (missingCodeCount === i) {
+    message = `Se leyeron ${i} filas pero ninguna tiene la columna "Orden de trabajo". Delimitador detectado: "${delimiterLabel}". Encabezado: ${headerLine || "(vacío)"}`;
+    rowErrors.push(message);
+  }
+
   return {
-    message: `Procesados: ${successCount} actualizados, ${skippedCount} sin cambios, ${errorCount} errores`,
+    message,
     count: successCount,
     skipped: skippedCount,
     errors: errorCount,
