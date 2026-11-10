@@ -678,7 +678,6 @@ async function processActualizacionCsvFile(input: {
 }) {
   const now = new Date();
   let successCount = 0;
-  let skippedCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
   const codigosEnArchivo = input.cleanupMissing ? new Set<string>() : null;
@@ -738,10 +737,7 @@ async function processActualizacionCsvFile(input: {
 
       const rawCode = (getVal("Orden de trabajo") || getVal("Orden"))?.toString().trim();
       const code = rawCode;
-      if (!code) {
-        skippedCount++;
-        continue;
-      }
+      if (!code) continue;
 
       if (codigosEnArchivo) codigosEnArchivo.add(code);
 
@@ -762,20 +758,14 @@ async function processActualizacionCsvFile(input: {
         "ASIGNADO"
       ];
 
-      if (isNaN(orderNum) || orderNum <= 3000000) {
-        skippedCount++;
-        continue;
-      }
+      if (isNaN(orderNum) || orderNum <= 3000000) continue;
 
       if (rawStatus === "CANCELADA" || rawStatus === "CANCELADO" || rawStatus === "SOLICITADA" || rawStatus === "SOLICITADO") {
         await prisma.workOrder.deleteMany({ where: { code } });
         continue;
       }
 
-      if (!validStatuses.includes(rawStatus)) {
-        skippedCount++;
-        continue;
-      }
+      if (!validStatuses.includes(rawStatus)) continue;
 
       const status = mapStatus(getVal("Estado")?.toString());
       const gestorCc = getVal("Cedula Gestor")?.toString().trim();
@@ -980,9 +970,8 @@ async function processActualizacionCsvFile(input: {
     await input.onProgress({ rows: i, success: successCount, errors: errorCount });
   }
   return {
-    message: `Procesados: ${successCount} actualizados, ${skippedCount} omitidas, ${errorCount} errores`,
+    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
     count: successCount,
-    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors
   };
@@ -995,7 +984,6 @@ async function processActualizacion(input: {
 }) {
   const now = new Date();
   let successCount = 0;
-  let skippedCount = 0;
   let errorCount = 0;
   const rowErrors: string[] = [];
 
@@ -1027,7 +1015,6 @@ async function processActualizacion(input: {
 
       if (!code) {
         writeLog(`WARN: Fila ${i + 1} sin 'Orden de trabajo'`);
-        skippedCount++;
         continue;
       }
 
@@ -1053,7 +1040,6 @@ async function processActualizacion(input: {
 
       if (isNaN(orderNum) || orderNum <= 3000000) {
         writeLog(`INFO: Omitiendo fila ${i + 1} (Orden ${code}) por ser <= 3000000`);
-        skippedCount++;
         continue;
       }
 
@@ -1065,7 +1051,6 @@ async function processActualizacion(input: {
 
       if (!validStatuses.includes(rawStatus)) {
         writeLog(`INFO: Omitiendo fila ${i + 1} (Orden ${code}) por estado no permitido: ${rawStatus}`);
-        skippedCount++;
         continue;
       }
 
@@ -1277,9 +1262,8 @@ async function processActualizacion(input: {
 
   writeLog(`INFO: Finalizado. Éxitos: ${successCount}, Errores: ${errorCount}`);
   return {
-    message: `Procesados: ${successCount} actualizados, ${skippedCount} omitidas, ${errorCount} errores`,
+    message: `Procesados: ${successCount} éxitos, ${errorCount} errores`,
     count: successCount,
-    skipped: skippedCount,
     errors: errorCount,
     errorDetails: rowErrors,
     columns: input.data.length > 0 ? Object.keys(input.data[0]) : []
@@ -1800,6 +1784,9 @@ async function processActividadesBaremoJob(input: {
         rowErrors.push(`Fila ${i + 1}: Falta Código`);
         continue;
       }
+
+      const orderNum = parseInt(codigo.replace(/\D/g, ""));
+      if (isNaN(orderNum) || orderNum <= 3000000) continue;
 
       const estado = (getVal(row, "Estado") ?? "").toString().trim() || null;
       const tipo = (getVal(row, "Tipo") ?? "").toString().trim() || null;
@@ -3678,11 +3665,8 @@ async function processBacklogJob(input: {
   }
   const existingCodes = new Set(orderByCode.keys());
 
-  const TERMINAL_STATUSES: WorkOrderStatus[] = ["GESTIONADA", "FACTURADA", "CERRADA"];
-
   const matched = parsedRows.filter((r) => existingCodes.has(r.orderCode));
   const omitted = parsedRows.length - matched.length;
-  const activeCodes = Array.from(new Set(matched.map((r) => r.orderCode)));
 
   const chunk = <T,>(arr: T[], size: number) => {
     const out: T[][] = [];
@@ -3744,7 +3728,7 @@ async function processBacklogJob(input: {
 
   // Registros abiertos (sin fecha fin) de las órdenes incluidas en el cargue
   const openByKey = new Map<string, { id: string; signature: string }>();
-  for (const group of chunk(activeCodes, 500)) {
+  for (const group of chunk(codes, 500)) {
     const open = await prisma.backlog.findMany({
       where: { orderCode: { in: group }, fechaFin: null },
       select: {
@@ -3841,6 +3825,7 @@ async function processBacklogJob(input: {
   // Pausa/Reanudación automática según el responsable (ENEL / OCA)
   const BACKLOG_PAUSE_NOTE = "Pausa automática: responsable ENEL (cargue Backlog)";
   const BACKLOG_RESUME_NOTE = "Reanudación automática: responsable OCA (cargue Backlog)";
+  const TERMINAL_STATUSES: WorkOrderStatus[] = ["GESTIONADA", "FACTURADA", "CERRADA"];
 
   const responsableByCode = new Map<string, string>();
   for (const r of matched) {
