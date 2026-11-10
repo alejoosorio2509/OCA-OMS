@@ -1801,9 +1801,6 @@ async function processActividadesBaremoJob(input: {
         continue;
       }
 
-      const orderNum = parseInt(codigo.replace(/\D/g, ""));
-      if (isNaN(orderNum) || orderNum <= 3000000) continue;
-
       const estado = (getVal(row, "Estado") ?? "").toString().trim() || null;
       const tipo = (getVal(row, "Tipo") ?? "").toString().trim() || null;
       const origen = (getVal(row, "Origen") ?? "").toString().trim() || null;
