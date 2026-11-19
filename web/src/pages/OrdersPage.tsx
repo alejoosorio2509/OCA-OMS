@@ -750,7 +750,7 @@ export function OrdersPage() {
                         it.cumplimiento === "No cumple"
                           ? "red"
                           : it.cumplimiento === "Cumple"
-                            ? it.diasPasados != null && it.diasPasados <= 2
+                            ? it.diasPasados != null && it.diasPasados <= 1
                               ? "#d1a000"
                               : "green"
                             : "var(--muted)"
