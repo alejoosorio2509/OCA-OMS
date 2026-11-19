@@ -2124,7 +2124,7 @@ async function processActividadesBaremoJob(input: {
 
   for (const [codigo, row] of latestByCodigo.entries()) {
     const ansRef = ansMap.get(codigo) ?? null;
-    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
+    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 23 ? 0 : (row.totalBarSum / 23) * ansRef - ansRef) : null;
     const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
     const newData = {
