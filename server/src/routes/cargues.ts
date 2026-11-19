@@ -1505,6 +1505,27 @@ async function processDevolucionesJob(input: {
       const orderNum = parseInt(code.replace(/\D/g, ""));
       if (isNaN(orderNum) || orderNum <= 3000000) continue;
 
+      // Regla de devoluciones: la fila solo se procesa si la orden existe, tiene fecha de
+      // asignación y la Fecha Devolución es igual o posterior (mismo día vale) a la asignación.
+      // Si no se cumple, se omite por completo: no cambia estado, no guarda historial
+      // y no calcula días de descuento.
+      const ordenPrevia = await prisma.workOrder.findUnique({
+        where: { code },
+        select: { assignedAt: true }
+      });
+      if (!ordenPrevia || !ordenPrevia.assignedAt) {
+        ignoredCount++;
+        continue;
+      }
+      const fechaDevPrevia = pickBestDateByMap(
+        getVal("Fecha Devolución") || getVal("Fecha Devolucion"),
+        calendarInicioMap
+      );
+      if (!fechaDevPrevia || bogotaDateKey(fechaDevPrevia) < bogotaDateKey(ordenPrevia.assignedAt)) {
+        ignoredCount++;
+        continue;
+      }
+
       if (estadoSecundario === "DEVUELTA") {
         // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
         const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
@@ -1640,8 +1661,7 @@ async function processDevolucionesJob(input: {
         continue;
       }
 
-      // La orden se alimenta sin importar su estado actual. Si no tiene fecha de asignación,
-      // solo se omite la validación de "devolución anterior a la fecha de asignación".
+      // La validación de fecha de asignación ya se hizo al inicio de la fila (se repite por seguridad).
       const dAsig = order.assignedAt;
       if (dAsig && bogotaDateKey(dDev) < bogotaDateKey(dAsig)) {
         ignoredCount++;
@@ -2104,7 +2124,7 @@ async function processActividadesBaremoJob(input: {
 
   for (const [codigo, row] of latestByCodigo.entries()) {
     const ansRef = ansMap.get(codigo) ?? null;
-    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 23 ? 0 : (row.totalBarSum / 23) * ansRef - ansRef) : null;
+    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
     const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
     const newData = {
@@ -2212,7 +2232,7 @@ async function processActividadesBaremoJob(input: {
   for (const [codigo, row] of latestByCodigo.entries()) {
     const existing = existingMap.get(codigo);
     const ansRef = ansMap.get(codigo) ?? null;
-    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 23 ? 0 : (row.totalBarSum / 23) * ansRef - ansRef) : null;
+    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
     const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
     const order = workOrderMap.get(codigo);
@@ -4320,7 +4340,7 @@ carguesRouter.post(
       //   - inicioDev = Inicio(Fecha Devolución) desde el calendario
       //   - finRes = Fin(Fecha Respuesta) desde el calendario
       //   - Si la hora de la respuesta es > 17:00: finRes += 1 (equivalente a pasar al siguiente día del calendario)
-      //   - Regla: solo se cuenta si Fecha Devolución > Fecha Asignación; si no, se omite
+      //   - Regla: la fila solo se procesa si Fecha Devolución >= Fecha Asignación (mismo día vale); si no, o si no hay asignación u orden, se omite completa
       //   - Se de-duplica por (fechaInicio, fechaFin) para no duplicar descuentos
       //
       // Nota: usamos Inicio para la fecha de devolución y Fin para la fecha de respuesta por definición del calendario (columnas Inicio/Fin).
@@ -4353,6 +4373,28 @@ carguesRouter.post(
           const orderNum = parseInt(code.replace(/\D/g, ""));
           if (isNaN(orderNum) || orderNum <= 3000000) {
             writeLog(`INFO: Omitiendo fila de devolución para Orden ${code} por ser <= 3000000`);
+            continue;
+          }
+
+          // Regla de devoluciones: la fila solo se procesa si la orden existe, tiene fecha de
+          // asignación y la Fecha Devolución es igual o posterior (mismo día vale) a la asignación.
+          // Si no se cumple, se omite por completo: no cambia estado, no guarda historial
+          // y no calcula días de descuento.
+          const ordenPrevia = await prisma.workOrder.findUnique({
+            where: { code },
+            select: { assignedAt: true }
+          });
+          if (!ordenPrevia || !ordenPrevia.assignedAt) {
+            ignoredCount++;
+            continue;
+          }
+          const fechaDevPrevia = pickBestDateByMap(
+            getVal("Fecha Devolución") || getVal("Fecha Devolucion"),
+            calendarInicioMap
+          );
+          if (!fechaDevPrevia || bogotaDateKey(fechaDevPrevia) < bogotaDateKey(ordenPrevia.assignedAt)) {
+            writeLog(`INFO: Omitiendo fila de devolución para Orden ${code}: sin fecha de asignación o devolución anterior a la asignación`);
+            ignoredCount++;
             continue;
           }
 
@@ -4462,20 +4504,7 @@ carguesRouter.post(
                 const order = await prisma.workOrder.findUnique({ where: { code } });
                 
                 if (order) {
-                  // La orden se alimenta sin importar su estado actual. Si no tiene fecha de
-                  // asignación, solo se omite la validación de "devolución posterior a la asignación".
-                  const dAsig = order.assignedAt;
-                  if (dAsig) {
-                    const normalizeAsig = new Date(dAsig.getFullYear(), dAsig.getMonth(), dAsig.getDate()).getTime();
-                    const normalizeDev = new Date(dDev.getFullYear(), dDev.getMonth(), dDev.getDate()).getTime();
-
-                    if (normalizeDev <= normalizeAsig) {
-                      writeLog(`INFO: Omitiendo descuento para Orden ${code} porque Fecha Devolución (${dDev.toLocaleDateString()}) no es superior a Fecha Asignación (${dAsig.toLocaleDateString()})`);
-                      ignoredCount++;
-                      continue;
-                    }
-                  }
-
+                  // La validación de fecha de asignación ya se hizo al inicio de la fila.
                   const diff = finRes - inicioDev;
                   if (diff <= 0) {
                     ignoredCount++;
@@ -4910,7 +4939,7 @@ carguesRouter.post(
 
       for (const [codigo, row] of latestByCodigo.entries()) {
         const ansRef = ansMap.get(codigo) ?? null;
-        const rawAnsCalc = ansRef != null ? (row.totalBarSum < 23 ? 0 : (row.totalBarSum / 23) * ansRef - ansRef) : null;
+        const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
         const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
         const newData = {
@@ -5040,7 +5069,7 @@ carguesRouter.post(
       for (const [codigo, row] of latestByCodigo.entries()) {
         const existing = existingMap.get(codigo);
         const ansRef = ansMap.get(codigo) ?? null;
-        const rawAnsCalc = ansRef != null ? (row.totalBarSum < 23 ? 0 : (row.totalBarSum / 23) * ansRef - ansRef) : null;
+        const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
         const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
         const order = workOrderMap.get(codigo);
