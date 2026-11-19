@@ -447,7 +447,7 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
   if (status === "EXCLUDED") return "green";
   if (diasPasados === null) return null;
   if (diasPasados < 0) return "red";
-  if (diasPasados <= 2) return "yellow";
+  if (diasPasados <= 1) return "yellow";
   return "green";
 }
 
