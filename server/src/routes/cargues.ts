@@ -807,10 +807,9 @@ async function writeActualizacionRows(input: {
     for (const g of grouped) openNovedadesByOrderId.set(g.workOrderId, g._count._all);
   }
 
-  // Regla: una orden CERRADA, GESTIONADA o FACTURADA no puede quedar en estado DEVUELTA.
-  // Si el archivo la reporta en un estado final, ese estado prevalece sobre DEVUELTA
-  // incluso si la orden tiene novedades abiertas.
-  const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
+  // Regla: este cargue no cambia el estado de una orden DEVUELTA, en pausa (ON_HOLD) o con
+  // novedades abiertas en el sistema. DEVUELTA solo la libera el cargue de devoluciones;
+  // las pausas y novedades solo se cambian desde el sistema.
   const sameDate = (a: Date | null, b: Date | null | undefined) => {
     if (a === null && (b === null || b === undefined)) return true;
     if (a === null || b === null || b === undefined) return false;
@@ -823,8 +822,8 @@ async function writeActualizacionRows(input: {
 
       let lockStatus = false;
       if (existing) {
-        if (existing.status === "DEVUELTA" && finalStatuses.includes(row.status)) {
-          lockStatus = false;
+        if (existing.status === "DEVUELTA") {
+          lockStatus = true;
         } else if (existing.status === "ON_HOLD") {
           lockStatus = true;
         } else {
@@ -1456,6 +1455,14 @@ async function processDevolucionesJob(input: {
   let deletedCount = 0;
   let updatedCount = 0;
   let ignoredCount = 0;
+  let liberadasCount = 0;
+  // La liberación solo aplica si el archivo trae la columna "Estado secundario".
+  const fileHasEstadoCol = input.data.some((r) =>
+    Object.keys(r).some((k) => {
+      const n = k.trim().toLowerCase();
+      return n === "estado secundario" || n === "estado secundarios";
+    })
+  );
   const rowErrors: string[] = [];
   const debugSample: Array<{
     fila: number;
@@ -1505,6 +1512,31 @@ async function processDevolucionesJob(input: {
       const orderNum = parseInt(code.replace(/\D/g, ""));
       if (isNaN(orderNum) || orderNum <= 3000000) continue;
 
+      // Liberación: si el archivo trae la columna de estado secundario y esta orden viene vacía,
+      // una orden DEVUELTA vuelve a EN_EJECUCION. Es la única forma de sacarla de DEVUELTA.
+      if (fileHasEstadoCol && !estadoSecundario) {
+        const devuelta = await prisma.workOrder.findUnique({
+          where: { code },
+          select: { id: true, status: true }
+        });
+        if (devuelta && devuelta.status === "DEVUELTA") {
+          await prisma.workOrder.update({
+            where: { id: devuelta.id },
+            data: { status: "EN_EJECUCION", estadoSecundario: null, lastStatusChangeAt: new Date() }
+          });
+          await prisma.workOrderHistory.create({
+            data: {
+              workOrderId: devuelta.id,
+              fromStatus: "DEVUELTA",
+              toStatus: "EN_EJECUCION",
+              note: "Orden liberada de DEVUELTA: el cargue de devoluciones la trae sin estado secundario",
+              changedById: input.userId
+            }
+          });
+          liberadasCount++;
+        }
+      }
+
       // Regla de devoluciones: la fila solo se procesa si la orden existe, tiene fecha de
       // asignación y la Fecha Devolución es igual o posterior (mismo día vale) a la asignación.
       // Si no se cumple, se omite por completo: no cambia estado, no guarda historial
@@ -1531,10 +1563,17 @@ async function processDevolucionesJob(input: {
         const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
         const existingOrder = await prisma.workOrder.findUnique({
           where: { code },
-          select: { status: true }
+          select: { id: true, status: true }
         });
         if (existingOrder && finalStatuses.includes(existingOrder.status)) {
           writeLog(`INFO: Orden ${code} no se marca DEVUELTA porque está en estado ${existingOrder.status}`);
+          ignoredCount++;
+        } else if (
+          existingOrder &&
+          (existingOrder.status === "ON_HOLD" ||
+            (await prisma.novedad.count({ where: { workOrderId: existingOrder.id, fechaFin: null } })) > 0)
+        ) {
+          writeLog(`INFO: Orden ${code} no se marca DEVUELTA porque tiene una pausa/novedad registrada en el sistema`);
           ignoredCount++;
         } else {
           const now = new Date();
@@ -1565,6 +1604,7 @@ async function processDevolucionesJob(input: {
             await prisma.workOrderHistory.create({
               data: {
                 workOrderId: order.id,
+                fromStatus: existingOrder?.status,
                 toStatus: "DEVUELTA",
                 note: "Orden marcada como DEVUELTA desde el cargue de devoluciones",
                 changedById: input.userId
@@ -1729,7 +1769,7 @@ async function processDevolucionesJob(input: {
   }
 
   return {
-    message: `Proceso de Devoluciones finalizado. ${deletedCount} eliminadas, ${updatedCount} actualizadas.`,
+    message: `Proceso de Devoluciones finalizado. ${deletedCount} eliminadas, ${updatedCount} actualizadas, ${liberadasCount} liberadas.`,
     count: updatedCount,
     deleted: deletedCount,
     ignored: ignoredCount,
@@ -2124,7 +2164,7 @@ async function processActividadesBaremoJob(input: {
 
   for (const [codigo, row] of latestByCodigo.entries()) {
     const ansRef = ansMap.get(codigo) ?? null;
-    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 23 ? 0 : (row.totalBarSum / 23) * ansRef - ansRef) : null;
+    const rawAnsCalc = ansRef != null ? (row.totalBarSum < 39 ? 0 : (row.totalBarSum / 39) * ansRef - ansRef) : null;
     const ansCalc = rawAnsCalc == null ? null : Math.floor(rawAnsCalc);
 
     const newData = {
@@ -4038,8 +4078,19 @@ async function processBacklogJob(input: {
       // Cerrada, Facturada o Gestionada en la aplicación.
       if (TERMINAL_STATUSES.includes(order.status)) continue;
 
+      // Una orden DEVUELTA solo cambia desde el cargue de devoluciones.
+      if (order.status === "DEVUELTA") continue;
+
       const responsable = responsableRaw.trim().toUpperCase();
       try {
+        // Una pausa por novedad registrada en el sistema solo se levanta desde el sistema.
+        if (
+          order.status === "ON_HOLD" &&
+          (await prisma.novedad.count({ where: { workOrderId: order.id, fechaFin: null } })) > 0
+        ) {
+          continue;
+        }
+
         if (responsable === "ENEL") {
           if (order.status !== "ON_HOLD") {
             await prisma.workOrderHistory.create({
@@ -4329,6 +4380,14 @@ carguesRouter.post(
       let deletedCount = 0;
       let updatedCount = 0;
       let ignoredCount = 0;
+      let liberadasCount = 0;
+      // La liberación solo aplica si el archivo trae la columna "Estado secundario".
+      const fileHasEstadoCol = data.some((r: Record<string, unknown>) =>
+        Object.keys(r).some((k) => {
+          const n = k.trim().toLowerCase();
+          return n === "estado secundario" || n === "estado secundarios";
+        })
+      );
       const rowErrors: string[] = [];
 
       writeLog(`INFO: Procesando archivo de Devoluciones: ${data.length} filas`);
@@ -4376,6 +4435,31 @@ carguesRouter.post(
             continue;
           }
 
+          // Liberación: si el archivo trae la columna de estado secundario y esta orden viene vacía,
+          // una orden DEVUELTA vuelve a EN_EJECUCION. Es la única forma de sacarla de DEVUELTA.
+          if (fileHasEstadoCol && !estadoSecundario) {
+            const devuelta = await prisma.workOrder.findUnique({
+              where: { code },
+              select: { id: true, status: true }
+            });
+            if (devuelta && devuelta.status === "DEVUELTA") {
+              await prisma.workOrder.update({
+                where: { id: devuelta.id },
+                data: { status: "EN_EJECUCION", estadoSecundario: null, lastStatusChangeAt: new Date() }
+              });
+              await prisma.workOrderHistory.create({
+                data: {
+                  workOrderId: devuelta.id,
+                  fromStatus: "DEVUELTA",
+                  toStatus: "EN_EJECUCION",
+                  note: "Orden liberada de DEVUELTA: el cargue de devoluciones la trae sin estado secundario",
+                  changedById: userId
+                }
+              });
+              liberadasCount++;
+            }
+          }
+
           // Regla de devoluciones: la fila solo se procesa si la orden existe, tiene fecha de
           // asignación y la Fecha Devolución es igual o posterior (mismo día vale) a la asignación.
           // Si no se cumple, se omite por completo: no cambia estado, no guarda historial
@@ -4404,10 +4488,17 @@ carguesRouter.post(
             const finalStatuses: WorkOrderStatus[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
             const existingOrder = await prisma.workOrder.findUnique({
               where: { code },
-              select: { status: true }
+              select: { id: true, status: true }
             });
             if (existingOrder && finalStatuses.includes(existingOrder.status)) {
               writeLog(`INFO: Orden ${code} no se marca DEVUELTA porque está en estado ${existingOrder.status}`);
+              ignoredCount++;
+            } else if (
+              existingOrder &&
+              (existingOrder.status === "ON_HOLD" ||
+                (await prisma.novedad.count({ where: { workOrderId: existingOrder.id, fechaFin: null } })) > 0)
+            ) {
+              writeLog(`INFO: Orden ${code} no se marca DEVUELTA porque tiene una pausa/novedad registrada en el sistema`);
               ignoredCount++;
             } else {
               const now = new Date();
@@ -4439,6 +4530,7 @@ carguesRouter.post(
                 await prisma.workOrderHistory.create({
                   data: {
                     workOrderId: order.id,
+                    fromStatus: existingOrder?.status,
                     toStatus: "DEVUELTA",
                     note: "Orden marcada como DEVUELTA desde el cargue de devoluciones",
                     changedById: userId
@@ -4580,7 +4672,7 @@ carguesRouter.post(
 
       writeLog(`INFO: Finalizado Devoluciones. Eliminadas: ${deletedCount}, Actualizadas: ${updatedCount}, Ignoradas: ${ignoredCount}`);
       res.json({ 
-        message: `Proceso de Devoluciones finalizado. ${deletedCount} eliminadas, ${updatedCount} actualizadas.`,
+        message: `Proceso de Devoluciones finalizado. ${deletedCount} eliminadas, ${updatedCount} actualizadas, ${liberadasCount} liberadas.`,
         count: updatedCount,
         deleted: deletedCount,
         errors: rowErrors.length,
