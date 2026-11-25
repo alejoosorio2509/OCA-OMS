@@ -4086,7 +4086,8 @@ async function processBacklogJob(input: {
         // Una pausa por novedad registrada en el sistema solo se levanta desde el sistema.
         if (
           order.status === "ON_HOLD" &&
-          (await prisma.novedad.count({ where: { workOrderId: order.id, fechaFin: null } })) > 0
+          ((await prisma.novedad.count({ where: { workOrderId: order.id, fechaFin: null } })) > 0 ||
+            (await prisma.solCdsNuevo.count({ where: { ot: code, fechaFinNovedad: null } })) > 0)
         ) {
           continue;
         }
