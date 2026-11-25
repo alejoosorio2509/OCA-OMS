@@ -447,7 +447,7 @@ function colorFromDiasPasados(status: WorkOrderStatus, diasPasados: number | nul
   if (status === "EXCLUDED") return "green";
   if (diasPasados === null) return null;
   if (diasPasados < 0) return "red";
-  if (diasPasados <= 1) return "yellow";
+  if (diasPasados <= 2) return "yellow";
   return "green";
 }
 
@@ -1710,8 +1710,14 @@ workOrdersRouter.patch("/:id/novedades/:novedadId", requireAuth, requirePermissi
       }
     });
 
-    // Si ya no hay novedades abiertas, retomar el estado anterior
-    if (openNovedades.length === 0) {
+    // Solicitudes de CDS nuevos sin fecha fin también mantienen la orden pausada
+    const ordenConCodigo = await prisma.workOrder.findUnique({ where: { id }, select: { code: true } });
+    const solicitudesAbiertas = ordenConCodigo
+      ? await prisma.solCdsNuevo.count({ where: { ot: ordenConCodigo.code, fechaFinNovedad: null } })
+      : 0;
+
+    // Si ya no hay novedades ni solicitudes abiertas, retomar el estado anterior
+    if (openNovedades.length === 0 && solicitudesAbiertas === 0) {
       const lastHistory = await prisma.workOrderHistory.findFirst({
         where: { 
           workOrderId: id,
