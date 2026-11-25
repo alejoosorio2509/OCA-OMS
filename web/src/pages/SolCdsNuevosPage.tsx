@@ -115,9 +115,9 @@ export function SolCdsNuevosPage() {
       const normalized: SolCdsNuevoCreateInput = options
         ? {
             ...form,
-            subestacionSbItm: validateCatalogValue("COD_CIRCUIT_STM", form.subestacionSbItm, options.subestaciones, issues),
-            codCircuitStm: validateCatalogValue("SUBESTACION_SB:ITM", form.codCircuitStm, options.codCircuitStm, issues),
-            circuitoStm: validateCatalogValue("CIRCUITO_STM", form.circuitoStm, options.circuitoStm, issues),
+            subestacionSbItm: validateCatalogValue("SUBESTACION_SB:ITM", form.subestacionSbItm, options.subestaciones, issues),
+            codCircuitStm: validateCatalogValue("CIRCUITO_STM", form.codCircuitStm, options.codCircuitStm, issues),
+            circuitoStm: validateCatalogValue("COD_CIRCUIT_STM", form.circuitoStm, options.circuitoStm, issues),
             marca: validateCatalogValue("MARCA", form.marca, options.marcas, issues),
             modelo: validateCatalogValue("MODELO", form.modelo, options.modelos, issues),
             terDesc: validateCatalogValue("TER_DESC", form.terDesc, options.terDesc, issues),
@@ -471,8 +471,15 @@ export function SolCdsNuevosPage() {
                               min={toDateOnly(r.createdAt)}
                               disabled={!!savingFin[r.id]}
                               onChange={(e) => setPendingFin((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                              onBlur={(e) => saveFechaFin(r, e.target.value)}
                             />
+                            <button
+                              type="button"
+                              className="btn"
+                              disabled={!!savingFin[r.id] || !pendingFin[r.id]}
+                              onClick={() => saveFechaFin(r, pendingFin[r.id] ?? "")}
+                            >
+                              {savingFin[r.id] ? "Guardando..." : "OK"}
+                            </button>
                             {errorFin[r.id] ? (
                               <span style={{ color: "#b91c1c", fontSize: 11 }}>{errorFin[r.id]}</span>
                             ) : null}
