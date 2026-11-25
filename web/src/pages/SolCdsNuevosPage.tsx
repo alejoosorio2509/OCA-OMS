@@ -115,8 +115,8 @@ export function SolCdsNuevosPage() {
       const normalized: SolCdsNuevoCreateInput = options
         ? {
             ...form,
-            subestacionSbItm: validateCatalogValue("SUBESTACION_SB:ITM", form.subestacionSbItm, options.subestaciones, issues),
-            codCircuitStm: validateCatalogValue("COD_CIRCUIT_STM", form.codCircuitStm, options.codCircuitStm, issues),
+            subestacionSbItm: validateCatalogValue("COD_CIRCUIT_STM", form.subestacionSbItm, options.subestaciones, issues),
+            codCircuitStm: validateCatalogValue("SUBESTACION_SB:ITM", form.codCircuitStm, options.codCircuitStm, issues),
             circuitoStm: validateCatalogValue("CIRCUITO_STM", form.circuitoStm, options.circuitoStm, issues),
             marca: validateCatalogValue("MARCA", form.marca, options.marcas, issues),
             modelo: validateCatalogValue("MODELO", form.modelo, options.modelos, issues),
@@ -241,7 +241,7 @@ export function SolCdsNuevosPage() {
         </div>
 
         <div className="field">
-          <label>SUBESTACION_SB:ITM</label>
+          <label>COD_CIRCUIT_STM</label>
           <input
             value={form.subestacionSbItm}
             onChange={(e) => setForm({ ...form, subestacionSbItm: e.target.value })}
@@ -256,7 +256,7 @@ export function SolCdsNuevosPage() {
           {renderDatalist("dl-subestacionSbItm", options?.subestaciones ?? [])}
         </div>
         <div className="field">
-          <label>COD_CIRCUIT_STM</label>
+          <label>SUBESTACION_SB:ITM</label>
           <input
             value={form.codCircuitStm}
             onChange={(e) => setForm({ ...form, codCircuitStm: e.target.value })}
