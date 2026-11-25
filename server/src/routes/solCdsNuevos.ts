@@ -223,7 +223,36 @@ solCdsNuevosRouter.post("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), a
     }
   });
 
-  res.status(201).json(created);
+  // Mientras la novedad no tenga fecha fin, la orden queda pausada (ON_HOLD).
+  // No se pausan las órdenes ya Cerradas, Gestionadas o Facturadas.
+  let ordenPausada = false;
+  try {
+    const ordenAPausar = await prisma.workOrder.findUnique({
+      where: { code: data.ot },
+      select: { id: true, status: true }
+    });
+    const estadosFinales: string[] = ["CERRADA", "GESTIONADA", "FACTURADA"];
+    if (ordenAPausar && ordenAPausar.status !== "ON_HOLD" && !estadosFinales.includes(ordenAPausar.status)) {
+      await prisma.workOrder.update({
+        where: { id: ordenAPausar.id },
+        data: { status: "ON_HOLD", lastStatusChangeAt: new Date() }
+      });
+      await prisma.workOrderHistory.create({
+        data: {
+          workOrderId: ordenAPausar.id,
+          fromStatus: ordenAPausar.status,
+          toStatus: "ON_HOLD",
+          note: `Novedad ${registro} - OT ${data.ot}: orden pausada hasta registrar la fecha fin`,
+          changedById: req.auth!.sub
+        }
+      });
+      ordenPausada = true;
+    }
+  } catch {
+    ordenPausada = false;
+  }
+
+  res.status(201).json({ ...created, ordenPausada });
 });
 
 solCdsNuevosRouter.get("/", requireAuth, requirePermission("SOL_CDS_NUEVOS"), async (req, res) => {
@@ -326,7 +355,48 @@ solCdsNuevosRouter.patch("/:id/fecha-fin-novedad", requireAuth, requirePermissio
       });
     }
 
-    res.json({ ...updated, dias, orderFound: !!order });
+    // Al registrar la fecha fin por primera vez, si la orden quedó pausada por una solicitud de CDS
+    // nuevos y no hay otras novedades ni solicitudes abiertas, vuelve al estado que tenía antes.
+    let ordenReanudada = false;
+    if (order && solicitud.fechaFinNovedad == null) {
+      const actual = await prisma.workOrder.findUnique({ where: { id: order.id }, select: { status: true } });
+      if (actual?.status === "ON_HOLD") {
+        const [novedadesAbiertas, otrasSolicitudes] = await Promise.all([
+          prisma.novedad.count({ where: { workOrderId: order.id, fechaFin: null } }),
+          prisma.solCdsNuevo.count({ where: { ot: solicitud.ot, fechaFinNovedad: null, NOT: { id } } })
+        ]);
+        if (novedadesAbiertas === 0 && otrasSolicitudes === 0) {
+          const pausa = await prisma.workOrderHistory.findFirst({
+            where: {
+              workOrderId: order.id,
+              toStatus: "ON_HOLD",
+              fromStatus: { not: null },
+              note: { contains: "orden pausada hasta registrar la fecha fin" }
+            },
+            orderBy: { changedAt: "desc" },
+            select: { fromStatus: true }
+          });
+          if (pausa?.fromStatus && pausa.fromStatus !== "ON_HOLD") {
+            await prisma.workOrder.update({
+              where: { id: order.id },
+              data: { status: pausa.fromStatus, lastStatusChangeAt: new Date() }
+            });
+            await prisma.workOrderHistory.create({
+              data: {
+                workOrderId: order.id,
+                fromStatus: "ON_HOLD",
+                toStatus: pausa.fromStatus,
+                note: `Novedad ${solicitud.registro} - OT ${solicitud.ot}: orden reanudada al registrar la fecha fin`,
+                changedById: req.auth!.sub
+              }
+            });
+            ordenReanudada = true;
+          }
+        }
+      }
+    }
+
+    res.json({ ...updated, dias, orderFound: !!order, ordenReanudada });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "UNKNOWN";
     res.status(500).json({ error: "INTERNAL_ERROR", details: msg });
