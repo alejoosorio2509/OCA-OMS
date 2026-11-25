@@ -256,7 +256,7 @@ export function SolCdsNuevosPage() {
           {renderDatalist("dl-subestacionSbItm", options?.subestaciones ?? [])}
         </div>
         <div className="field">
-          <label>CIRCUITO_STM<</label>
+          <label>CIRCUITO_STM</label>
           <input
             value={form.codCircuitStm}
             onChange={(e) => setForm({ ...form, codCircuitStm: e.target.value })}
@@ -271,7 +271,7 @@ export function SolCdsNuevosPage() {
           {renderDatalist("dl-codCircuitStm", options?.codCircuitStm ?? [])}
         </div>
         <div className="field">
-          <label>COD_CIRCUIT_STM/label>
+          <label>COD_CIRCUIT_STM</label>
           <input
             value={form.circuitoStm}
             onChange={(e) => setForm({ ...form, circuitoStm: e.target.value })}
